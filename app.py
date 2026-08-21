@@ -23,6 +23,7 @@ def init_database():
     conn = get_db()
     c = conn.cursor()
     
+    # Users Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +34,7 @@ def init_database():
         )
     ''')
     
+    # Dynamic Job Aids Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS job_aid_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +50,7 @@ def init_database():
         )
     ''')
     
+    # Audit Logs Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,13 +64,15 @@ def init_database():
         )
     ''')
     
+    # Seed default Admin & Analyst
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
-                  ("admin", hash_password("admin@123"), "Lead Software Developer / Admin", "ADMIN"))
+                  ("admin", hash_password("admin@123"), "Samir (Lead Architect & Admin)", "ADMIN"))
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
                   ("analyst", hash_password("analyst@123"), "Benefit Operations Analyst", "ANALYST"))
                   
+    # Seed default Job Aids
     c.execute("SELECT COUNT(*) FROM job_aid_rules")
     if c.fetchone()[0] == 0:
         seed_rules = [
@@ -93,11 +98,11 @@ def authenticate(username, password):
     return user
 
 # ==========================================
-# 2. STREAMLIT CONFIGURATION & STYLING
+# 2. STREAMLIT APP CONFIGURATION & BRANDING
 # ==========================================
 st.set_page_config(
-    page_title="BenefitRecon Pro | Enterprise AI Audit Platform",
-    page_icon="🛡️",
+    page_title="SamAI AuditEngine | Healthcare Benefit Reconciliation",
+    page_icon="⚡",
     layout="wide"
 )
 
@@ -140,14 +145,14 @@ if "authenticated" not in st.session_state:
 if not st.session_state["authenticated"]:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center; color: #1e3a8a;'>🛡️ BenefitRecon Enterprise AI</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #64748b;'>Healthcare Benefit Audit, AI Policy Parser & Dynamic Rules Engine</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #1e3a8a;'>⚡ SamAI AuditEngine</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #64748b; font-weight: 500;'>Healthcare Benefit & Policy Governance Platform | Engineered by Samir</p>", unsafe_allow_html=True)
         
         with st.form("login_form"):
             st.subheader("Employee Sign In")
             u_name = st.text_input("Username / Employee ID")
             u_pass = st.text_input("Password", type="password")
-            btn_login = st.form_submit_button("Sign In", use_container_width=True)
+            btn_login = st.form_submit_button("Sign In to SamAI", use_container_width=True)
             
             if btn_login:
                 user_record = authenticate(u_name.strip(), u_pass.strip())
@@ -161,9 +166,9 @@ if not st.session_state["authenticated"]:
                     st.error("Invalid Username or Password. Please check your credentials.")
         
         st.markdown("---")
-        st.caption("💡 **Default Credentials:**")
-        st.caption("- **Admin/Developer:** `admin` | Password: `admin@123`")
-        st.caption("- **Benefit Analyst:** `analyst` | Password: `analyst@123`")
+        st.caption("💡 **System Default Logins:**")
+        st.caption("- **Admin:** `admin` | Password: `admin@123`")
+        st.caption("- **Analyst:** `analyst` | Password: `analyst@123`")
     st.stop()
 
 # ==========================================
@@ -173,12 +178,12 @@ user_role = st.session_state["role"]
 full_name = st.session_state["full_name"]
 
 with st.sidebar:
-    st.markdown(f"### 👤 Logged in as:")
-    st.write(f"**{full_name}**")
+    st.markdown("## ⚡ SamAI Engine")
+    st.markdown(f"**User:** {full_name}")
     if user_role == "ADMIN":
-        st.markdown('<span class="admin-badge">Software Developer / Admin</span>', unsafe_allow_html=True)
+        st.markdown('<span class="admin-badge">Admin & System Architect</span>', unsafe_allow_html=True)
     else:
-        st.markdown('<span class="analyst-badge">Benefit Analyst</span>', unsafe_allow_html=True)
+        st.markdown('<span class="analyst-badge">Benefit Operations Analyst</span>', unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -190,7 +195,7 @@ with st.sidebar:
             "👥 Employee Access Control"
         ])
         
-    selected_page = st.radio("Navigation Menu", nav_options)
+    selected_page = st.radio("System Navigation", nav_options)
     
     st.markdown("---")
     if st.button("🚪 Log Out", use_container_width=True):
@@ -222,7 +227,7 @@ def extract_text_from_pdf(uploaded_file):
 # ==========================================
 if selected_page == "🔍 Run Benefit Audit":
     st.title("🩺 Benefit Configuration & Cost-Share Audit")
-    st.caption("Auto-reconcile discrepancies against active Job Aids & Policy rules in real-time.")
+    st.caption("Reconcile source plan documents with coded system outputs in seconds via SamAI Engine.")
 
     colA, colB = st.columns(2)
     with colA:
@@ -240,7 +245,7 @@ if selected_page == "🔍 Run Benefit Audit":
             conn.close()
             
             if "Plan_ID" not in df_src.columns or "Benefit_Service" not in df_src.columns:
-                st.error("Uploaded files must have 'Plan_ID' and 'Benefit_Service' columns.")
+                st.error("Uploaded files must contain 'Plan_ID' and 'Benefit_Service' columns.")
                 st.stop()
 
             merged = pd.merge(df_src, df_cod, on=["Plan_ID", "Benefit_Service"], suffixes=('_Source', '_Coded'), how='outer')
@@ -320,7 +325,7 @@ if selected_page == "🔍 Run Benefit Audit":
                           (st.session_state["username"], plans_count, total_checked, t1, t2, acc))
                 conn.commit()
                 conn.close()
-                st.success("✅ Audit log successfully saved to database.")
+                st.success("✅ Audit log successfully recorded into SamAI database.")
 
             st.subheader(f"⚠️ Discrepancy Log ({total_err} Issues Detected)")
             if total_err > 0:
@@ -335,7 +340,7 @@ if selected_page == "🔍 Run Benefit Audit":
                 st.download_button(
                     label="📥 Export Audit & Clarification Report (Excel)",
                     data=buffer,
-                    file_name=f"Benefit_Audit_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    file_name=f"SamAI_Audit_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
@@ -350,7 +355,7 @@ if selected_page == "🔍 Run Benefit Audit":
 # ==========================================
 elif selected_page == "📊 Audit History & Analytics":
     st.title("📊 Enterprise Audit History & Quality Analytics")
-    st.caption("Track past audit runs, accuracy rates, and operational quality metrics.")
+    st.caption("Historical performance tracking and coder quality metric logs.")
     
     conn = get_db()
     logs_df = pd.read_sql_query("SELECT * FROM audit_logs ORDER BY timestamp DESC", conn)
@@ -366,12 +371,12 @@ elif selected_page == "📊 Audit History & Analytics":
 # ==========================================
 elif selected_page == "🤖 AI Job Aid PDF Extractor":
     st.title("🤖 AI Job Aid & Policy Document Extractor")
-    st.info("Upload healthcare Job Aid or Policy PDFs. The AI Parser will automatically read the text, extract business logic/mandates, and publish them directly into the live rules engine.")
+    st.info("Upload healthcare Job Aid or Policy PDFs. SamAI will parse the text, extract business logic, and publish them directly into the live rules engine.")
 
     pdf_file = st.file_uploader("Upload Job Aid / Policy Document (.pdf)", type=["pdf"])
 
     if pdf_file:
-        with st.spinner("Extracting and analyzing Job Aid document..."):
+        with st.spinner("Extracting and analyzing Job Aid document via SamAI..."):
             extracted_text = extract_text_from_pdf(pdf_file)
             
         st.success(f"✅ Successfully extracted text ({len(extracted_text)} characters) from `{pdf_file.name}`")
@@ -411,7 +416,7 @@ elif selected_page == "🤖 AI Job Aid PDF Extractor":
 # ==========================================
 elif selected_page == "⚙️ Dynamic Rules Manager":
     st.title("⚙️ Dynamic Job Aids & Business Rules Manager")
-    st.caption("Active rules currently used by the reconciliation engine.")
+    st.caption("Active rules and clarification logic currently utilized by SamAI Engine.")
     
     conn = get_db()
     rules_df = pd.read_sql_query("SELECT * FROM job_aid_rules", conn)
@@ -424,14 +429,14 @@ elif selected_page == "⚙️ Dynamic Rules Manager":
 # ==========================================
 elif selected_page == "👥 Employee Access Control":
     st.title("👥 Employee Access & Identity Management")
-    st.caption("Register new employees and configure access permissions.")
+    st.caption("Create unique logins and manage permission tiers.")
     
     conn = get_db()
     users_df = pd.read_sql_query("SELECT id, username, full_name, role FROM users", conn)
     conn.close()
     
     st.dataframe(users_df, use_container_width=True)
-
+    
     st.markdown("---")
     st.subheader("➕ Register New Employee")
     
@@ -441,7 +446,7 @@ elif selected_page == "👥 Employee Access Control":
         new_pw = st.text_input("Temporary Password", type="password")
         new_role = st.selectbox("Assign Role", ["ANALYST", "ADMIN"])
         
-        btn_user = st.form_submit_button("Create Account")
+        btn_user = st.form_submit_button("Create Employee Account")
         if btn_user:
             if new_u and new_pw and new_name:
                 try:
@@ -451,7 +456,9 @@ elif selected_page == "👥 Employee Access Control":
                               (new_u.strip(), hash_password(new_pw.strip()), new_name.strip(), new_role))
                     conn.commit()
                     conn.close()
-                    st.success(f"Account for {new_name} ({new_role}) created!")
+                    st.success(f"Account for {new_name} ({new_role}) created successfully!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    st.error(f"Error creating user: {str(e)}")
+            else:
+                st.warning("Please fill all mandatory details.")
