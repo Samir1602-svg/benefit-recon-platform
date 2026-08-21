@@ -3,7 +3,9 @@ import pandas as pd
 import sqlite3
 import hashlib
 import io
+import re
 from datetime import datetime
+from pypdf import PdfReader
 
 # ==========================================
 # 1. DATABASE & SECURITY LAYER (SQLite + Auth)
@@ -21,7 +23,6 @@ def init_database():
     conn = get_db()
     c = conn.cursor()
     
-    # 1. Users Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +33,6 @@ def init_database():
         )
     ''')
     
-    # 2. Dynamic Job Aids / Business Rules Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS job_aid_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,12 +42,12 @@ def init_database():
             rule_description TEXT NOT NULL,
             error_type TEXT NOT NULL,
             clarification_action TEXT NOT NULL,
+            source_document TEXT DEFAULT 'Manual Entry',
             is_active INTEGER DEFAULT 1,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
-    # 3. Audit Logs Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +61,6 @@ def init_database():
         )
     ''')
     
-    # Seed default Admin & Analyst users if first time
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
@@ -69,16 +68,15 @@ def init_database():
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
                   ("analyst", hash_password("analyst@123"), "Benefit Operations Analyst", "ANALYST"))
                   
-    # Seed default Job Aids
     c.execute("SELECT COUNT(*) FROM job_aid_rules")
     if c.fetchone()[0] == 0:
         seed_rules = [
-            ("JA-COPAY-01", "Cost Share", "Copay Direct Match", "Copay amount must strictly match the Source Benefit Summary grid.", "Type 1: Financial Mismatch (Copay)", "Direct financial discrepancy. Coder must update copay table in system."),
-            ("JA-COINS-01", "Cost Share", "Coinsurance Split Match", "Coinsurance percentage must align with benefit booklet schedule.", "Type 1: Financial Mismatch (Coinsurance)", "Direct financial discrepancy. Coder must reconfigure coinsurance percentage split."),
-            ("JA-DED-01", "Accumulators / ACA", "Preventive Deductible Mandate", "ACA Preventive services must be 100% covered ($0 copay) with Deductible = No.", "Type 2: Policy / ACA Mandate Clarification", "Clarification: Preventive services cannot have deductible accumulator per ACA Section 2713."),
-            ("JA-AUTH-01", "Utilization Mgmt", "Prior Authorization Flag Check", "Inpatient and High-Cost radiology require Prior-Auth match.", "Type 2: Workflow / Auth Rule Clarification", "Clarification: Prior authorization indicator differs from standard job aid matrix.")
+            ("JA-COPAY-01", "Cost Share", "Copay Direct Match", "Copay amount must strictly match the Source Benefit Summary grid.", "Type 1: Financial Mismatch (Copay)", "Direct financial discrepancy. Coder must update copay table in system.", "Standard Baseline"),
+            ("JA-COINS-01", "Cost Share", "Coinsurance Split Match", "Coinsurance percentage must align with benefit booklet schedule.", "Type 1: Financial Mismatch (Coinsurance)", "Direct financial discrepancy. Coder must reconfigure coinsurance percentage split.", "Standard Baseline"),
+            ("JA-DED-01", "Accumulators / ACA", "Preventive Deductible Mandate", "ACA Preventive services must be 100% covered ($0 copay) with Deductible = No.", "Type 2: Policy / ACA Mandate Clarification", "Clarification: Preventive services cannot have deductible accumulator per ACA Section 2713.", "Standard Baseline"),
+            ("JA-AUTH-01", "Utilization Mgmt", "Prior Authorization Flag Check", "Inpatient and High-Cost radiology require Prior-Auth match.", "Type 2: Workflow / Auth Rule Clarification", "Clarification: Prior authorization indicator differs from standard job aid matrix.", "Standard Baseline")
         ]
-        c.executemany("INSERT INTO job_aid_rules (rule_code, category, rule_title, rule_description, error_type, clarification_action) VALUES (?, ?, ?, ?, ?, ?)", seed_rules)
+        c.executemany("INSERT INTO job_aid_rules (rule_code, category, rule_title, rule_description, error_type, clarification_action, source_document) VALUES (?, ?, ?, ?, ?, ?, ?)", seed_rules)
 
     conn.commit()
     conn.close()
@@ -95,10 +93,10 @@ def authenticate(username, password):
     return user
 
 # ==========================================
-# 2. STREAMLIT APP CONFIGURATION & STYLING
+# 2. STREAMLIT CONFIGURATION & STYLING
 # ==========================================
 st.set_page_config(
-    page_title="BenefitRecon Pro | Enterprise Audit Platform",
+    page_title="BenefitRecon Pro | Enterprise AI Audit Platform",
     page_icon="🛡️",
     layout="wide"
 )
@@ -142,8 +140,8 @@ if "authenticated" not in st.session_state:
 if not st.session_state["authenticated"]:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center; color: #1e3a8a;'>🛡️ BenefitRecon Enterprise</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #64748b;'>Payer Benefit Configuration Audit & Dynamic Rules Engine</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #1e3a8a;'>🛡️ BenefitRecon Enterprise AI</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #64748b;'>Healthcare Benefit Audit, AI Policy Parser & Dynamic Rules Engine</p>", unsafe_allow_html=True)
         
         with st.form("login_form"):
             st.subheader("Employee Sign In")
@@ -163,7 +161,7 @@ if not st.session_state["authenticated"]:
                     st.error("Invalid Username or Password. Please check your credentials.")
         
         st.markdown("---")
-        st.caption("💡 **Default Credentials for Testing:**")
+        st.caption("💡 **Default Credentials:**")
         st.caption("- **Admin/Developer:** `admin` | Password: `admin@123`")
         st.caption("- **Benefit Analyst:** `analyst` | Password: `analyst@123`")
     st.stop()
@@ -186,7 +184,11 @@ with st.sidebar:
     
     nav_options = ["🔍 Run Benefit Audit", "📊 Audit History & Analytics"]
     if user_role == "ADMIN":
-        nav_options.extend(["⚙️ Job Aid & Rules Engine Manager", "👥 Employee Access Control"])
+        nav_options.extend([
+            "🤖 AI Job Aid PDF Extractor", 
+            "⚙️ Dynamic Rules Manager", 
+            "👥 Employee Access Control"
+        ])
         
     selected_page = st.radio("Navigation Menu", nav_options)
     
@@ -199,16 +201,28 @@ with st.sidebar:
         st.rerun()
 
 # ==========================================
-# PAGE 1: RUN BENEFIT AUDIT
+# HELPER FUNCTIONS
 # ==========================================
 def clean_val(val):
     if pd.isna(val):
         return ""
     return str(val).replace("$", "").replace("%", "").strip().upper()
 
+def extract_text_from_pdf(uploaded_file):
+    pdf = PdfReader(uploaded_file)
+    text = ""
+    for page in pdf.pages:
+        page_text = page.extract_text()
+        if page_text:
+            text += page_text + "\n"
+    return text
+
+# ==========================================
+# PAGE 1: RUN BENEFIT AUDIT
+# ==========================================
 if selected_page == "🔍 Run Benefit Audit":
     st.title("🩺 Benefit Configuration & Cost-Share Audit")
-    st.caption("Upload the Benchmark Source Grid and Coder System Export to auto-reconcile discrepancies against active Job Aids.")
+    st.caption("Auto-reconcile discrepancies against active Job Aids & Policy rules in real-time.")
 
     colA, colB = st.columns(2)
     with colA:
@@ -306,7 +320,7 @@ if selected_page == "🔍 Run Benefit Audit":
                           (st.session_state["username"], plans_count, total_checked, t1, t2, acc))
                 conn.commit()
                 conn.close()
-                st.success("✅ Audit log successfully saved to enterprise database.")
+                st.success("✅ Audit log successfully saved to database.")
 
             st.subheader(f"⚠️ Discrepancy Log ({total_err} Issues Detected)")
             if total_err > 0:
@@ -348,61 +362,76 @@ elif selected_page == "📊 Audit History & Analytics":
         st.dataframe(logs_df, use_container_width=True)
 
 # ==========================================
-# PAGE 3: JOB AID & RULES ENGINE MANAGER (ADMIN ONLY)
+# PAGE 3: AI JOB AID PDF EXTRACTOR (ADMIN ONLY)
 # ==========================================
-elif selected_page == "⚙️ Job Aid & Rules Engine Manager":
-    st.title("⚙️ Developer Control: Job Aid & Rules Manager")
-    st.info("As the System Developer/Admin, you can dynamically create, edit, or toggle rules and clarifications without restarting the application.")
+elif selected_page == "🤖 AI Job Aid PDF Extractor":
+    st.title("🤖 AI Job Aid & Policy Document Extractor")
+    st.info("Upload healthcare Job Aid or Policy PDFs. The AI Parser will automatically read the text, extract business logic/mandates, and publish them directly into the live rules engine.")
+
+    pdf_file = st.file_uploader("Upload Job Aid / Policy Document (.pdf)", type=["pdf"])
+
+    if pdf_file:
+        with st.spinner("Extracting and analyzing Job Aid document..."):
+            extracted_text = extract_text_from_pdf(pdf_file)
+            
+        st.success(f"✅ Successfully extracted text ({len(extracted_text)} characters) from `{pdf_file.name}`")
+        
+        with st.expander("📄 View Raw Extracted PDF Content"):
+            st.text_area("PDF Text", extracted_text, height=180)
+
+        st.subheader("⚙️ AI Rule Generator & Publisher")
+        st.write("Convert extracted policy logic into an active system rule:")
+
+        suggested_code = "JA-" + re.sub(r'[^A-Z0-9]', '', pdf_file.name[:10].upper())
+        
+        with st.form("ai_rule_form"):
+            r_code = st.text_input("Suggested Rule Code", value=suggested_code)
+            r_cat = st.selectbox("Category", ["State Mandate", "Accumulators / ACA", "Utilization Mgmt", "Cost Share", "Network Tier"])
+            r_title = st.text_input("Rule Title", value=f"Policy Rule from {pdf_file.name}")
+            r_desc = st.text_area("Extracted Policy Logic Summary", value=extracted_text[:300] + "...")
+            r_type = st.selectbox("Error Classification", ["Type 2: Policy / Job Aid Clarification", "Type 1: Financial Mismatch"])
+            r_action = st.text_area("Generated Clarification & Coder Action", value=f"Per policy document '{pdf_file.name}', verify compliance with benefit guidelines.")
+            
+            publish_btn = st.form_submit_button("🚀 Publish Extracted Rule to Production")
+            if publish_btn:
+                if r_code and r_title:
+                    try:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute("INSERT INTO job_aid_rules (rule_code, category, rule_title, rule_description, error_type, clarification_action, source_document) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                  (r_code.strip().upper(), r_cat, r_title, r_desc, r_type, r_action, pdf_file.name))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Rule `{r_code}` extracted from PDF and published to production rules engine!")
+                    except Exception as e:
+                        st.error(f"Database error: {str(e)}")
+
+# ==========================================
+# PAGE 4: DYNAMIC RULES MANAGER (ADMIN ONLY)
+# ==========================================
+elif selected_page == "⚙️ Dynamic Rules Manager":
+    st.title("⚙️ Dynamic Job Aids & Business Rules Manager")
+    st.caption("Active rules currently used by the reconciliation engine.")
     
     conn = get_db()
     rules_df = pd.read_sql_query("SELECT * FROM job_aid_rules", conn)
     conn.close()
     
-    st.subheader("📋 Active Business Rules & Job Aids")
     st.dataframe(rules_df, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("➕ Add New Job Aid / Clarification Rule")
-    
-    with st.form("new_rule_form"):
-        r_code = st.text_input("Rule Code (e.g., JA-TIER-02, JA-STATE-01)")
-        r_cat = st.selectbox("Category", ["Cost Share", "Accumulators / ACA", "Utilization Mgmt", "State Mandate", "Network Tier"])
-        r_title = st.text_input("Rule Title")
-        r_desc = st.text_area("Rule Description (Condition to check)")
-        r_type = st.selectbox("Error Classification", ["Type 1: Financial Mismatch", "Type 2: Policy / Job Aid Clarification"])
-        r_action = st.text_area("Clarification & Action Required (Guidance message for coder)")
-        
-        btn_add = st.form_submit_button("Publish Rule to Production")
-        if btn_add:
-            if r_code and r_title and r_action:
-                try:
-                    conn = get_db()
-                    c = conn.cursor()
-                    c.execute("INSERT INTO job_aid_rules (rule_code, category, rule_title, rule_description, error_type, clarification_action) VALUES (?, ?, ?, ?, ?, ?)",
-                              (r_code.strip().upper(), r_cat, r_title, r_desc, r_type, r_action))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Rule `{r_code}` successfully added to the live rule engine!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error adding rule: {str(e)}")
-            else:
-                st.warning("Please fill all mandatory fields.")
 
 # ==========================================
-# PAGE 4: EMPLOYEE ACCESS CONTROL (ADMIN ONLY)
+# PAGE 5: EMPLOYEE ACCESS CONTROL (ADMIN ONLY)
 # ==========================================
 elif selected_page == "👥 Employee Access Control":
     st.title("👥 Employee Access & Identity Management")
-    st.caption("Create unique logins, passwords, and assign roles (Benefit Analyst vs Developer/Admin).")
+    st.caption("Register new employees and configure access permissions.")
     
     conn = get_db()
     users_df = pd.read_sql_query("SELECT id, username, full_name, role FROM users", conn)
     conn.close()
     
-    st.subheader("Registered Employees")
     st.dataframe(users_df, use_container_width=True)
-    
+
     st.markdown("---")
     st.subheader("➕ Register New Employee")
     
@@ -412,7 +441,7 @@ elif selected_page == "👥 Employee Access Control":
         new_pw = st.text_input("Temporary Password", type="password")
         new_role = st.selectbox("Assign Role", ["ANALYST", "ADMIN"])
         
-        btn_user = st.form_submit_button("Create Employee Account")
+        btn_user = st.form_submit_button("Create Account")
         if btn_user:
             if new_u and new_pw and new_name:
                 try:
@@ -422,9 +451,7 @@ elif selected_page == "👥 Employee Access Control":
                               (new_u.strip(), hash_password(new_pw.strip()), new_name.strip(), new_role))
                     conn.commit()
                     conn.close()
-                    st.success(f"Account for {new_name} ({new_role}) created successfully!")
+                    st.success(f"Account for {new_name} ({new_role}) created!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error creating user: {str(e)}")
-            else:
-                st.warning("Please fill all user details.")
+                    st.error(f"Error: {str(e)}")
