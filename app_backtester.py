@@ -14,7 +14,7 @@ import time
 # 💎 SAM QUANTUM TERMINAL - CONFIG & STYLES
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Institutional Terminal",
+    page_title="SAM QUANTUM AI | Free Strategy & Backtest App",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -23,9 +23,8 @@ st.set_page_config(
 DB_FILE = "users_db.json"
 
 DEFAULT_USERS = {
-    "admin": {"pass": "sam@2026", "name": "Sam (Founder / Master)", "tier": "Master Admin"},
-    "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "tier": "Institutional Pro"},
-    "guest": {"pass": "welcome123", "name": "Trial Client", "tier": "Standard Beta"}
+    "admin": {"pass": "sam@2026", "name": "Sam (Founder)", "phone": "9999999999", "tier": "Master Admin", "created_at": "2026-08-20"},
+    "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "8888888888", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
 def load_users():
@@ -50,7 +49,7 @@ st.markdown("""
 <style>
     .stApp { background-color: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
-    .glass-card { background: rgba(22, 27, 34, 0.85); border: 1px solid #30363d; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .glass-card { background: rgba(22, 27, 34, 0.95); border: 1px solid #30363d; border-radius: 14px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
     .brand-header { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #161b22 0%, #1f2937 100%); border: 1px solid #30363d; border-radius: 10px; padding: 14px 24px; margin-bottom: 20px; }
     div[data-testid="stMetric"] { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 18px; }
     .stButton>button { background: linear-gradient(135deg, #238636 0%, #2ea043 100%); color: white; font-weight: 600; border: 1px solid #3fb950; border-radius: 8px; width: 100%; }
@@ -60,54 +59,93 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 🔐 AUTHENTICATION GATEWAY
+# 🔐 AUTHENTICATION & OPEN SIGN-UP PORTAL
 # ==============================================================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
-def login_portal():
-    col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
+def auth_portal():
+    col_l1, col_l2, col_l3 = st.columns([1, 1.9, 1])
     with col_l2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
         <div class="glass-card" style="text-align: center;">
-            <h1 style="color: #58a6ff; margin-bottom: 2px;">⚡ SAM QUANTUM AI</h1>
-            <p style="color: #8b949e; font-size: 14px; margin-bottom: 24px;">Institutional Strategy Studio & Execution Engine</p>
-            <hr style="border-color: #30363d;">
+            <h1 style="color: #58a6ff; margin-bottom: 0px;">⚡ SAM QUANTUM AI</h1>
+            <p style="color: #8b949e; font-size: 14px; margin-bottom: 16px;">100% Free Strategy Studio & Institutional Backtester</p>
+            <span style="background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #3fb950; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
+                🆓 FREE LIFETIME ACCESS FOR TRADERS
+            </span>
+            <hr style="border-color: #30363d; margin-top: 20px;">
         </div>
         """, unsafe_allow_html=True)
         
-        with st.form("login_form"):
-            st.markdown("#### 🔒 Terminal Access Verification")
-            username = st.text_input("User ID / Access Identity", placeholder="Enter assigned username")
-            password = st.text_input("Security Access Key", type="password", placeholder="Enter your secret token")
-            submit = st.form_submit_button("⚡ UNLOCK TERMINAL")
-            
-            if submit:
-                users = st.session_state.users_db
-                if username in users and users[username]["pass"] == password:
-                    st.session_state.authenticated = True
-                    st.session_state.user_info = {**users[username], "id": username}
-                    st.success(f"Access Granted! Welcome, {users[username]['name']}.")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error("⛔ Unauthorized Access Key. Contact Sam to obtain an institutional license.")
+        auth_mode = st.radio("Choose Action", ["🔑 Sign In to Terminal", "✨ Create Free New Account"], horizontal=True, label_visibility="collapsed")
+        
+        # --- 1. SIGN IN FLOW ---
+        if auth_mode == "🔑 Sign In to Terminal":
+            with st.form("login_form"):
+                st.markdown("#### 🔒 Member Login")
+                username = st.text_input("User ID / Phone", placeholder="Enter your ID or phone number")
+                password = st.text_input("Password", type="password", placeholder="Enter your secret token")
+                submit = st.form_submit_button("⚡ UNLOCK TERMINAL")
+                
+                if submit:
+                    users = st.session_state.users_db
+                    if username in users and users[username]["pass"] == password:
+                        st.session_state.authenticated = True
+                        st.session_state.user_info = {**users[username], "id": username}
+                        st.success(f"Access Granted! Welcome back, {users[username]['name']}.")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("⛔ Invalid Credentials. If you are new, click 'Create Free New Account' above.")
+
+        # --- 2. OPEN SELF-REGISTRATION FLOW ---
+        else:
+            with st.form("signup_form"):
+                st.markdown("#### 🚀 Instant Free Registration")
+                new_name = st.text_input("Full Name", placeholder="e.g. Rahul Sharma")
+                new_phone = st.text_input("Mobile Number / WhatsApp", placeholder="e.g. 9876543210")
+                new_user = st.text_input("Choose Username (User ID)", placeholder="e.g. rahul_trader")
+                new_pass = st.text_input("Create Secret Password", type="password", placeholder="Minimum 4 characters")
+                agree = st.checkbox("I agree to analytical terms (Free educational backtest tool)", value=True)
+                btn_reg = st.form_submit_button("🎉 CREATE FREE ACCOUNT & START")
+                
+                if btn_reg:
+                    if not new_name.strip() or not new_phone.strip() or not new_user.strip() or not new_pass.strip():
+                        st.error("Please fill all registration fields.")
+                    elif new_user in st.session_state.users_db:
+                        st.error(f"Username '{new_user}' already taken. Choose another one.")
+                    elif not agree:
+                        st.error("Please accept the terms to proceed.")
+                    else:
+                        st.session_state.users_db[new_user] = {
+                            "pass": new_pass,
+                            "name": new_name,
+                            "phone": new_phone,
+                            "tier": "Free Community Member",
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        }
+                        save_users(st.session_state.users_db)
+                        st.session_state.authenticated = True
+                        st.session_state.user_info = {**st.session_state.users_db[new_user], "id": new_user}
+                        st.success(f"Account Created Successfully! Welcome to Sam Quantum, {new_name}.")
+                        time.sleep(0.8)
+                        st.rerun()
 
 if not st.session_state.authenticated:
-    login_portal()
+    auth_portal()
     st.stop()
 
 # ==============================================================================
-# 🧮 INDICATORS & PATTERN RECOGNITION ENGINE
+# 🧮 INDICATORS & CANDLESTICK PATTERN ENGINE
 # ==============================================================================
 def calc_indicators(df, params):
     d = df.copy()
     c, h, l, o, v = d['Close'], d['High'], d['Low'], d['Open'], d['Volume']
 
-    # Moving Averages
     d['EMA9'] = c.ewm(span=9, adjust=False).mean()
     d['EMA20'] = c.ewm(span=20, adjust=False).mean()
     d['EMA21'] = c.ewm(span=21, adjust=False).mean()
@@ -115,7 +153,6 @@ def calc_indicators(df, params):
     d['EMA200'] = c.ewm(span=200, adjust=False).mean()
     d['SMA20'] = c.rolling(window=20).mean()
 
-    # VWAP
     typical_price = (h + l + c) / 3.0
     date_group = d.index.date if hasattr(d.index, 'date') else np.zeros(len(d))
     pv = typical_price * v
@@ -124,7 +161,6 @@ def calc_indicators(df, params):
     d['VWAP'] = d['Cum_PV'] / d['Cum_Vol'].replace(0, np.nan)
     d['VWAP'] = d['VWAP'].fillna(c)
 
-    # RSI
     delta = c.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -134,20 +170,17 @@ def calc_indicators(df, params):
     d['RSI'] = 100 - (100 / (1 + rs))
     d['RSI'] = d['RSI'].fillna(50)
 
-    # Bollinger Bands
     d['BB_MID'] = d['SMA20']
     bb_std = c.rolling(window=20).std()
     d['BB_UP'] = d['BB_MID'] + (params.get('bb_std', 2.0) * bb_std)
     d['BB_LOW'] = d['BB_MID'] - (params.get('bb_std', 2.0) * bb_std)
 
-    # ATR
     hl = h - l
     hc = (h - c.shift(1)).abs()
     lc = (l - c.shift(1)).abs()
     tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
     d['ATR'] = tr.rolling(window=14).mean().fillna(tr)
 
-    # SuperTrend
     st_period = params.get('st_period', 10)
     st_mult = params.get('st_mult', 2.0)
     st_atr = tr.ewm(com=st_period-1, adjust=False).mean()
@@ -181,17 +214,14 @@ def calc_indicators(df, params):
     d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
     d['PCT_CHANGE'] = ((c - o) / o.replace(0, np.nan)) * 100
 
-    # 🕯️ Beginner-Friendly Candle Patterns
     body = (c - o).abs()
-    candle_range = h - l
     d['IS_HAMMER'] = ((l <= o.combine(c, min) - (body * 1.8)) & (h <= o.combine(c, max) + (body * 0.3)) & (body > 0))
     d['IS_ENGULFING_BULL'] = ((c > o) & (c.shift(1) < o.shift(1)) & (c >= o.shift(1)) & (o <= c.shift(1)))
     d['IS_ENGULFING_BEAR'] = ((c < o) & (c.shift(1) > o.shift(1)) & (c <= o.shift(1)) & (o >= c.shift(1)))
-
     return d
 
 # ==============================================================================
-# 🎛️ SIDEBAR: QUANT CONTROLS
+# 🎛️ SIDEBAR
 # ==============================================================================
 with st.sidebar:
     st.markdown(f"""
@@ -202,7 +232,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚪 Logout Session"):
+    if st.button("🚪 Logout"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
         st.rerun()
@@ -289,28 +319,28 @@ st.markdown(f"""
 <div class="brand-header">
     <div>
         <h2 style="color: #58a6ff; margin: 0;">⚡ SAM QUANTUM STUDIO</h2>
-        <span style="color: #8b949e; font-size: 13px;">Enterprise Strategy Validation & Multi-Asset Quantitative Terminal</span>
+        <span style="color: #8b949e; font-size: 13px;">Community Strategy Backtesting & Quantitative Terminal</span>
     </div>
     <div style="text-align: right;">
-        <span style="background: #238636; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 700;">LIVE FEED: CONNECTED</span><br>
-        <span style="color: #8b949e; font-size: 12px;">Target: {symbol} | {timeframe}</span>
+        <span style="background: #238636; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 700;">SERVER: ACTIVE 🟢</span><br>
+        <span style="color: #8b949e; font-size: 12px;">Asset: {symbol} | {timeframe}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Strategy:** {strategy_type.split('.')[1].strip()} | 🎯 **R:R Profile:** Risk ₹{sl_pts*qty:,.0f} to Gain ₹{target_pts*qty:,.0f}")
+    st.write(f"💼 **Strategy:** {strategy_type.split('.')[1].strip()} | 🎯 **R:R:** Risk ₹{sl_pts*qty:,.0f} to Target ₹{target_pts*qty:,.0f}")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE BACKTEST", type="primary")
 
 if execute_btn or 'sim_ran' in st.session_state:
     st.session_state.sim_ran = True
-    with st.spinner("⏳ Compiling candle stream and executing institutional matrix..."):
+    with st.spinner("⏳ Loading institutional price matrix and processing rules..."):
         df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
         
         if df_raw.empty or len(df_raw) < 25:
-            st.error("❌ Insufficient tick history. Please adjust lookback days or candle timeframe.")
+            st.error("❌ Insufficient data. Please adjust lookback days or timeframe.")
             st.stop()
 
         if isinstance(df_raw.columns, pd.MultiIndex):
@@ -323,7 +353,6 @@ if execute_btn or 'sim_ran' in st.session_state:
         ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
         df['IST_Hour'] = ist_time.hour
         df['IST_Minute'] = ist_time.minute
-        # Format string for clean non-disappearing categories
         df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
         df.dropna(inplace=True)
 
@@ -467,35 +496,30 @@ if execute_btn or 'sim_ran' in st.session_state:
         # 📊 WORKSPACE TABS
         # ==============================================================================
         tab_chart, tab_metrics, tab_trades, tab_admin = st.tabs([
-            "📈 Seamless Pro Chart (No Disappearing)", 
+            "📈 Seamless Pro Chart", 
             "📊 Strategy Scorecard & KPIs", 
             "📜 Detailed Execution Logs", 
-            "👑 Live Access Controller (Admin)"
+            "👥 User Base & Growth Manager"
         ])
 
         with tab_chart:
             st.markdown("#### 🕯️ Smooth-Zoom Institutional Candlestick Terminal")
-            st.caption("💡 Category-Indexed: Zoom In/Out freely without gaps or data vanishing.")
-            
             fig = make_subplots(
                 rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03,
                 subplot_titles=(f"{symbol} Price Matrix & Signals", "Volume Activity", "RSI Momentum (14)"),
                 row_heights=[0.65, 0.15, 0.20]
             )
 
-            # Candlestick
             fig.add_trace(go.Candlestick(
                 x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
                 name="Price", increasing_line_color='#238636', decreasing_line_color='#da3633',
                 increasing_fillcolor='#238636', decreasing_fillcolor='#da3633'
             ), row=1, col=1)
 
-            # Indicator Overlays
             fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#58a6ff', width=1.5), name='EMA 20'), row=1, col=1)
             fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f0883e', width=1.5), name='EMA 50'), row=1, col=1)
             fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VWAP'], line=dict(color='#d2a8ff', width=1.5, dash='dot'), name='VWAP'), row=1, col=1)
 
-            # Trade Marker Overlays
             if trades:
                 tdf = pd.DataFrame(trades)
                 b_df = tdf[tdf['Type'] == 'BUY/CE']
@@ -514,18 +538,15 @@ if execute_btn or 'sim_ran' in st.session_state:
                         name='SELL / PE Entry'
                     ), row=1, col=1)
 
-            # Volume Pane
             colors_v = ['#238636' if df['Close'].iloc[k] >= df['Open'].iloc[k] else '#da3633' for k in range(len(df))]
             fig.add_trace(go.Bar(x=df['Time_Str'], y=df['Volume'], marker_color=colors_v, name='Volume'), row=2, col=1)
             fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VOL_SMA20'], line=dict(color='#e3b341', width=1.2), name='Vol SMA 20'), row=2, col=1)
 
-            # RSI Pane
             fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#a371f7', width=1.5), name='RSI (14)'), row=3, col=1)
             fig.add_hline(y=70, line_dash="dash", line_color="rgba(248, 81, 73, 0.4)", row=3, col=1)
             fig.add_hline(y=30, line_dash="dash", line_color="rgba(63, 185, 80, 0.4)", row=3, col=1)
             fig.add_hline(y=50, line_dash="dot", line_color="rgba(139, 148, 158, 0.4)", row=3, col=1)
 
-            # Category-Based Layout to prevent empty space bugs
             fig.update_xaxes(type='category', row=1, col=1)
             fig.update_xaxes(type='category', row=2, col=1)
             fig.update_xaxes(type='category', row=3, col=1)
@@ -601,7 +622,7 @@ if execute_btn or 'sim_ran' in st.session_state:
 
         with tab_trades:
             if trades:
-                st.markdown("#### 📜 Institutional Trade Execution Audit Logs")
+                st.markdown("#### 📜 Detailed Trade Execution Audit Logs")
                 tdf_clean = tdf[['Entry Time', 'Exit Time', 'Type', 'Entry Price', 'Exit Price', 'Result', 'Points', 'PnL']].copy()
                 st.dataframe(
                     tdf_clean.style.map(
@@ -619,65 +640,44 @@ if execute_btn or 'sim_ran' in st.session_state:
                     mime="text/csv"
                 )
 
-        # --- LIVE USER CREATION & AUTHORITY MANAGER ---
+        # --- ADMIN USER BASE & REGISTERED TRADERS LEADS ---
         with tab_admin:
             is_admin = st.session_state.user_info.get("tier") == "Master Admin" or st.session_state.user_info.get("id") == "admin"
             
             if not is_admin:
-                st.warning("🔒 Access Restricted: Only Sam (Master Admin) can issue and manage user licenses.")
+                st.info("👋 Welcome! You are logged in as a Community Member. Share this app with your trader friends!")
             else:
-                st.markdown("### 👑 Master Admin: Live Client Access Manager")
-                st.caption("Aap yahan se kisi bhi naye user ka username aur password instant create ya revoke kar sakte hain.")
+                total_registered = len(st.session_state.users_db)
+                st.markdown("### 👑 Founder Dashboard: Community & Registered Leads")
+                st.metric("Total Registered Traders", total_registered, "Live App Users")
 
-                col_add, col_del = st.columns([1.5, 1])
-                
-                with col_add:
-                    st.markdown("#### ➕ Create New Access Credentials")
-                    with st.form("add_user_form", clear_on_submit=True):
-                        new_u = st.text_input("New Username (User ID)", placeholder="e.g. rahul_trader")
-                        new_p = st.text_input("Secret Access Password", placeholder="e.g. pass@123")
-                        new_n = st.text_input("Full Name", placeholder="e.g. Rahul Sharma")
-                        new_t = st.selectbox("License Tier", ["Institutional Pro", "Standard Beta", "VIP Algo Trader"])
-                        btn_add = st.form_submit_button("⚡ GENERATE & GRANT ACCESS")
-                        
-                        if btn_add:
-                            if new_u.strip() == "" or new_p.strip() == "":
-                                st.error("Username aur Password empty nahi ho sakte.")
-                            elif new_u in st.session_state.users_db:
-                                st.error(f"User ID '{new_u}' pehle se exist karti hai.")
-                            else:
-                                st.session_state.users_db[new_u] = {
-                                    "pass": new_p,
-                                    "name": new_n if new_n else new_u,
-                                    "tier": new_t
-                                }
-                                save_users(st.session_state.users_db)
-                                st.success(f"✅ Access granted for user '{new_u}'! Credentials are now live.")
-                                time.sleep(1)
-                                st.rerun()
+                col_a1, col_a2 = st.columns([1.5, 1])
+                with col_a1:
+                    st.markdown("#### 📋 Registered Traders Directory (Leads)")
+                    users_list = []
+                    for uid, udata in st.session_state.users_db.items():
+                        users_list.append({
+                            "Username": uid,
+                            "Full Name": udata.get("name", "N/A"),
+                            "Phone / WhatsApp": udata.get("phone", "N/A"),
+                            "Tier": udata.get("tier", "Free Member"),
+                            "Registered On": udata.get("created_at", "Pre-launch")
+                        })
+                    leads_df = pd.DataFrame(users_list)
+                    st.dataframe(leads_df, use_container_width=True)
+                    
+                    csv_leads = io.StringIO()
+                    leads_df.to_csv(csv_leads, index=False)
+                    st.download_button("📥 Export User Phone/Email Leads (CSV)", data=csv_leads.getvalue(), file_name="sam_quantum_leads.csv", mime="text/csv")
 
-                with col_del:
-                    st.markdown("#### 🗑️ Revoke / Delete Client Access")
-                    user_list = [u for u in st.session_state.users_db.keys() if u != "admin"]
-                    if user_list:
-                        target_u = st.selectbox("Select User to Remove", user_list)
-                        if st.button("❌ REVOKE ACCESS NOW", type="secondary"):
-                            del st.session_state.users_db[target_u]
+                with col_a2:
+                    st.markdown("#### 🗑️ Manage / Revoke Member")
+                    rem_list = [u for u in st.session_state.users_db.keys() if u != "admin"]
+                    if rem_list:
+                        u_del = st.selectbox("Select User to Remove", rem_list)
+                        if st.button("❌ REMOVE USER", type="secondary"):
+                            del st.session_state.users_db[u_del]
                             save_users(st.session_state.users_db)
-                            st.warning(f"User '{target_u}' ka access revoke kar diya gaya hai.")
+                            st.warning(f"User '{u_del}' removed.")
                             time.sleep(1)
                             st.rerun()
-                    else:
-                        st.info("Koi client user available nahi hai (Admin protected).")
-
-                st.markdown("---")
-                st.markdown("#### 📋 Active Registered Accounts")
-                active_data = []
-                for uid, udata in st.session_state.users_db.items():
-                    active_data.append({
-                        "User ID": uid,
-                        "Client Name": udata["name"],
-                        "Password": udata["pass"],
-                        "Tier": udata["tier"]
-                    })
-                st.dataframe(pd.DataFrame(active_data), use_container_width=True)
