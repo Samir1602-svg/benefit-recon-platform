@@ -6,10 +6,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 import io
+import json
+import os
 import time
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - UI THEME & AUTHENTICATION CONFIG
+# 💎 SAM QUANTUM TERMINAL - CONFIG & STYLES
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Terminal",
@@ -18,99 +20,42 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Authorized Access Registry (Admin can add/remove clients)
-AUTHORIZED_USERS = {
+DB_FILE = "users_db.json"
+
+DEFAULT_USERS = {
     "admin": {"pass": "sam@2026", "name": "Sam (Founder / Master)", "tier": "Master Admin"},
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "tier": "Institutional Pro"},
     "guest": {"pass": "welcome123", "name": "Trial Client", "tier": "Standard Beta"}
 }
 
-# Custom CSS for Sleek Institutional Dark / Glassmorphism Interface
+def load_users():
+    if not os.path.exists(DB_FILE):
+        with open(DB_FILE, "w") as f:
+            json.dump(DEFAULT_USERS, f)
+        return DEFAULT_USERS
+    try:
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return DEFAULT_USERS
+
+def save_users(users_dict):
+    with open(DB_FILE, "w") as f:
+        json.dump(users_dict, f, indent=4)
+
+if 'users_db' not in st.session_state:
+    st.session_state.users_db = load_users()
+
 st.markdown("""
 <style>
-    /* Dark Terminal Theme */
-    .stApp {
-        background-color: #0d1117;
-        color: #e6edf3;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    }
-    
-    /* Sleek Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #161b22 !important;
-        border-right: 1px solid #30363d;
-    }
-    
-    /* Login & Glass Containers */
-    .glass-card {
-        background: rgba(22, 27, 34, 0.85);
-        border: 1px solid #30363d;
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        backdrop-filter: blur(10px);
-    }
-    
-    /* Top Banner */
-    .brand-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: linear-gradient(90deg, #161b22 0%, #1f2937 100%);
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 14px 24px;
-        margin-bottom: 20px;
-    }
-    
-    /* Metrics */
-    div[data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 14px 18px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #8b949e !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        text-transform: uppercase;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #ffffff !important;
-        font-size: 22px !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Neon Action Buttons */
-    .stButton>button {
-        background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
-        color: white;
-        font-weight: 600;
-        border: 1px solid #3fb950;
-        border-radius: 8px;
-        padding: 10px 20px;
-        transition: all 0.2s ease;
-        width: 100%;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #2ea043 0%, #3fb950 100%);
-        box-shadow: 0 0 16px rgba(46, 160, 67, 0.5);
-    }
-
-    /* Tabs Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #161b22;
-        border-radius: 8px;
-        padding: 6px;
-        border: 1px solid #30363d;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #21262d !important;
-        color: #58a6ff !important;
-        border-radius: 6px;
-    }
+    .stApp { background-color: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
+    .glass-card { background: rgba(22, 27, 34, 0.85); border: 1px solid #30363d; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .brand-header { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #161b22 0%, #1f2937 100%); border: 1px solid #30363d; border-radius: 10px; padding: 14px 24px; margin-bottom: 20px; }
+    div[data-testid="stMetric"] { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 18px; }
+    .stButton>button { background: linear-gradient(135deg, #238636 0%, #2ea043 100%); color: white; font-weight: 600; border: 1px solid #3fb950; border-radius: 8px; width: 100%; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #161b22; border-radius: 8px; padding: 6px; border: 1px solid #30363d; }
+    .stTabs [aria-selected="true"] { background-color: #21262d !important; color: #58a6ff !important; border-radius: 6px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -141,10 +86,11 @@ def login_portal():
             submit = st.form_submit_button("⚡ UNLOCK TERMINAL")
             
             if submit:
-                if username in AUTHORIZED_USERS and AUTHORIZED_USERS[username]["pass"] == password:
+                users = st.session_state.users_db
+                if username in users and users[username]["pass"] == password:
                     st.session_state.authenticated = True
-                    st.session_state.user_info = AUTHORIZED_USERS[username]
-                    st.success(f"Access Granted! Welcome, {AUTHORIZED_USERS[username]['name']}.")
+                    st.session_state.user_info = {**users[username], "id": username}
+                    st.success(f"Access Granted! Welcome, {users[username]['name']}.")
                     time.sleep(0.5)
                     st.rerun()
                 else:
@@ -155,7 +101,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# 🧮 PRODUCTION QUANT INDICATORS ENGINE
+# 🧮 INDICATORS & PATTERN RECOGNITION ENGINE
 # ==============================================================================
 def calc_indicators(df, params):
     d = df.copy()
@@ -166,11 +112,10 @@ def calc_indicators(df, params):
     d['EMA20'] = c.ewm(span=20, adjust=False).mean()
     d['EMA21'] = c.ewm(span=21, adjust=False).mean()
     d['EMA50'] = c.ewm(span=50, adjust=False).mean()
-    d['EMA100'] = c.ewm(span=100, adjust=False).mean()
     d['EMA200'] = c.ewm(span=200, adjust=False).mean()
     d['SMA20'] = c.rolling(window=20).mean()
 
-    # Intraday VWAP
+    # VWAP
     typical_price = (h + l + c) / 3.0
     date_group = d.index.date if hasattr(d.index, 'date') else np.zeros(len(d))
     pv = typical_price * v
@@ -179,7 +124,7 @@ def calc_indicators(df, params):
     d['VWAP'] = d['Cum_PV'] / d['Cum_Vol'].replace(0, np.nan)
     d['VWAP'] = d['VWAP'].fillna(c)
 
-    # RSI (14)
+    # RSI
     delta = c.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -235,7 +180,14 @@ def calc_indicators(df, params):
     d['ST_DIR'] = direction
     d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
     d['PCT_CHANGE'] = ((c - o) / o.replace(0, np.nan)) * 100
-    
+
+    # 🕯️ Beginner-Friendly Candle Patterns
+    body = (c - o).abs()
+    candle_range = h - l
+    d['IS_HAMMER'] = ((l <= o.combine(c, min) - (body * 1.8)) & (h <= o.combine(c, max) + (body * 0.3)) & (body > 0))
+    d['IS_ENGULFING_BULL'] = ((c > o) & (c.shift(1) < o.shift(1)) & (c >= o.shift(1)) & (o <= c.shift(1)))
+    d['IS_ENGULFING_BEAR'] = ((c < o) & (c.shift(1) > o.shift(1)) & (c <= o.shift(1)) & (o >= c.shift(1)))
+
     return d
 
 # ==============================================================================
@@ -279,9 +231,9 @@ with st.sidebar:
             "2. EMA Golden/Death Crossover (9/21 or 20/50)",
             "3. SuperTrend Trend-Rider (10, Multiplier)",
             "4. Momentum + Volume Spike Breakout (2.5x Vol)",
-            "5. Bollinger Band Bounce (Mean Reversion)",
-            "6. VWAP Intraday Breakout & Retest",
-            "7. Master Multi-Indicator Confluence"
+            "5. Candlestick Pattern Engine (Hammer/Engulfing)",
+            "6. Bollinger Band Bounce (Mean Reversion)",
+            "7. VWAP Intraday Breakout & Retest"
         ]
     )
 
@@ -325,8 +277,7 @@ with st.sidebar:
         [
             "All Market Hours (24/7 or Standard Open)",
             "Indian Cash/Options (09:15 - 15:15 IST)",
-            "London + NY Session (13:30 - 22:30 IST)",
-            "Prime Breakout Windows Only"
+            "London + NY Session (13:30 - 22:30 IST)"
         ],
         index=0
     )
@@ -355,7 +306,7 @@ with col_run2:
 
 if execute_btn or 'sim_ran' in st.session_state:
     st.session_state.sim_ran = True
-    with st.spinner("⏳ Compiling multi-timeframe candle stream and executing institutional matrix..."):
+    with st.spinner("⏳ Compiling candle stream and executing institutional matrix..."):
         df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
         
         if df_raw.empty or len(df_raw) < 25:
@@ -372,9 +323,10 @@ if execute_btn or 'sim_ran' in st.session_state:
         ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
         df['IST_Hour'] = ist_time.hour
         df['IST_Minute'] = ist_time.minute
+        # Format string for clean non-disappearing categories
+        df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
         df.dropna(inplace=True)
 
-        # Simulation Loop
         trades = []
         position = None
         last_traded_bar = -1
@@ -403,12 +355,14 @@ if execute_btn or 'sim_ran' in st.session_state:
             bb_u = float(df['BB_UP'].iloc[i])
             bb_l = float(df['BB_LOW'].iloc[i])
             vwap = float(df['VWAP'].iloc[i])
+            is_hammer = bool(df['IS_HAMMER'].iloc[i])
+            is_engulf_bull = bool(df['IS_ENGULFING_BULL'].iloc[i])
+            is_engulf_bear = bool(df['IS_ENGULFING_BEAR'].iloc[i])
 
             hr = int(df['IST_Hour'].iloc[i])
             mn = int(df['IST_Minute'].iloc[i])
-            candle_time = df.index[i]
+            time_label = df['Time_Str'].iloc[i]
 
-            # Timing Filters
             in_session = True
             if session_filter == "Indian Cash/Options (09:15 - 15:15 IST)":
                 in_session = (hr == 9 and mn >= 15) or (10 <= hr < 15) or (hr == 15 and mn <= 15)
@@ -420,12 +374,10 @@ if execute_btn or 'sim_ran' in st.session_state:
                 spot_move = (curr_spot - position['entry_spot']) if position['type'] == 'BUY/CE' else (position['entry_spot'] - curr_spot)
                 opt_move = spot_move * delta
 
-                # Breakeven Trail
                 if "Breakeven" in trailing_mode and opt_move >= be_trigger and not position['trailed']:
                     position['sl_pts'] = 0.0
                     position['trailed'] = True
 
-                # Dynamic ATR Ratchet
                 if "ATR" in trailing_mode:
                     if opt_move > position['max_gain']:
                         position['max_gain'] = opt_move
@@ -433,47 +385,41 @@ if execute_btn or 'sim_ran' in st.session_state:
                         if ratchet < position['sl_pts']:
                             position['sl_pts'] = ratchet
 
-                # 9-EMA Dynamic Trend-Rider Exit
                 if "9-EMA" in trailing_mode:
                     ema_break = (position['type'] == 'BUY/CE' and curr_spot < ema9) or (position['type'] == 'SELL/PE' and curr_spot > ema9)
                     if ema_break and opt_move > 5.0:
                         pnl = opt_move * qty
                         trades.append({
-                            'Entry Time': position['entry_time'], 'Exit Time': candle_time,
+                            'Entry Time': position['entry_time'], 'Exit Time': time_label,
                             'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot,
-                            'Result': 'EMA TRAIL EXIT 🏃', 'Points': round(opt_move, 1), 'PnL': pnl,
-                            'Entry_Idx': position['entry_idx']
+                            'Result': 'EMA TRAIL EXIT 🏃', 'Points': round(opt_move, 1), 'PnL': pnl
                         })
                         position = None
                         last_traded_bar = i
                         continue
 
-                # Target Hit
                 if opt_move >= target_pts:
                     pnl = target_pts * qty
                     trades.append({
-                        'Entry Time': position['entry_time'], 'Exit Time': candle_time,
+                        'Entry Time': position['entry_time'], 'Exit Time': time_label,
                         'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot,
-                        'Result': 'TARGET HIT 🎯', 'Points': target_pts, 'PnL': pnl,
-                        'Entry_Idx': position['entry_idx']
+                        'Result': 'TARGET HIT 🎯', 'Points': target_pts, 'PnL': pnl
                     })
                     position = None
                     last_traded_bar = i
 
-                # Stop-Loss Hit
                 elif opt_move <= -position['sl_pts']:
                     pnl = -position['sl_pts'] * qty
                     res_tag = "BREAKEVEN 🛡️" if position['trailed'] else "SL HIT 🛑"
                     trades.append({
-                        'Entry Time': position['entry_time'], 'Exit Time': candle_time,
+                        'Entry Time': position['entry_time'], 'Exit Time': time_label,
                         'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot,
-                        'Result': res_tag, 'Points': -position['sl_pts'], 'PnL': pnl,
-                        'Entry_Idx': position['entry_idx']
+                        'Result': res_tag, 'Points': -position['sl_pts'], 'PnL': pnl
                     })
                     position = None
                     last_traded_bar = i
 
-            # 2. Trigger Next Valid Setup
+            # 2. Trigger Setup
             elif in_session and last_traded_bar != i:
                 pass_rsi_buy = (rsi > 50) if rsi_filter else True
                 pass_rsi_sell = (rsi < 50) if rsi_filter else True
@@ -498,53 +444,58 @@ if execute_btn or 'sim_ran' in st.session_state:
                     buy_sig = (vol >= vol_sma * 2.5) and (pct >= 0.30) and (curr_spot > ema9) and pass_rsi_buy
                     sell_sig = (vol >= vol_sma * 2.5) and (pct <= -0.30) and (curr_spot < ema9) and pass_rsi_sell
 
-                elif "5. Bollinger Band Bounce" in strategy_type:
+                elif "5. Candlestick Pattern Engine" in strategy_type:
+                    buy_sig = (is_hammer or is_engulf_bull) and (curr_spot > ema20) and pass_rsi_buy
+                    sell_sig = is_engulf_bear and (curr_spot < ema20) and pass_rsi_sell
+
+                elif "6. Bollinger Band Bounce" in strategy_type:
                     buy_sig = (low_spot <= bb_l) and (rsi < 35) and (curr_spot > bb_l)
                     sell_sig = (high_spot >= bb_u) and (rsi > 65) and (curr_spot < bb_u)
 
-                elif "6. VWAP Intraday Breakout" in strategy_type:
+                elif "7. VWAP Intraday Breakout" in strategy_type:
                     buy_sig = (curr_spot > vwap) and (curr_open <= vwap) and (curr_spot > ema20) and pass_rsi_buy and pass_vol
                     sell_sig = (curr_spot < vwap) and (curr_open >= vwap) and (curr_spot < ema20) and pass_rsi_sell and pass_vol
 
-                elif "7. Master Multi-Indicator Confluence" in strategy_type:
-                    buy_sig = (st_dir == 1) and (curr_spot > ema50) and (curr_spot > vwap) and (rsi > 54) and pass_vol
-                    sell_sig = (st_dir == -1) and (curr_spot < ema50) and (curr_spot < vwap) and (rsi < 46) and pass_vol
-
                 if buy_sig:
-                    position = {'type': 'BUY/CE', 'entry_spot': curr_spot, 'entry_time': candle_time, 'sl_pts': sl_pts, 'trailed': False, 'max_gain': 0.0, 'entry_idx': i}
+                    position = {'type': 'BUY/CE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_pts': sl_pts, 'trailed': False, 'max_gain': 0.0}
                     last_traded_bar = i
                 elif sell_sig:
-                    position = {'type': 'SELL/PE', 'entry_spot': curr_spot, 'entry_time': candle_time, 'sl_pts': sl_pts, 'trailed': False, 'max_gain': 0.0, 'entry_idx': i}
+                    position = {'type': 'SELL/PE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_pts': sl_pts, 'trailed': False, 'max_gain': 0.0}
                     last_traded_bar = i
 
         # ==============================================================================
-        # 📊 INSTITUTIONAL VISUAL WORKSPACE
+        # 📊 WORKSPACE TABS
         # ==============================================================================
         tab_chart, tab_metrics, tab_trades, tab_admin = st.tabs([
-            "📈 Candlestick Pro Chart", 
-            "📊 Executive KPIs & Scorecard", 
-            "📜 Execution Logs", 
-            "👥 Client Access Manager"
+            "📈 Seamless Pro Chart (No Disappearing)", 
+            "📊 Strategy Scorecard & KPIs", 
+            "📜 Detailed Execution Logs", 
+            "👑 Live Access Controller (Admin)"
         ])
 
         with tab_chart:
-            st.markdown("#### 🕯️ Multi-Pane Institutional Price Chart with Execution Overlays")
+            st.markdown("#### 🕯️ Smooth-Zoom Institutional Candlestick Terminal")
+            st.caption("💡 Category-Indexed: Zoom In/Out freely without gaps or data vanishing.")
+            
             fig = make_subplots(
                 rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03,
-                subplot_titles=(f"{symbol} ({timeframe}) Price & Indicators", "Volume & Activity", "RSI Momentum (14)"),
+                subplot_titles=(f"{symbol} Price Matrix & Signals", "Volume Activity", "RSI Momentum (14)"),
                 row_heights=[0.65, 0.15, 0.20]
             )
 
+            # Candlestick
             fig.add_trace(go.Candlestick(
-                x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                name="Candles", increasing_line_color='#238636', decreasing_line_color='#da3633',
+                x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+                name="Price", increasing_line_color='#238636', decreasing_line_color='#da3633',
                 increasing_fillcolor='#238636', decreasing_fillcolor='#da3633'
             ), row=1, col=1)
 
-            fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], line=dict(color='#58a6ff', width=1.5), name='EMA 20'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['EMA50'], line=dict(color='#f0883e', width=1.5), name='EMA 50'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['VWAP'], line=dict(color='#d2a8ff', width=1.5, dash='dot'), name='VWAP'), row=1, col=1)
+            # Indicator Overlays
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#58a6ff', width=1.5), name='EMA 20'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f0883e', width=1.5), name='EMA 50'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VWAP'], line=dict(color='#d2a8ff', width=1.5, dash='dot'), name='VWAP'), row=1, col=1)
 
+            # Trade Marker Overlays
             if trades:
                 tdf = pd.DataFrame(trades)
                 b_df = tdf[tdf['Type'] == 'BUY/CE']
@@ -563,14 +514,21 @@ if execute_btn or 'sim_ran' in st.session_state:
                         name='SELL / PE Entry'
                     ), row=1, col=1)
 
+            # Volume Pane
             colors_v = ['#238636' if df['Close'].iloc[k] >= df['Open'].iloc[k] else '#da3633' for k in range(len(df))]
-            fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=colors_v, name='Volume'), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['VOL_SMA20'], line=dict(color='#e3b341', width=1.2), name='Vol SMA 20'), row=2, col=1)
+            fig.add_trace(go.Bar(x=df['Time_Str'], y=df['Volume'], marker_color=colors_v, name='Volume'), row=2, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VOL_SMA20'], line=dict(color='#e3b341', width=1.2), name='Vol SMA 20'), row=2, col=1)
 
-            fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], line=dict(color='#a371f7', width=1.5), name='RSI (14)'), row=3, col=1)
+            # RSI Pane
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#a371f7', width=1.5), name='RSI (14)'), row=3, col=1)
             fig.add_hline(y=70, line_dash="dash", line_color="rgba(248, 81, 73, 0.4)", row=3, col=1)
             fig.add_hline(y=30, line_dash="dash", line_color="rgba(63, 185, 80, 0.4)", row=3, col=1)
             fig.add_hline(y=50, line_dash="dot", line_color="rgba(139, 148, 158, 0.4)", row=3, col=1)
+
+            # Category-Based Layout to prevent empty space bugs
+            fig.update_xaxes(type='category', row=1, col=1)
+            fig.update_xaxes(type='category', row=2, col=1)
+            fig.update_xaxes(type='category', row=3, col=1)
 
             fig.update_layout(
                 template="plotly_dark", paper_bgcolor='#0d1117', plot_bgcolor='#0d1117',
@@ -582,7 +540,7 @@ if execute_btn or 'sim_ran' in st.session_state:
 
         with tab_metrics:
             if not trades:
-                st.warning("⚠️ No trades were triggered with current parameter constraints.")
+                st.warning("⚠️ No trades triggered with current parameters.")
             else:
                 tdf = pd.DataFrame(trades)
                 net_pnl = tdf['PnL'].sum()
@@ -614,8 +572,8 @@ if execute_btn or 'sim_ran' in st.session_state:
                 k2.metric("Win Rate", f"{win_rate:.1f}%", f"{win_count}W / {loss_count}L")
                 k3.metric("Profit Factor", f"{profit_factor}", "Ratio")
                 k4.metric("Max Drawdown", f"-₹{abs(max_dd):,.2f}", f"{max_dd_pct:.1f}% DD")
-                k5.metric("Avg Trade Expectancy", f"₹{expectancy:,.1f}", "Per Trade")
-                k6.metric("Total Executions", total_trades, f"{timeframe} Stream")
+                k5.metric("Avg Expectancy", f"₹{expectancy:,.1f}", "Per Trade")
+                k6.metric("Total Trades", total_trades, f"{timeframe} Stream")
 
                 st.markdown("---")
                 col_e1, col_e2 = st.columns(2)
@@ -661,13 +619,65 @@ if execute_btn or 'sim_ran' in st.session_state:
                     mime="text/csv"
                 )
 
+        # --- LIVE USER CREATION & AUTHORITY MANAGER ---
         with tab_admin:
-            st.markdown("#### 👥 Enterprise Access & License Controller")
-            st.caption("Sam (Master Admin) can issue or revoke access keys for client accounts.")
+            is_admin = st.session_state.user_info.get("tier") == "Master Admin" or st.session_state.user_info.get("id") == "admin"
             
-            users_df = pd.DataFrame([
-                {"User ID": u, "Client Name": d["name"], "Access Key": "••••••••", "License Tier": d["tier"]}
-                for u, d in AUTHORIZED_USERS.items()
-            ])
-            st.table(users_df)
-            st.info("💡 To grant access to a new user, simply add their credentials inside `AUTHORIZED_USERS` dictionary in `app_backtester.py`.")
+            if not is_admin:
+                st.warning("🔒 Access Restricted: Only Sam (Master Admin) can issue and manage user licenses.")
+            else:
+                st.markdown("### 👑 Master Admin: Live Client Access Manager")
+                st.caption("Aap yahan se kisi bhi naye user ka username aur password instant create ya revoke kar sakte hain.")
+
+                col_add, col_del = st.columns([1.5, 1])
+                
+                with col_add:
+                    st.markdown("#### ➕ Create New Access Credentials")
+                    with st.form("add_user_form", clear_on_submit=True):
+                        new_u = st.text_input("New Username (User ID)", placeholder="e.g. rahul_trader")
+                        new_p = st.text_input("Secret Access Password", placeholder="e.g. pass@123")
+                        new_n = st.text_input("Full Name", placeholder="e.g. Rahul Sharma")
+                        new_t = st.selectbox("License Tier", ["Institutional Pro", "Standard Beta", "VIP Algo Trader"])
+                        btn_add = st.form_submit_button("⚡ GENERATE & GRANT ACCESS")
+                        
+                        if btn_add:
+                            if new_u.strip() == "" or new_p.strip() == "":
+                                st.error("Username aur Password empty nahi ho sakte.")
+                            elif new_u in st.session_state.users_db:
+                                st.error(f"User ID '{new_u}' pehle se exist karti hai.")
+                            else:
+                                st.session_state.users_db[new_u] = {
+                                    "pass": new_p,
+                                    "name": new_n if new_n else new_u,
+                                    "tier": new_t
+                                }
+                                save_users(st.session_state.users_db)
+                                st.success(f"✅ Access granted for user '{new_u}'! Credentials are now live.")
+                                time.sleep(1)
+                                st.rerun()
+
+                with col_del:
+                    st.markdown("#### 🗑️ Revoke / Delete Client Access")
+                    user_list = [u for u in st.session_state.users_db.keys() if u != "admin"]
+                    if user_list:
+                        target_u = st.selectbox("Select User to Remove", user_list)
+                        if st.button("❌ REVOKE ACCESS NOW", type="secondary"):
+                            del st.session_state.users_db[target_u]
+                            save_users(st.session_state.users_db)
+                            st.warning(f"User '{target_u}' ka access revoke kar diya gaya hai.")
+                            time.sleep(1)
+                            st.rerun()
+                    else:
+                        st.info("Koi client user available nahi hai (Admin protected).")
+
+                st.markdown("---")
+                st.markdown("#### 📋 Active Registered Accounts")
+                active_data = []
+                for uid, udata in st.session_state.users_db.items():
+                    active_data.append({
+                        "User ID": uid,
+                        "Client Name": udata["name"],
+                        "Password": udata["pass"],
+                        "Tier": udata["tier"]
+                    })
+                st.dataframe(pd.DataFrame(active_data), use_container_width=True)
