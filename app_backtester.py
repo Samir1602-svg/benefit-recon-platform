@@ -11,13 +11,13 @@ import os
 import time
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - CONFIG & STYLES
+# 💎 SAM QUANTUM TERMINAL - CONFIG & STYLES (MOBILE ANTI-REFRESH ENABLED)
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Free Strategy & Backtest App",
+    page_title="SAM QUANTUM AI | Institutional Terminal",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 DB_FILE = "users_db.json"
@@ -45,26 +45,99 @@ def save_users(users_dict):
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
 
+# 🛡️ Anti-Pull-To-Refresh & Clean TradingView UI Styling
 st.markdown("""
 <style>
-    .stApp { background-color: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
-    .glass-card { background: rgba(22, 27, 34, 0.95); border: 1px solid #30363d; border-radius: 14px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
-    .brand-header { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #161b22 0%, #1f2937 100%); border: 1px solid #30363d; border-radius: 10px; padding: 14px 24px; margin-bottom: 20px; }
-    div[data-testid="stMetric"] { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 18px; }
-    .stButton>button { background: linear-gradient(135deg, #238636 0%, #2ea043 100%); color: white; font-weight: 600; border: 1px solid #3fb950; border-radius: 8px; width: 100%; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #161b22; border-radius: 8px; padding: 6px; border: 1px solid #30363d; }
-    .stTabs [aria-selected="true"] { background-color: #21262d !important; color: #58a6ff !important; border-radius: 6px; }
+    /* Prevent accidental pull-to-refresh on mobile swipe */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
+        overscroll-behavior-y: none !important;
+        overscroll-behavior-x: none !important;
+        -webkit-overflow-scrolling: touch;
+        background-color: #0b0e14 !important;
+        color: #e6edf3;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Minimalist header & glass effect */
+    .brand-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, #111722 0%, #161f30 100%);
+        border: 1px solid #1f293d;
+        border-radius: 12px;
+        padding: 12px 18px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+    }
+    
+    .glass-card {
+        background: #111722;
+        border: 1px solid #1f293d;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    /* Professional Metrics */
+    div[data-testid="stMetric"] {
+        background-color: #111722 !important;
+        border: 1px solid #1f293d !important;
+        border-radius: 10px !important;
+        padding: 12px 14px !important;
+    }
+
+    /* Neon Green Institutional Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 10px 18px !important;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+
+    /* Tabs UI */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #111722;
+        border-radius: 10px;
+        padding: 4px;
+        border: 1px solid #1f293d;
+        gap: 4px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1f293d !important;
+        color: #38bdf8 !important;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+    
+    /* Clean DataFrame scroll */
+    div[data-testid="stDataFrame"] {
+        border-radius: 10px;
+        border: 1px solid #1f293d;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 🔐 AUTHENTICATION & OPEN SIGN-UP PORTAL
+# 🔐 SESSION PERSISTENCE & AUTHENTICATION (SURVIVES MOBILE REFRESH)
 # ==============================================================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
+
+# 🔄 Check if user ID is saved in query parameters (Auto-Login on accidental reload)
+query_params = st.query_params
+if not st.session_state.authenticated and "uid" in query_params:
+    saved_uid = query_params["uid"]
+    users = st.session_state.users_db
+    if saved_uid in users:
+        st.session_state.authenticated = True
+        st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
 def auth_portal():
     col_l1, col_l2, col_l3 = st.columns([1, 1.9, 1])
@@ -72,23 +145,23 @@ def auth_portal():
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
         <div class="glass-card" style="text-align: center;">
-            <h1 style="color: #58a6ff; margin-bottom: 0px;">⚡ SAM QUANTUM AI</h1>
-            <p style="color: #8b949e; font-size: 14px; margin-bottom: 16px;">100% Free Strategy Studio & Institutional Backtester</p>
-            <span style="background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #3fb950; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
-                🆓 FREE LIFETIME ACCESS FOR TRADERS
+            <div style="font-size: 32px; margin-bottom: 6px;">⚡</div>
+            <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: 0.5px;">SAM QUANTUM AI</h2>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Quantitative Strategy Studio</p>
+            <span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">
+                ● FREE LIFETIME TRADER EDITION
             </span>
-            <hr style="border-color: #30363d; margin-top: 20px;">
+            <hr style="border-color: #1f293d; margin-top: 18px;">
         </div>
         """, unsafe_allow_html=True)
         
-        auth_mode = st.radio("Choose Action", ["🔑 Sign In to Terminal", "✨ Create Free New Account"], horizontal=True, label_visibility="collapsed")
+        auth_mode = st.radio("Mode", ["🔑 Sign In", "✨ Create Free Account"], horizontal=True, label_visibility="collapsed")
         
-        # --- 1. SIGN IN FLOW ---
-        if auth_mode == "🔑 Sign In to Terminal":
+        if auth_mode == "🔑 Sign In":
             with st.form("login_form"):
-                st.markdown("#### 🔒 Member Login")
-                username = st.text_input("User ID / Phone", placeholder="Enter your ID or phone number")
-                password = st.text_input("Password", type="password", placeholder="Enter your secret token")
+                st.markdown("##### 🔒 Terminal Sign In")
+                username = st.text_input("User ID / Mobile Number", placeholder="Enter username or mobile")
+                password = st.text_input("Security Access Key", type="password", placeholder="Enter password")
                 submit = st.form_submit_button("⚡ UNLOCK TERMINAL")
                 
                 if submit:
@@ -96,30 +169,28 @@ def auth_portal():
                     if username in users and users[username]["pass"] == password:
                         st.session_state.authenticated = True
                         st.session_state.user_info = {**users[username], "id": username}
-                        st.success(f"Access Granted! Welcome back, {users[username]['name']}.")
-                        time.sleep(0.5)
+                        # Lock query parameter for persistence
+                        st.query_params["uid"] = username
+                        st.success(f"Welcome back, {users[username]['name']}!")
+                        time.sleep(0.4)
                         st.rerun()
                     else:
-                        st.error("⛔ Invalid Credentials. If you are new, click 'Create Free New Account' above.")
+                        st.error("⛔ Invalid Credentials. New users click 'Create Free Account'.")
 
-        # --- 2. OPEN SELF-REGISTRATION FLOW ---
         else:
             with st.form("signup_form"):
-                st.markdown("#### 🚀 Instant Free Registration")
+                st.markdown("##### 🚀 Quick Free Registration")
                 new_name = st.text_input("Full Name", placeholder="e.g. Rahul Sharma")
-                new_phone = st.text_input("Mobile Number / WhatsApp", placeholder="e.g. 9876543210")
-                new_user = st.text_input("Choose Username (User ID)", placeholder="e.g. rahul_trader")
+                new_phone = st.text_input("Mobile / WhatsApp Number", placeholder="e.g. 9876543210")
+                new_user = st.text_input("Create User ID", placeholder="e.g. rahul_trader")
                 new_pass = st.text_input("Create Secret Password", type="password", placeholder="Minimum 4 characters")
-                agree = st.checkbox("I agree to analytical terms (Free educational backtest tool)", value=True)
-                btn_reg = st.form_submit_button("🎉 CREATE FREE ACCOUNT & START")
+                btn_reg = st.form_submit_button("🎉 INSTANT ACCESS")
                 
                 if btn_reg:
                     if not new_name.strip() or not new_phone.strip() or not new_user.strip() or not new_pass.strip():
-                        st.error("Please fill all registration fields.")
+                        st.error("Please fill all details.")
                     elif new_user in st.session_state.users_db:
-                        st.error(f"Username '{new_user}' already taken. Choose another one.")
-                    elif not agree:
-                        st.error("Please accept the terms to proceed.")
+                        st.error(f"Username '{new_user}' already taken.")
                     else:
                         st.session_state.users_db[new_user] = {
                             "pass": new_pass,
@@ -131,8 +202,9 @@ def auth_portal():
                         save_users(st.session_state.users_db)
                         st.session_state.authenticated = True
                         st.session_state.user_info = {**st.session_state.users_db[new_user], "id": new_user}
-                        st.success(f"Account Created Successfully! Welcome to Sam Quantum, {new_name}.")
-                        time.sleep(0.8)
+                        st.query_params["uid"] = new_user
+                        st.success(f"Welcome, {new_name}!")
+                        time.sleep(0.4)
                         st.rerun()
 
 if not st.session_state.authenticated:
@@ -221,24 +293,26 @@ def calc_indicators(df, params):
     return d
 
 # ==============================================================================
-# 🎛️ SIDEBAR
+# 🎛️ SIDEBAR CONTROLS
 # ==============================================================================
 with st.sidebar:
     st.markdown(f"""
-    <div style="background:#21262d; border:1px solid #30363d; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-        <span style="color:#58a6ff; font-weight:700;">⚡ SAM QUANTUM</span><br>
-        <span style="color:#8b949e; font-size:12px;">User: {st.session_state.user_info['name']}</span><br>
-        <span style="color:#3fb950; font-size:11px; font-weight:600;">● {st.session_state.user_info['tier']}</span>
+    <div style="background:#111722; border:1px solid #1f293d; border-radius:10px; padding:12px 14px; margin-bottom:12px;">
+        <span style="color:#38bdf8; font-weight:800; font-size:14px;">⚡ SAM QUANTUM</span><br>
+        <span style="color:#94a3b8; font-size:12px;">User: <b>{st.session_state.user_info['name']}</b></span><br>
+        <span style="color:#10b981; font-size:11px; font-weight:700;">● {st.session_state.user_info['tier']}</span>
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚪 Logout"):
+    if st.button("🚪 Logout Terminal"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
+        if "uid" in st.query_params:
+            del st.query_params["uid"]
         st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📊 1. Market Asset & Horizon")
+    st.markdown("### 📊 1. Asset & Timeframe")
     asset_dict = {
         "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
         "^NSEI": "Nifty 50 Index (^NSEI)",
@@ -250,7 +324,7 @@ with st.sidebar:
     }
     symbol = st.selectbox("Instrument", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
     timeframe = st.selectbox("Candle Resolution", ["1m", "2m", "5m", "15m", "30m", "60m", "1d"], index=3)
-    lookback_days = st.slider("Lookback Window (Days)", 1, 60, 30)
+    lookback_days = st.slider("Lookback Period (Days)", 1, 60, 30)
 
     st.markdown("---")
     st.markdown("### 🛠️ 2. Strategy Engine")
@@ -279,9 +353,9 @@ with st.sidebar:
     vol_filter = st.checkbox("Require Volume Spike Confirmation", value=False)
 
     st.markdown("---")
-    st.markdown("### 🛡️ 3. Risk & Trailing Architecture")
+    st.markdown("### 🛡️ 3. Risk & Capital Management")
     capital = st.number_input("Capital Allocation (₹)", value=100000.0, step=10000.0)
-    qty = st.number_input("Position Units / Qty", value=150, step=15)
+    qty = st.number_input("Position Units / Lot Qty", value=150, step=15)
     delta = st.slider("Option Delta / Leverage", 0.1, 1.0, 0.5, 0.05)
 
     col_k1, col_k2 = st.columns(2)
@@ -318,19 +392,19 @@ with st.sidebar:
 st.markdown(f"""
 <div class="brand-header">
     <div>
-        <h2 style="color: #58a6ff; margin: 0;">⚡ SAM QUANTUM STUDIO</h2>
-        <span style="color: #8b949e; font-size: 13px;">Community Strategy Backtesting & Quantitative Terminal</span>
+        <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM STUDIO</h3>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Strategy Studio & Execution Engine</span>
     </div>
     <div style="text-align: right;">
-        <span style="background: #238636; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 700;">SERVER: ACTIVE 🟢</span><br>
-        <span style="color: #8b949e; font-size: 12px;">Asset: {symbol} | {timeframe}</span>
+        <span style="background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 700;">LIVE FEED: CONNECTED</span><br>
+        <span style="color: #94a3b8; font-size: 11px;">{symbol} | {timeframe}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Strategy:** {strategy_type.split('.')[1].strip()} | 🎯 **R:R:** Risk ₹{sl_pts*qty:,.0f} to Target ₹{target_pts*qty:,.0f}")
+    st.write(f"💼 **Strategy:** {strategy_type.split('.')[1].strip()} | 🎯 **R:R:** Risk ₹{sl_pts*qty:,.0f} to Gain ₹{target_pts*qty:,.0f}")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE BACKTEST", type="primary")
 
@@ -398,7 +472,7 @@ if execute_btn or 'sim_ran' in st.session_state:
             elif session_filter == "London + NY Session (13:30 - 22:30 IST)":
                 in_session = (hr == 13 and mn >= 30) or (14 <= hr < 22) or (hr == 22 and mn <= 30)
 
-            # 1. Manage Active Position
+            # 1. Active Position Tracking
             if position is not None:
                 spot_move = (curr_spot - position['entry_spot']) if position['type'] == 'BUY/CE' else (position['entry_spot'] - curr_spot)
                 opt_move = spot_move * delta
@@ -448,7 +522,7 @@ if execute_btn or 'sim_ran' in st.session_state:
                     position = None
                     last_traded_bar = i
 
-            # 2. Trigger Setup
+            # 2. Strategy Trigger Logic
             elif in_session and last_traded_bar != i:
                 pass_rsi_buy = (rsi > 50) if rsi_filter else True
                 pass_rsi_sell = (rsi < 50) if rsi_filter else True
@@ -496,14 +570,14 @@ if execute_btn or 'sim_ran' in st.session_state:
         # 📊 WORKSPACE TABS
         # ==============================================================================
         tab_chart, tab_metrics, tab_trades, tab_admin = st.tabs([
-            "📈 Seamless Pro Chart", 
-            "📊 Strategy Scorecard & KPIs", 
-            "📜 Detailed Execution Logs", 
-            "👥 User Base & Growth Manager"
+            "📈 Pro Chart", 
+            "📊 Scorecard & KPIs", 
+            "📜 Trade Logs", 
+            "👥 Leads & Members"
         ])
 
         with tab_chart:
-            st.markdown("#### 🕯️ Smooth-Zoom Institutional Candlestick Terminal")
+            st.markdown("#### 🕯️ Institutional Price Chart & Signal Overlays")
             fig = make_subplots(
                 rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03,
                 subplot_titles=(f"{symbol} Price Matrix & Signals", "Volume Activity", "RSI Momentum (14)"),
@@ -512,13 +586,13 @@ if execute_btn or 'sim_ran' in st.session_state:
 
             fig.add_trace(go.Candlestick(
                 x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                name="Price", increasing_line_color='#238636', decreasing_line_color='#da3633',
-                increasing_fillcolor='#238636', decreasing_fillcolor='#da3633'
+                name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444',
+                increasing_fillcolor='#10b981', decreasing_fillcolor='#ef4444'
             ), row=1, col=1)
 
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#58a6ff', width=1.5), name='EMA 20'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f0883e', width=1.5), name='EMA 50'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VWAP'], line=dict(color='#d2a8ff', width=1.5, dash='dot'), name='VWAP'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VWAP'], line=dict(color='#c084fc', width=1.5, dash='dot'), name='VWAP'), row=1, col=1)
 
             if trades:
                 tdf = pd.DataFrame(trades)
@@ -526,7 +600,7 @@ if execute_btn or 'sim_ran' in st.session_state:
                 if not b_df.empty:
                     fig.add_trace(go.Scatter(
                         x=b_df['Entry Time'], y=b_df['Entry Price'],
-                        mode='markers', marker=dict(symbol='triangle-up', size=12, color='#3fb950'),
+                        mode='markers', marker=dict(symbol='triangle-up', size=12, color='#10b981'),
                         name='BUY / CE Entry'
                     ), row=1, col=1)
 
@@ -534,26 +608,26 @@ if execute_btn or 'sim_ran' in st.session_state:
                 if not s_df.empty:
                     fig.add_trace(go.Scatter(
                         x=s_df['Entry Time'], y=s_df['Entry Price'],
-                        mode='markers', marker=dict(symbol='triangle-down', size=12, color='#f85149'),
+                        mode='markers', marker=dict(symbol='triangle-down', size=12, color='#ef4444'),
                         name='SELL / PE Entry'
                     ), row=1, col=1)
 
-            colors_v = ['#238636' if df['Close'].iloc[k] >= df['Open'].iloc[k] else '#da3633' for k in range(len(df))]
+            colors_v = ['#10b981' if df['Close'].iloc[k] >= df['Open'].iloc[k] else '#ef4444' for k in range(len(df))]
             fig.add_trace(go.Bar(x=df['Time_Str'], y=df['Volume'], marker_color=colors_v, name='Volume'), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VOL_SMA20'], line=dict(color='#e3b341', width=1.2), name='Vol SMA 20'), row=2, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VOL_SMA20'], line=dict(color='#f59e0b', width=1.2), name='Vol SMA 20'), row=2, col=1)
 
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#a371f7', width=1.5), name='RSI (14)'), row=3, col=1)
-            fig.add_hline(y=70, line_dash="dash", line_color="rgba(248, 81, 73, 0.4)", row=3, col=1)
-            fig.add_hline(y=30, line_dash="dash", line_color="rgba(63, 185, 80, 0.4)", row=3, col=1)
-            fig.add_hline(y=50, line_dash="dot", line_color="rgba(139, 148, 158, 0.4)", row=3, col=1)
+            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=3, col=1)
+            fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=3, col=1)
+            fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=3, col=1)
+            fig.add_hline(y=50, line_dash="dot", line_color="rgba(148, 163, 184, 0.4)", row=3, col=1)
 
             fig.update_xaxes(type='category', row=1, col=1)
             fig.update_xaxes(type='category', row=2, col=1)
             fig.update_xaxes(type='category', row=3, col=1)
 
             fig.update_layout(
-                template="plotly_dark", paper_bgcolor='#0d1117', plot_bgcolor='#0d1117',
-                height=720, xaxis_rangeslider_visible=False,
+                template="plotly_dark", paper_bgcolor='#0b0e14', plot_bgcolor='#0b0e14',
+                height=700, xaxis_rangeslider_visible=False,
                 margin=dict(l=10, r=10, t=30, b=10),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
@@ -602,31 +676,31 @@ if execute_btn or 'sim_ran' in st.session_state:
                     fig_e = go.Figure()
                     fig_e.add_trace(go.Scatter(
                         x=tdf['Exit Time'], y=tdf['Cum_PnL'],
-                        mode='lines+markers', line=dict(color='#3fb950', width=2.5),
-                        fill='tozeroy', fillcolor='rgba(63, 185, 80, 0.05)',
+                        mode='lines+markers', line=dict(color='#10b981', width=2.5),
+                        fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)',
                         name='Net Growth'
                     ))
-                    fig_e.update_layout(title="📈 Cumulative Equity Growth (₹)", template="plotly_dark", paper_bgcolor='#161b22', plot_bgcolor='#161b22', height=350)
+                    fig_e.update_layout(title="📈 Cumulative Equity Growth (₹)", template="plotly_dark", paper_bgcolor='#111722', plot_bgcolor='#111722', height=340)
                     st.plotly_chart(fig_e, use_container_width=True)
 
                 with col_e2:
                     fig_d = go.Figure()
                     fig_d.add_trace(go.Scatter(
                         x=tdf['Exit Time'], y=tdf['Drawdown'],
-                        mode='lines', line=dict(color='#f85149', width=2),
-                        fill='tozeroy', fillcolor='rgba(248, 81, 73, 0.1)',
+                        mode='lines', line=dict(color='#ef4444', width=2),
+                        fill='tozeroy', fillcolor='rgba(239, 68, 68, 0.1)',
                         name='Drawdown'
                     ))
-                    fig_d.update_layout(title="📉 Underwater Drawdown Curve (₹)", template="plotly_dark", paper_bgcolor='#161b22', plot_bgcolor='#161b22', height=350)
+                    fig_d.update_layout(title="📉 Underwater Drawdown Curve (₹)", template="plotly_dark", paper_bgcolor='#111722', plot_bgcolor='#111722', height=340)
                     st.plotly_chart(fig_d, use_container_width=True)
 
         with tab_trades:
             if trades:
-                st.markdown("#### 📜 Detailed Trade Execution Audit Logs")
+                st.markdown("#### 📜 Institutional Trade Execution Audit Logs")
                 tdf_clean = tdf[['Entry Time', 'Exit Time', 'Type', 'Entry Price', 'Exit Price', 'Result', 'Points', 'PnL']].copy()
                 st.dataframe(
                     tdf_clean.style.map(
-                        lambda v: 'color: #3fb950; font-weight: bold;' if isinstance(v, (int, float)) and v > 0 else ('color: #f85149; font-weight: bold;' if isinstance(v, (int, float)) and v < 0 else ''),
+                        lambda v: 'color: #10b981; font-weight: bold;' if isinstance(v, (int, float)) and v > 0 else ('color: #ef4444; font-weight: bold;' if isinstance(v, (int, float)) and v < 0 else ''),
                         subset=['PnL', 'Points']
                     ),
                     use_container_width=True, height=450
@@ -648,7 +722,7 @@ if execute_btn or 'sim_ran' in st.session_state:
                 st.info("👋 Welcome! You are logged in as a Community Member. Share this app with your trader friends!")
             else:
                 total_registered = len(st.session_state.users_db)
-                st.markdown("### 👑 Founder Dashboard: Community & Registered Leads")
+                st.markdown("### 👑 Founder Dashboard: Community & Leads")
                 st.metric("Total Registered Traders", total_registered, "Live App Users")
 
                 col_a1, col_a2 = st.columns([1.5, 1])
@@ -668,7 +742,7 @@ if execute_btn or 'sim_ran' in st.session_state:
                     
                     csv_leads = io.StringIO()
                     leads_df.to_csv(csv_leads, index=False)
-                    st.download_button("📥 Export User Phone/Email Leads (CSV)", data=csv_leads.getvalue(), file_name="sam_quantum_leads.csv", mime="text/csv")
+                    st.download_button("📥 Export User Leads (CSV)", data=csv_leads.getvalue(), file_name="sam_quantum_leads.csv", mime="text/csv")
 
                 with col_a2:
                     st.markdown("#### 🗑️ Manage / Revoke Member")
