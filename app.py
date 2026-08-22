@@ -23,7 +23,6 @@ def init_database():
     conn = get_db()
     c = conn.cursor()
     
-    # Users Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +33,6 @@ def init_database():
         )
     ''')
     
-    # Dynamic Job Aids Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS job_aid_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +48,6 @@ def init_database():
         )
     ''')
     
-    # Audit Logs Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +61,6 @@ def init_database():
         )
     ''')
     
-    # Seed default Admin & Analyst
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
@@ -72,7 +68,6 @@ def init_database():
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
                   ("analyst", hash_password("analyst@123"), "Benefit Operations Analyst", "ANALYST"))
                   
-    # Seed default Job Aids
     c.execute("SELECT COUNT(*) FROM job_aid_rules")
     if c.fetchone()[0] == 0:
         seed_rules = [
@@ -222,6 +217,23 @@ def extract_text_from_pdf(uploaded_file):
             text += page_text + "\n"
     return text
 
+def get_demo_data():
+    df_src = pd.DataFrame({
+        "Plan_ID": ["PLN-HMO-101", "PLN-HMO-101", "PLN-HMO-101", "PLN-HMO-101", "PLN-PPO-202", "PLN-PPO-202", "PLN-PPO-202", "PLN-PPO-202"],
+        "Benefit_Service": ["Primary Care Visit (PCP)", "Specialist Visit", "Preventive Care / Annual Wellness", "Emergency Room (ER)", "Primary Care Visit (PCP)", "Specialist Visit", "Preventive Care / Annual Wellness", "Outpatient Diagnostic MRI"],
+        "Copay": ["$20", "$45", "$0", "$250", "$25", "$50", "$0", "$0"],
+        "Coinsurance": ["0%", "0%", "0%", "0%", "10%", "20%", "0%", "20%"],
+        "Deductible_Applies": ["No", "No", "No", "Yes", "No", "Yes", "No", "Yes"]
+    })
+    df_cod = pd.DataFrame({
+        "Plan_ID": ["PLN-HMO-101", "PLN-HMO-101", "PLN-HMO-101", "PLN-HMO-101", "PLN-PPO-202", "PLN-PPO-202", "PLN-PPO-202", "PLN-PPO-202"],
+        "Benefit_Service": ["Primary Care Visit (PCP)", "Specialist Visit", "Preventive Care / Annual Wellness", "Emergency Room (ER)", "Primary Care Visit (PCP)", "Specialist Visit", "Preventive Care / Annual Wellness", "Outpatient Diagnostic MRI"],
+        "Copay": ["$20", "$55", "$0", "$250", "$25", "$50", "$0", "$0"],
+        "Coinsurance": ["0%", "0%", "0%", "0%", "10%", "30%", "0%", "20%"],
+        "Deductible_Applies": ["No", "No", "Yes", "Yes", "No", "Yes", "No", "Yes"]
+    })
+    return df_src, df_cod
+
 # ==========================================
 # PAGE 1: RUN BENEFIT AUDIT
 # ==========================================
@@ -229,17 +241,27 @@ if selected_page == "🔍 Run Benefit Audit":
     st.title("🩺 Benefit Configuration & Cost-Share Audit")
     st.caption("Reconcile source plan documents with coded system outputs in seconds via SamAI Engine.")
 
+    col_demo, _ = st.columns([1, 1])
+    with col_demo:
+        use_demo = st.button("🚀 Auto-Load Practice Demo Data (1-Click Test)", use_container_width=True)
+
     colA, colB = st.columns(2)
     with colA:
         src_file = st.file_uploader("1. Source Plan / Benchmark Grid (.xlsx)", type=["xlsx", "xls"], key="src")
     with colB:
         cod_file = st.file_uploader("2. System Coded / Coder Export (.xlsx)", type=["xlsx", "xls"], key="cod")
 
-    if src_file and cod_file:
+    df_src, df_cod = None, None
+
+    if use_demo:
+        df_src, df_cod = get_demo_data()
+        st.info("Loaded built-in Practice Benchmark & Coded Data for live demonstration.")
+    elif src_file and cod_file:
+        df_src = pd.read_excel(src_file, engine='openpyxl')
+        df_cod = pd.read_excel(cod_file, engine='openpyxl')
+
+    if df_src is not None and df_cod is not None:
         try:
-            df_src = pd.read_excel(src_file, engine='openpyxl')
-            df_cod = pd.read_excel(cod_file, engine='openpyxl')
-            
             conn = get_db()
             rules_df = pd.read_sql_query("SELECT * FROM job_aid_rules WHERE is_active = 1", conn)
             conn.close()
