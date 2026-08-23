@@ -59,7 +59,6 @@ st.markdown("""
         font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
     }
 
-    /* Institutional Header Banner */
     .brand-header {
         display: flex;
         align-items: center;
@@ -73,7 +72,6 @@ st.markdown("""
         box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255,255,255,0.05);
     }
     
-    /* Obsidian Glass Cards */
     .glass-card {
         background: rgba(13, 20, 36, 0.75);
         border: 1px solid rgba(30, 41, 59, 0.8);
@@ -83,7 +81,6 @@ st.markdown("""
         box-shadow: 0 10px 30px rgba(0,0,0,0.7);
     }
 
-    /* Glowing Status Badges */
     .pulse-badge {
         display: inline-flex;
         align-items: center;
@@ -113,7 +110,6 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace;
     }
 
-    /* Metric Cards */
     div[data-testid="stMetric"] {
         background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(11, 17, 32, 0.9) 100%) !important;
         border: 1px solid rgba(51, 65, 85, 0.7) !important;
@@ -128,7 +124,6 @@ st.markdown("""
         color: #38bdf8 !important;
     }
 
-    /* High Precision Cyber Buttons */
     .stButton>button {
         background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
         color: #ffffff !important;
@@ -146,7 +141,6 @@ st.markdown("""
         transform: translateY(-1px);
     }
 
-    /* Navigation Tabs */
     .stTabs [data-baseweb="tab-list"] {
         background-color: rgba(13, 20, 36, 0.85);
         border-radius: 14px;
@@ -181,7 +175,7 @@ if not st.session_state.authenticated and "uid" in query_params:
         st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
 # ==============================================================================
-# 🔐 AUTHENTICATION PORTAL (CYBER SECURITY GRADE)
+# 🔐 AUTHENTICATION PORTAL
 # ==============================================================================
 if not st.session_state.authenticated:
     col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
@@ -407,7 +401,6 @@ with st.sidebar:
         
     timeframe = st.selectbox("Resolution Stream", allowed_tf, index=0)
     
-    # Auto-adjust lookback to prevent limit errors
     max_days = 7 if timeframe in ["1m", "2m"] else 60
     default_days = 5 if timeframe in ["1m", "2m"] else 30
     lookback_days = st.slider("Lookback Memory (Days)", 1, max_days, default_days)
@@ -440,7 +433,7 @@ with st.sidebar:
         sl_val = st.number_input("Hard SL (" + ("Pts" if is_idx else "%") + ")", value=20.0 if is_idx else 1.0, step=5.0 if is_idx else 0.2)
 
 # ==============================================================================
-# 🚀 MAIN DASHBOARD & INSTITUTIONAL COCKPIT
+# 🚀 MAIN DASHBOARD
 # ==============================================================================
 if not is_admin and curr_tier == "Free Member":
     with st.expander("⚡ UPGRADE TO VIP ALGO TRADER (Click to Expand / Dismiss)", expanded=False):
@@ -467,7 +460,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Top Bar Workspace Setup
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
     st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Strategy: **{strategy_type.split('.')[1].strip()}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
@@ -491,6 +483,78 @@ else:
         "📜 Trade Logs", 
         "📥 Download Reports"
     ])
+
+# ==============================================================================
+# 📑 EMBEDDED OPERATING MANUAL HTML GENERATOR (PDF READY)
+# ==============================================================================
+manual_html_doc = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SAM QUANTUM AI — Operating Manual</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    @page { size: A4; margin: 20mm 18mm; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080b11; color: #e2e8f0; margin: 0; padding: 24px; line-height: 1.55; }
+    .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 20px 24px; margin-bottom: 22px; }
+    .brand-title { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 800; color: #38bdf8; margin: 0; }
+    .brand-sub { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    .doc-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; margin-top: 10px; border-top: 1px solid rgba(51, 65, 85, 0.7); padding-top: 8px; display: flex; justify-content: space-between; }
+    .badge { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 3px solid #38bdf8; padding-left: 10px; margin: 22px 0 10px 0; text-transform: uppercase; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; font-size: 12.5px; color: #cbd5e1; }
+    ul { margin: 6px 0; padding-left: 18px; }
+    li { margin-bottom: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 11.5px; }
+    th, td { border: 1px solid #1e293b; padding: 8px 10px; text-align: left; }
+    th { background-color: #1e293b; color: #38bdf8; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+    td { background-color: rgba(15, 23, 42, 0.6); }
+    .print-btn { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 700; font-size: 14px; border: none; border-radius: 8px; padding: 12px 24px; cursor: pointer; margin-bottom: 20px; }
+    @media print { .no-print { display: none !important; } body { padding: 0; background: #080b11; } }
+</style>
+</head>
+<body>
+<div class="no-print" style="text-align: center; margin-bottom: 20px;">
+    <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Manual</button>
+</div>
+<div class="header-card">
+    <div class="brand-title">⚡ SAM QUANTUM AI</div>
+    <div class="brand-sub">Institutional Quantitative Operating Manual & Trader Guide</div>
+    <div class="doc-meta">
+        <span>DOC ID: SQ-MAN-2026-V1.0</span>
+        <span>LATENCY: 12ms</span>
+        <span class="badge">OFFICIAL TRADER MANUAL</span>
+    </div>
+</div>
+<div class="section-title">1. Executive Summary & Philosophy</div>
+<div class="card">
+    <p><strong>SAM QUANTUM AI</strong> is an institutional quantitative backtesting and algorithmic surveillance engine built for Indian Indices (Bank Nifty, Nifty 50), MCX Commodities, Equities, and 24/7 Digital Assets.</p>
+</div>
+<div class="section-title">2. Strategy Engines</div>
+<div class="card">
+    <ul>
+        <li><strong>EMA Institutional Pullback (20/50):</strong> Mean-reversion retest into support/resistance confirmed by RSI-14 momentum.</li>
+        <li><strong>EMA Golden / Death Crossover (9/21):</strong> Captures trend initiation with moving average crosses.</li>
+        <li><strong>SuperTrend Trend-Rider (10, 2.0):</strong> Volatility-adaptive breakout model utilizing dynamic ATR bands.</li>
+    </ul>
+</div>
+<div class="section-title">3. Membership Tiers</div>
+<table>
+    <thead><tr><th>Matrix</th><th>🟢 Free Member</th><th>🔵 VIP Algo Trader</th><th>🟣 Institutional Pro</th></tr></thead>
+    <tbody>
+        <tr><td><strong>Resolutions</strong></td><td>15m, 1D</td><td>1m, 5m, 15m, 1D</td><td>Sub-Minute (1m–1D)</td></tr>
+        <tr><td><strong>Universe</strong></td><td>Core Indices & BTC</td><td>Indices, MCX & Crypto</td><td>Full Global Grid</td></tr>
+        <tr><td><strong>Capital Cap</strong></td><td>₹1,00,000</td><td>₹10,00,000</td><td>Unlimited (₹1 Cr+)</td></tr>
+    </tbody>
+</table>
+<div class="section-title">4. Verification & Community Links</div>
+<div class="card">
+    <ul>
+        <li><strong>Terminal Web:</strong> https://sam-ai-recon-platform-76dht2tcjgwf9ar7o7ehhn.streamlit.app</li>
+        <li><strong>Telegram Radar:</strong> @sam_quantum_signals</li>
+    </ul>
+</div>
+</body></html>"""
 
 # ==============================================================================
 # 📊 BACKTEST EXECUTION ENGINE
@@ -608,10 +672,10 @@ if execute_btn or 'backtest_executed' in st.session_state:
                     st.markdown("#### 📜 Trade Execution Audit Trail")
                     st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
-            # Render Reports
+            # Render Reports with Direct PDF / Print Guide Download Button
             with tab_reports:
-                st.markdown("### 📥 Instant Mobile Audit Reports")
-                col_r1, col_r2 = st.columns(2)
+                st.markdown("### 📥 Instant Mobile Audit Reports & Documentation")
+                col_r1, col_r2, col_r3 = st.columns(3)
                 with col_r1:
                     if trades:
                         csv_buf = io.StringIO()
@@ -627,11 +691,13 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         </body></html>
                         """
                         st.download_button("📥 DOWNLOAD HTML AUDIT", data=html_report, file_name=f"sam_quantum_{symbol}.html", mime="text/html")
+                with col_r3:
+                    st.download_button("📄 DOWNLOAD OPERATING MANUAL (PDF)", data=manual_html_doc, file_name="sam_quantum_operating_manual.html", mime="text/html")
         except Exception as e:
             st.error(f"Error during simulation: {str(e)}")
 
 else:
-    # 🌟 Obsidian Clean Strategy Ready State (Zero Error on Launch)
+    # 🌟 Clean Landing State
     with tab_chart:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"""
@@ -648,6 +714,10 @@ else:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+    with tab_reports:
+        st.markdown("### 📥 Instant Official Documentation Download")
+        st.download_button("📄 DOWNLOAD OPERATING MANUAL (PDF / PRINT GUIDE)", data=manual_html_doc, file_name="sam_quantum_operating_manual.html", mime="text/html")
 
 # --- ADMIN ONLY: TAB 5 - SINGLE ASSET LIVE RADAR ---
 if is_admin:
