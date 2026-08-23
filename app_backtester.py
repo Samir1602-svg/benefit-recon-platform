@@ -9,14 +9,15 @@ import pytz
 import io
 import json
 import os
+import re
 import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - TOUCH ENGINE & LIVE ACCOUNTABILITY PILOT
+# 💎 SAM QUANTUM TERMINAL - PRO STREAMLIT CONFIG
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Institutional Terminal & Live Pilot",
+    page_title="SAM QUANTUM AI | Institutional Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,7 +26,7 @@ st.set_page_config(
 DB_FILE = "users_db.json"
 DEFAULT_USERS = {
     "admin": {"pass": "sam@2026", "name": "Sam (Founder)", "phone": "9999999999", "tier": "Master Admin", "created_at": "2026-08-20"},
-    "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "8888888888", "tier": "Institutional Pro", "created_at": "2026-08-21"}
+    "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
 def load_users():
@@ -46,10 +47,7 @@ def save_users(users_dict):
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
 
-# Active live alerts tracking dictionary for accountability
-if 'live_active_signals' not in st.session_state:
-    st.session_state.live_active_signals = {}
-
+# CSS styling
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -131,6 +129,9 @@ if not st.session_state.authenticated and "uid" in query_params:
         st.session_state.authenticated = True
         st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
+# ==============================================================================
+# 🔐 AUTHENTICATION & MANDATORY DATA VALIDATION
+# ==============================================================================
 if not st.session_state.authenticated:
     col_l1, col_l2, col_l3 = st.columns([1, 1.9, 1])
     with col_l2:
@@ -139,19 +140,20 @@ if not st.session_state.authenticated:
         <div class="glass-card" style="text-align: center;">
             <div style="font-size: 36px; margin-bottom: 6px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Terminal & Autonomous Pilot</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Terminal & Real-Time Engine</p>
             <span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">
-                ● FREE LIFETIME TRADER ACCESS
+                ● COMMUNITY EDITION ACCESS
             </span>
             <hr style="border-color: #1e293b; margin-top: 18px;">
         </div>
         """, unsafe_allow_html=True)
         
         auth_mode = st.radio("Mode", ["🔑 Sign In", "✨ Create Free Account"], horizontal=True, label_visibility="collapsed")
+        
         if auth_mode == "🔑 Sign In":
             with st.form("login_form"):
                 st.markdown("##### 🔒 Terminal Sign In")
-                username = st.text_input("User ID / Mobile Number", value="admin")
+                username = st.text_input("User ID", value="admin")
                 password = st.text_input("Security Access Key", type="password", value="sam@2026")
                 if st.form_submit_button("⚡ UNLOCK TERMINAL"):
                     users = st.session_state.users_db
@@ -164,18 +166,32 @@ if not st.session_state.authenticated:
                         st.error("⛔ Invalid Credentials.")
         else:
             with st.form("signup_form"):
-                st.markdown("##### 🚀 Quick Free Registration")
-                new_name = st.text_input("Full Name")
-                new_phone = st.text_input("Mobile / WhatsApp Number")
-                new_user = st.text_input("Create User ID")
-                new_pass = st.text_input("Create Secret Password", type="password")
-                if st.form_submit_button("🎉 INSTANT ACCESS"):
-                    if new_user in st.session_state.users_db:
-                        st.error("Username already exists.")
-                    elif not new_name.strip() or not new_user.strip():
-                        st.error("Fill all fields.")
+                st.markdown("##### 🚀 Mandatory Profile Registration")
+                new_name = st.text_input("Full Name *", placeholder="e.g. Samir Khan")
+                new_phone = st.text_input("10-Digit Mobile / WhatsApp Number *", placeholder="e.g. 9876543210")
+                new_user = st.text_input("Create Unique User ID *", placeholder="e.g. samir_trader")
+                new_pass = st.text_input("Create Secret Password (Min 4 Characters) *", type="password")
+                
+                if st.form_submit_button("🎉 VERIFY & GET ACCESS"):
+                    clean_phone = re.sub(r'[^0-9]', '', new_phone)
+                    if len(new_name.strip()) < 3:
+                        st.error("❌ Full Name is mandatory (Minimum 3 letters).")
+                    elif len(clean_phone) != 10:
+                        st.error("❌ Valid 10-digit mobile number is mandatory.")
+                    elif len(new_user.strip()) < 3:
+                        st.error("❌ Valid User ID is mandatory.")
+                    elif len(new_pass.strip()) < 4:
+                        st.error("❌ Password must be at least 4 characters.")
+                    elif new_user in st.session_state.users_db:
+                        st.error("❌ Username already registered. Please choose another.")
                     else:
-                        st.session_state.users_db[new_user] = {"pass": new_pass, "name": new_name, "phone": new_phone, "tier": "Free Member", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+                        st.session_state.users_db[new_user] = {
+                            "pass": new_pass,
+                            "name": new_name.strip(),
+                            "phone": clean_phone,
+                            "tier": "Free Member",
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        }
                         save_users(st.session_state.users_db)
                         st.session_state.authenticated = True
                         st.session_state.user_info = {**st.session_state.users_db[new_user], "id": new_user}
@@ -193,7 +209,7 @@ def is_market_open(symbol_key):
     current_time = now_ist.time()
 
     if symbol_key in ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD"]:
-        return True, "Crypto 24/7 Live"
+        return True, "Crypto (24/7 Live Open)"
 
     if weekday in [5, 6]:
         return False, "Market Closed (Weekend)"
@@ -202,7 +218,7 @@ def is_market_open(symbol_key):
         market_start = dtime(9, 15)
         market_end = dtime(15, 30)
         if market_start <= current_time <= market_end:
-            return True, "NSE Live (09:15 - 15:30 IST)"
+            return True, "NSE Cash/Options (09:15 - 15:30 IST)"
         return False, "NSE Closed (Opens 09:15 AM Mon-Fri)"
 
     if symbol_key in ["GC=F", "SI=F", "CL=F"]:
@@ -240,15 +256,7 @@ def calc_indicators(df, params):
     d['EMA20'] = c.ewm(span=20, adjust=False).mean()
     d['EMA21'] = c.ewm(span=21, adjust=False).mean()
     d['EMA50'] = c.ewm(span=50, adjust=False).mean()
-    d['EMA200'] = c.ewm(span=200, adjust=False).mean()
     d['SMA20'] = c.rolling(window=20).mean()
-
-    typical_price = (h + l + c) / 3.0
-    date_group = d.index.date if hasattr(d.index, 'date') else np.zeros(len(d))
-    pv = typical_price * v
-    d['Cum_PV'] = pv.groupby(date_group).cumsum()
-    d['Cum_Vol'] = v.groupby(date_group).cumsum()
-    d['VWAP'] = (d['Cum_PV'] / d['Cum_Vol'].replace(0, np.nan)).fillna(c)
 
     delta = c.diff()
     gain = delta.clip(lower=0)
@@ -258,24 +266,16 @@ def calc_indicators(df, params):
     rs = avg_gain / avg_loss.replace(0, np.nan)
     d['RSI'] = (100 - (100 / (1 + rs))).fillna(50)
 
-    d['BB_MID'] = d['SMA20']
-    bb_std = c.rolling(window=20).std()
-    d['BB_UP'] = d['BB_MID'] + (params.get('bb_std', 2.0) * bb_std)
-    d['BB_LOW'] = d['BB_MID'] - (params.get('bb_std', 2.0) * bb_std)
-
     hl = h - l
     hc = (h - c.shift(1)).abs()
     lc = (l - c.shift(1)).abs()
     tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
     d['ATR'] = tr.rolling(window=14).mean().fillna(tr)
 
-    st_period = params.get('st_period', 10)
-    st_mult = params.get('st_mult', 2.0)
-    st_atr = tr.ewm(com=st_period-1, adjust=False).mean()
+    st_atr = tr.ewm(com=9, adjust=False).mean()
     hl2 = (h + l) / 2.0
-    basic_ub = hl2 + (st_mult * st_atr)
-    basic_lb = hl2 - (st_mult * st_atr)
-
+    basic_ub = hl2 + (2.0 * st_atr)
+    basic_lb = hl2 - (2.0 * st_atr)
     final_ub = basic_ub.copy()
     final_lb = basic_lb.copy()
     direction = np.zeros(len(d))
@@ -300,25 +300,20 @@ def calc_indicators(df, params):
 
     d['ST_DIR'] = direction
     d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
-    d['PCT_CHANGE'] = ((c - o) / o.replace(0, np.nan)) * 100
-
-    body = (c - o).abs()
-    d['IS_HAMMER'] = ((l <= o.combine(c, min) - (body * 1.8)) & (h <= o.combine(c, max) + (body * 0.3)) & (body > 0))
-    d['IS_ENGULFING_BULL'] = ((c > o) & (c.shift(1) < o.shift(1)) & (c >= o.shift(1)) & (o <= c.shift(1)))
-    d['IS_ENGULFING_BEAR'] = ((c < o) & (c.shift(1) > o.shift(1)) & (c <= o.shift(1)) & (o >= c.shift(1)))
     return d
 
 # ==============================================================================
-# 🎛️ FULL SIDEBAR FILTERS & STRATEGY ENGINE
+# 🎛️ USER TIER CONTROL & SIDEBAR
 # ==============================================================================
-is_admin = st.session_state.user_info.get("tier") == "Master Admin" or st.session_state.user_info.get("id") == "admin"
+curr_tier = st.session_state.user_info.get("tier", "Free Member")
+is_admin = curr_tier == "Master Admin" or st.session_state.user_info.get("id") == "admin"
 
 with st.sidebar:
     st.markdown(f"""
     <div style="background:{'#1e1b4b' if is_admin else '#0f172a'}; border:1px solid {'#6366f1' if is_admin else '#1e293b'}; border-radius:12px; padding:14px; margin-bottom:14px;">
         <span style="color:#38bdf8; font-weight:800; font-size:14px;">⚡ SAM QUANTUM</span><br>
         <span style="color:#f8fafc; font-size:12px;">User: <b>{st.session_state.user_info['name']}</b></span><br>
-        <span style="color:{'#a855f7' if is_admin else '#10b981'}; font-size:11px; font-weight:700;">● {st.session_state.user_info['tier']}</span>
+        <span style="color:{'#a855f7' if is_admin else '#10b981'}; font-size:11px; font-weight:700;">● {curr_tier}</span>
     </div>
     """, unsafe_allow_html=True)
     
@@ -330,7 +325,7 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📊 1. Asset & Timeframe")
+    st.markdown("### 📊 1. Asset & Resolution")
     
     asset_dict = {
         "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
@@ -341,7 +336,6 @@ with st.sidebar:
         "INFY.NS": "Infosys",
         "GC=F": "MCX Gold Mini / Spot (GC=F)",
         "SI=F": "MCX Silver Mini (SI=F)",
-        "CL=F": "Crude Oil Futures",
         "BTC-USD": "Bitcoin (BTC/USD)",
         "ETH-USD": "Ethereum (ETH/USD)",
         "SOL-USD": "Solana (SOL/USD)",
@@ -350,103 +344,83 @@ with st.sidebar:
         "DOGE-USD": "Dogecoin (DOGE/USD)"
     }
     
-    symbol = st.selectbox("Instrument Universe", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
-    timeframe = st.selectbox("Candle Resolution", ["1m", "2m", "5m", "15m", "30m", "60m", "1d"], index=3)
+    symbol = st.selectbox("Instrument", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
+    
+    # Tier based timeframe restriction
+    if curr_tier == "Free Member":
+        allowed_tf = ["15m", "1d"]
+    else:
+        allowed_tf = ["1m", "2m", "5m", "15m", "30m", "60m", "1d"]
+        
+    timeframe = st.selectbox("Candle Resolution", allowed_tf, index=0)
     lookback_days = st.slider("Lookback Period (Days)", 1, 60, 30)
 
     st.markdown("---")
     st.markdown("### 🛠️ 2. Strategy Engine")
     strategy_type = st.selectbox(
-        "Quantitative Archetype",
+        "Strategy Archetype",
         [
             "1. EMA Institutional Pullback (20/50 Trend)",
-            "2. EMA Golden/Death Crossover (9/21 or 20/50)",
-            "3. SuperTrend Trend-Rider (10, Multiplier)",
-            "4. Momentum + Volume Spike Breakout (2.5x Vol)",
-            "5. Candlestick Pattern Engine (Hammer/Engulfing)",
-            "6. Bollinger Band Bounce (Mean Reversion)",
-            "7. VWAP Intraday Breakout & Retest"
+            "2. EMA Golden/Death Crossover (9/21)",
+            "3. SuperTrend Trend-Rider (10, 2.0)",
+            "4. Candlestick Pattern Engine"
         ]
     )
 
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st_mult = st.number_input("ST Multiplier", value=2.0, step=0.5)
-        fast_ema = st.selectbox("Fast EMA", [9, 20], index=0)
-    with col_s2:
-        st_period = st.number_input("ST Length", value=10, step=1)
-        slow_ema = st.selectbox("Slow EMA", [21, 50, 200], index=1)
-
     rsi_filter = st.checkbox("Require RSI 50-Level Filter", value=True)
-    vol_filter = st.checkbox("Require Volume Spike Filter", value=False)
 
     st.markdown("---")
-    st.markdown("### 🛡️ 3. Risk & Position Sizing")
+    st.markdown("### 🛡️ 3. Risk & Capital")
     capital = st.number_input("Capital Allocation (₹)", value=100000.0, step=10000.0)
-    qty = st.number_input("Lot / Contract Quantity", value=150, step=15)
-    delta = st.slider("Option Delta / Leverage Multiplier", 0.1, 1.0, 0.5, 0.05)
+    qty = st.number_input("Lot / Contract Qty", value=150, step=15)
+    delta = st.slider("Option Delta / Leverage", 0.1, 1.0, 0.5, 0.05)
 
-    is_index_asset = symbol in ["^NSEBANK", "^NSEI"]
+    is_idx = symbol in ["^NSEBANK", "^NSEI"]
     col_k1, col_k2 = st.columns(2)
     with col_k1:
-        target_val = st.number_input("Target (" + ("Pts" if is_index_asset else "%") + ")", value=50.0 if is_index_asset else 2.5, step=5.0 if is_index_asset else 0.5)
+        target_val = st.number_input("Target (" + ("Pts" if is_idx else "%") + ")", value=50.0 if is_idx else 2.5, step=5.0 if is_idx else 0.5)
     with col_k2:
-        sl_val = st.number_input("Hard SL (" + ("Pts" if is_index_asset else "%") + ")", value=20.0 if is_index_asset else 1.0, step=5.0 if is_index_asset else 0.2)
-
-    trailing_mode = st.selectbox(
-        "Dynamic Trailing Stop Mode",
-        [
-            "Breakeven Lock (+pts shift SL to Cost)",
-            "Dynamic ATR Ratchet Trail",
-            "9-EMA Trend-Rider (Exit on Close)",
-            "None (Fixed Target & SL)"
-        ],
-        index=0
-    )
-    be_trigger = st.number_input("Breakeven Trigger (+pts)", value=25.0, step=5.0) if "Breakeven" in trailing_mode else 0.0
-
-    session_filter = st.selectbox(
-        "Market Timing Filter",
-        [
-            "All Market Hours (24/7 or Standard Open)",
-            "Indian Cash/Options (09:15 - 15:15 IST)",
-            "London + NY Session (13:30 - 22:30 IST)"
-        ],
-        index=0
-    )
+        sl_val = st.number_input("Hard SL (" + ("Pts" if is_idx else "%") + ")", value=20.0 if is_idx else 1.0, step=5.0 if is_idx else 0.2)
 
 # ==============================================================================
-# 🚀 MAIN DASHBOARD
+# 🚀 MAIN DASHBOARD & TIER UPGRADE DIALOG
 # ==============================================================================
+# 1-Click Upgrade Dialog
+if not is_admin and curr_tier == "Free Member":
+    with st.expander("⚡ UPGRADE TO VIP ALGO TRADER (Click to View / Dismiss)", expanded=True):
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border: 1px solid #6366f1; border-radius: 10px; padding: 14px;">
+            <h4 style="color:#38bdf8; margin:0;">Unlock 1m/5m Scalping & Institutional Indicators</h4>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 10px 0;">Free members get 15m/1d resolutions. Upgrade to VIP to access 1m high-speed feeds and multi-strategy optimization.</p>
+            <span style="background: rgba(168,85,247,0.2); color:#c084fc; border:1px solid #a855f7; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700;">
+                Contact Admin on WhatsApp: +91-9999999999 for instant upgrade
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
 st.markdown(f"""
 <div class="brand-header">
     <div>
         <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Strategy Studio & Accountability Engine</span>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Single-Market Live Radar</span>
     </div>
     <div style="text-align: right;">
         <span style="background: {'rgba(168,85,247,0.2)' if is_admin else 'rgba(16,185,129,0.2)'}; color: {'#c084fc' if is_admin else '#10b981'}; border: 1px solid {'#a855f7' if is_admin else '#10b981'}; font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 700;">
-            {'👑 MASTER FOUNDER ACCESS' if is_admin else '● TRADER ACCESS ACTIVE'}
+            {'👑 FOUNDER MASTER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
         </span><br>
         <span style="color: #94a3b8; font-size: 11px;">{symbol} | {timeframe}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-col_run1, col_run2 = st.columns([3, 1])
-with col_run1:
-    st.write(f"💼 **Selected:** {asset_dict[symbol]} | Strategy: {strategy_type.split('.')[1].strip()}")
-with col_run2:
-    execute_btn = st.button("⚡ EXECUTE BACKTEST", type="primary")
-
-# Tabs Setup
+# Tabs Routing
 if is_admin:
-    tab_chart, tab_metrics, tab_trades, tab_reports, tab_auto_pilot, tab_admin_access = st.tabs([
+    tab_chart, tab_metrics, tab_trades, tab_reports, tab_single_radar, tab_admin_access = st.tabs([
         "📈 Pro Touch Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
         "📥 Download Reports", 
-        "🤖 AI Telegram Auto-Pilot & Accountability",
+        "⚡ 1-Click Single Asset Radar (Admin)",
         "👑 Access & Revoke Console"
     ])
 else:
@@ -457,162 +431,75 @@ else:
         "📥 Download Reports"
     ])
 
-# Execute Backtest Data
+# Execute Backtest
 df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
 
-if df_raw.empty or len(df_raw) < 25:
-    st.error("❌ Insufficient market data. Please adjust lookback days or timeframe resolution.")
+if df_raw.empty or len(df_raw) < 20:
+    st.error("❌ Insufficient data. Try adjusting lookback or timeframe.")
     st.stop()
 
 if isinstance(df_raw.columns, pd.MultiIndex):
     df_raw.columns = df_raw.columns.droplevel(1)
 df_raw.dropna(inplace=True)
 
-params = {'st_period': int(st_period), 'st_mult': float(st_mult), 'bb_std': 2.0}
-df = calc_indicators(df_raw, params)
-
+df = calc_indicators(df_raw, {})
 ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
-df['IST_Hour'] = ist_time.hour
-df['IST_Minute'] = ist_time.minute
 df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
-df.dropna(inplace=True)
 
+# Simulate trades
 trades = []
 position = None
-last_traded_bar = -1
+last_bar = -1
 
 for i in range(2, len(df)):
     curr_spot = float(df['Close'].iloc[i])
-    low_spot = float(df['Low'].iloc[i])
-    high_spot = float(df['High'].iloc[i])
-    vol = float(df['Volume'].iloc[i])
-    vol_sma = float(df['VOL_SMA20'].iloc[i])
-    pct = float(df['PCT_CHANGE'].iloc[i])
     rsi = float(df['RSI'].iloc[i])
-    atr = float(df['ATR'].iloc[i])
-    
-    ema9 = float(df['EMA9'].iloc[i])
     ema20 = float(df['EMA20'].iloc[i])
     ema50 = float(df['EMA50'].iloc[i])
-    fast_val = float(df[f'EMA{fast_ema}'].iloc[i])
-    prev_fast_val = float(df[f'EMA{fast_ema}'].iloc[i-1])
-    slow_val = float(df[f'EMA{slow_ema}'].iloc[i])
-    prev_slow_val = float(df[f'EMA{slow_ema}'].iloc[i-1])
+    time_lbl = df['Time_Str'].iloc[i]
 
-    st_dir = int(df['ST_DIR'].iloc[i])
-    prev_st_dir = int(df['ST_DIR'].iloc[i-1])
-    bb_u = float(df['BB_UP'].iloc[i])
-    bb_l = float(df['BB_LOW'].iloc[i])
-    vwap = float(df['VWAP'].iloc[i])
-    is_hammer = bool(df['IS_HAMMER'].iloc[i])
-    is_engulf_bull = bool(df['IS_ENGULFING_BULL'].iloc[i])
-    is_engulf_bear = bool(df['IS_ENGULFING_BEAR'].iloc[i])
-
-    hr = int(df['IST_Hour'].iloc[i])
-    mn = int(df['IST_Minute'].iloc[i])
-    time_label = df['Time_Str'].iloc[i]
-
-    in_session = True
-    if session_filter == "Indian Cash/Options (09:15 - 15:15 IST)":
-        in_session = (hr == 9 and mn >= 15) or (10 <= hr < 15) or (hr == 15 and mn <= 15)
-    elif session_filter == "London + NY Session (13:30 - 22:30 IST)":
-        in_session = (hr == 13 and mn >= 30) or (14 <= hr < 22) or (hr == 22 and mn <= 30)
-
-    # Position Management
     if position is not None:
-        spot_move = (curr_spot - position['entry_spot']) if position['type'] == 'BUY/CE' else (position['entry_spot'] - curr_spot)
-        opt_move = spot_move if is_index_asset else ((spot_move / position['entry_spot']) * 100)
+        move = (curr_spot - position['entry']) if position['type'] == 'BUY/CE' else (position['entry'] - curr_spot)
+        opt_move = move if is_idx else ((move / position['entry']) * 100)
 
         if opt_move >= target_val:
-            pnl = (target_val * qty * delta) if is_index_asset else ((target_val / 100) * capital)
-            trades.append({
-                'Entry Time': position['entry_time'], 'Exit Time': time_label,
-                'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot,
-                'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl
-            })
+            pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
+            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
             position = None
-            last_traded_bar = i
-
+            last_bar = i
         elif opt_move <= -sl_val:
-            pnl = (-sl_val * qty * delta) if is_index_asset else ((-sl_val / 100) * capital)
-            trades.append({
-                'Entry Time': position['entry_time'], 'Exit Time': time_label,
-                'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot,
-                'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl
-            })
+            pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
+            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
             position = None
-            last_traded_bar = i
+            last_bar = i
+    elif last_bar != i:
+        if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
+            position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
+            last_bar = i
+        elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
+            position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
+            last_bar = i
 
-    elif in_session and last_traded_bar != i:
-        pass_rsi_buy = (rsi > 50) if rsi_filter else True
-        pass_rsi_sell = (rsi < 50) if rsi_filter else True
-        pass_vol = (vol >= vol_sma * 1.5) if vol_filter else True
-
-        buy_sig = False
-        sell_sig = False
-
-        if "1. EMA Institutional Pullback" in strategy_type:
-            buy_sig = (ema20 > ema50) and (low_spot <= ema20 * 1.002) and (curr_spot > ema20) and pass_rsi_buy and pass_vol
-            sell_sig = (ema20 < ema50) and (high_spot >= ema20 * 0.998) and (curr_spot < ema20) and pass_rsi_sell and pass_vol
-
-        elif "2. EMA Golden/Death Crossover" in strategy_type:
-            buy_sig = (prev_fast_val <= prev_slow_val and fast_val > slow_val) and pass_rsi_buy and pass_vol
-            sell_sig = (prev_fast_val >= prev_slow_val and fast_val < slow_val) and pass_rsi_sell and pass_vol
-
-        elif "3. SuperTrend Trend-Rider" in strategy_type:
-            buy_sig = (prev_st_dir == -1 and st_dir == 1) and pass_rsi_buy and pass_vol
-            sell_sig = (prev_st_dir == 1 and st_dir == -1) and pass_rsi_sell and pass_vol
-
-        elif "4. Momentum + Volume Spike" in strategy_type:
-            buy_sig = (vol >= vol_sma * 2.5) and (pct >= 0.30) and (curr_spot > ema9) and pass_rsi_buy
-            sell_sig = (vol >= vol_sma * 2.5) and (pct <= -0.30) and (curr_spot < ema9) and pass_rsi_sell
-
-        elif "5. Candlestick Pattern Engine" in strategy_type:
-            buy_sig = (is_hammer or is_engulf_bull) and (curr_spot > ema20) and pass_rsi_buy
-            sell_sig = is_engulf_bear and (curr_spot < ema20) and pass_rsi_sell
-
-        if buy_sig:
-            position = {'type': 'BUY/CE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_val': sl_val}
-            last_traded_bar = i
-        elif sell_sig:
-            position = {'type': 'SELL/PE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_val': sl_val}
-            last_traded_bar = i
-
-# --- TAB 1: PRO TOUCH CHART ---
+# --- TAB 1: PRO CHART ---
 with tab_chart:
-    st.markdown("#### 🕯️ Institutional Price Matrix (Touch Pan & Pinch-to-Zoom Enabled)")
-    fig = make_subplots(
-        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03,
-        subplot_titles=(f"{symbol} Matrix & Signals", "Volume Activity", "RSI Momentum (14)"),
-        row_heights=[0.65, 0.15, 0.20]
-    )
+    st.markdown("#### 🕯️ Institutional Price Matrix (Touch Pan & Zoom)")
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
 
     fig.add_trace(go.Candlestick(
         x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-        name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444',
-        increasing_fillcolor='#10b981', decreasing_fillcolor='#ef4444'
+        name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
-
-    colors_v = ['#10b981' if df['Close'].iloc[k] >= df['Open'].iloc[k] else '#ef4444' for k in range(len(df))]
-    fig.add_trace(go.Bar(x=df['Time_Str'], y=df['Volume'], marker_color=colors_v, name='Volume'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['VOL_SMA20'], line=dict(color='#f59e0b', width=1.2), name='Vol SMA 20'), row=2, col=1)
-
-    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=3, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=3, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=3, col=1)
-
-    fig.update_xaxes(type='category', row=1, col=1)
-    fig.update_xaxes(type='category', row=2, col=1)
-    fig.update_xaxes(type='category', row=3, col=1)
+    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=2, col=1)
 
     fig.update_layout(
         template="plotly_dark", paper_bgcolor='#080b11', plot_bgcolor='#080b11',
-        height=680, xaxis_rangeslider_visible=False, dragmode='pan',
-        margin=dict(l=5, r=5, t=30, b=5),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        height=620, xaxis_rangeslider_visible=False, dragmode='pan',
+        margin=dict(l=5, r=5, t=10, b=5)
     )
 
     config_touch = {
@@ -624,287 +511,168 @@ with tab_chart:
 
 # --- TAB 2: SCORECARD & KPIS ---
 with tab_metrics:
-    if not trades:
-        st.warning("⚠️ No trade executions triggered under current parameter constraints.")
-    else:
+    if trades:
         tdf = pd.DataFrame(trades)
         net_pnl = tdf['PnL'].sum()
-        win_df = tdf[tdf['PnL'] > 0]
-        loss_df = tdf[tdf['PnL'] < 0]
-        win_count = len(win_df)
-        loss_count = len(loss_df)
+        win_count = len(tdf[tdf['PnL'] > 0])
         win_rate = (win_count / len(tdf)) * 100
-        roi = (net_pnl / capital) * 100
-
-        total_gain = win_df['PnL'].sum()
-        total_loss = abs(loss_df['PnL'].sum())
-        profit_factor = round(total_gain / total_loss, 2) if total_loss > 0 else 99.9
-
         tdf['Cum_PnL'] = tdf['PnL'].cumsum()
-        tdf['Peak'] = tdf['Cum_PnL'].cummax()
-        tdf['Drawdown'] = tdf['Cum_PnL'] - tdf['Peak']
-        max_dd = tdf['Drawdown'].min()
-        max_dd_pct = (abs(max_dd) / capital) * 100
 
-        st.markdown("#### 💎 Strategy Edge KPIs")
-        k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.metric("Net PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}", f"{roi:.1f}% ROI")
-        k2.metric("Win Rate", f"{win_rate:.1f}%", f"{win_count}W / {loss_count}L")
-        k3.metric("Profit Factor", f"{profit_factor}", "Ratio")
-        k4.metric("Max Drawdown", f"-₹{abs(max_dd):,.2f}", f"{max_dd_pct:.1f}% DD")
-        k5.metric("Avg R:R", "1 : 2.5", "Edge")
-        k6.metric("Total Trades", len(tdf), f"{timeframe} Res")
+        st.markdown("#### 💎 Strategy Scorecard")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Net PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}")
+        k2.metric("Win Rate", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
+        k3.metric("Total Trades", len(tdf))
+        k4.metric("Risk-to-Reward", "1 : 2.5")
 
         st.markdown("---")
-        col_e1, col_e2 = st.columns(2)
-        with col_e1:
-            fig_e = go.Figure()
-            fig_e.add_trace(go.Scatter(
-                x=tdf['Exit Time'], y=tdf['Cum_PnL'],
-                mode='lines+markers', line=dict(color='#10b981', width=2.5),
-                fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)',
-                name='Cumulative Growth'
-            ))
-            fig_e.update_layout(title="📈 Cumulative Equity Curve (₹)", template="plotly_dark", paper_bgcolor='#0f172a', plot_bgcolor='#0f172a', height=340)
-            st.plotly_chart(fig_e, use_container_width=True, config=config_touch)
-
-        with col_e2:
-            fig_d = go.Figure()
-            fig_d.add_trace(go.Scatter(
-                x=tdf['Exit Time'], y=tdf['Drawdown'],
-                mode='lines', line=dict(color='#ef4444', width=2),
-                fill='tozeroy', fillcolor='rgba(239, 68, 68, 0.1)',
-                name='Drawdown'
-            ))
-            fig_d.update_layout(title="📉 Underwater Drawdown Curve (₹)", template="plotly_dark", paper_bgcolor='#0f172a', plot_bgcolor='#0f172a', height=340)
-            st.plotly_chart(fig_d, use_container_width=True, config=config_touch)
+        fig_equity = go.Figure()
+        fig_equity.add_trace(go.Scatter(
+            x=tdf['Exit Time'], y=tdf['Cum_PnL'],
+            mode='lines+markers', line=dict(color='#10b981', width=2.5),
+            fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)',
+            name='Equity'
+        ))
+        fig_equity.update_layout(title="📈 Cumulative Equity Growth (₹)", template="plotly_dark", paper_bgcolor='#0f172a', plot_bgcolor='#0f172a', height=340)
+        st.plotly_chart(fig_equity, use_container_width=True, config=config_touch)
 
 # --- TAB 3: TRADE LOGS ---
 with tab_trades:
     if trades:
-        st.markdown("#### 📜 Institutional Trade Execution Audit Logs")
-        tdf_clean = tdf[['Entry Time', 'Exit Time', 'Type', 'Entry Price', 'Exit Price', 'Result', 'Points', 'PnL']].copy()
-        st.dataframe(
-            tdf_clean.style.map(
-                lambda v: 'color: #10b981; font-weight: bold;' if isinstance(v, (int, float)) and v > 0 else ('color: #ef4444; font-weight: bold;' if isinstance(v, (int, float)) and v < 0 else ''),
-                subset=['PnL', 'Points']
-            ),
-            use_container_width=True, height=450
-        )
+        st.markdown("#### 📜 Trade Execution Audit Logs")
+        st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
 # --- TAB 4: DOWNLOAD REPORTS ---
 with tab_reports:
-    st.markdown("### 📥 Instant Mobile Audit & Report Export")
+    st.markdown("### 📥 Instant Mobile Audit Reports")
     col_r1, col_r2 = st.columns(2)
     with col_r1:
-        st.markdown("##### 📄 1. Full Strategy Audit Sheet (CSV)")
         if trades:
             csv_buf = io.StringIO()
-            tdf.to_csv(csv_buf, index=False)
-            st.download_button("📥 DOWNLOAD CSV AUDIT", data=csv_buf.getvalue(), file_name=f"sam_quantum_audit_{symbol}.csv", mime="text/csv")
+            pd.DataFrame(trades).to_csv(csv_buf, index=False)
+            st.download_button("📥 DOWNLOAD CSV AUDIT", data=csv_buf.getvalue(), file_name=f"sam_quantum_{symbol}.csv", mime="text/csv")
         else:
-            st.info("No trades to export.")
-
+            st.info("No trade data to export.")
     with col_r2:
-        st.markdown("##### 📑 2. Formatted HTML Executive Summary")
         if trades:
             html_report = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #080b11; color: #f1f5f9; padding: 25px; }}
-                    .card {{ background: #0f172a; border: 1px solid #1e293b; padding: 20px; border-radius: 12px; }}
-                    h1 {{ color: #38bdf8; margin: 0; }}
-                    .tag {{ background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 10px; border-radius: 6px; font-weight: bold; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                    th, td {{ border: 1px solid #1e293b; padding: 10px; text-align: left; font-size: 13px; }}
-                    th {{ background-color: #1e293b; color: #38bdf8; }}
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>⚡ SAM QUANTUM AI - AUDIT REPORT</h1>
-                    <p>Asset: <b>{asset_dict[symbol]}</b> | Resolution: <b>{timeframe}</b> | Generated On: <b>{datetime.now().strftime('%d-%b-%Y %H:%M')}</b></p>
-                    <span class="tag">NET PnL: ₹{net_pnl:,.2f}</span> | <span class="tag">WIN RATE: {win_rate:.1f}%</span>
-                    <hr style="border-color: #1e293b; margin: 20px 0;">
-                    <h3>Trade Log Records</h3>
-                    {tdf_clean.to_html(classes='table', index=False)}
-                </div>
-            </body>
-            </html>
+            <!DOCTYPE html><html><body style="background:#080b11;color:#f1f5f9;font-family:sans-serif;padding:20px;">
+            <h2 style="color:#38bdf8;">SAM QUANTUM AI - AUDIT</h2>
+            <p>Asset: <b>{asset_dict[symbol]}</b> | Net PnL: <b>₹{net_pnl:,.2f}</b> | Win Rate: <b>{win_rate:.1f}%</b></p>
+            {pd.DataFrame(trades).to_html(index=False)}
+            </body></html>
             """
-            st.download_button("📥 DOWNLOAD HTML SUMMARY", data=html_report, file_name=f"sam_quantum_report_{symbol}.html", mime="text/html")
+            st.download_button("📥 DOWNLOAD HTML AUDIT", data=html_report, file_name=f"sam_quantum_{symbol}.html", mime="text/html")
 
-# --- ADMIN ONLY: TAB 5 - AI TELEGRAM AUTO-PILOT & ACCOUNTABILITY TRACKER ---
+# --- ADMIN ONLY: TAB 5 - SINGLE ASSET LIVE RADAR (CLEAN & SIMPLE) ---
 if is_admin:
-    with tab_auto_pilot:
-        st.markdown("### 🤖 Autonomous Live Pilot & Trade Accountability Engine")
-        st.caption("Scans open markets, issues entry setups, and posts progress/target/SL accountability updates to Telegram.")
+    with tab_single_radar:
+        st.markdown("### ⚡ Single-Asset Live Opportunity Radar")
+        st.caption("Select one specific market at a time to audit real-time setups and broadcast crisp alerts to Telegram.")
 
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            auto_scan_active = st.toggle("⚡ ACTIVATE 60-SEC AUTO-PILOT LOOP", value=False)
-            target_pct_crypto = st.number_input("Crypto / Stock Target (%)", value=2.5, step=0.5)
-            target_pts_index = st.number_input("Bank Nifty / Nifty Target (Pts)", value=50.0, step=5.0)
-        with col_p2:
-            min_confidence = st.slider("Minimum AI Confidence Threshold", 75, 95, 85)
-            sl_pct_crypto = st.number_input("Crypto / Stock Hard SL (%)", value=1.0, step=0.2)
-            sl_pts_index = st.number_input("Bank Nifty / Nifty Hard SL (Pts)", value=20.0, step=5.0)
+        col_sr1, col_sr2 = st.columns(2)
+        with col_sr1:
+            radar_asset = st.selectbox("Select Market to Audit", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="single_rad_asset")
+            is_open, gate_info = is_market_open(radar_asset)
+            if is_open:
+                st.success(f"🟢 Market Status: {gate_info}")
+            else:
+                st.warning(f"🔴 Market Status: {gate_info}")
+                
+            is_rd_idx = radar_asset in ["^NSEBANK", "^NSEI"]
+            rd_target = st.number_input("Target (" + ("Pts" if is_rd_idx else "%") + ")", value=50.0 if is_rd_idx else 2.5, step=5.0 if is_rd_idx else 0.5, key="rd_tp")
+            
+        with col_sr2:
+            radar_tf = st.selectbox("Resolution", ["1m", "5m", "15m"], index=1, key="rd_tf")
+            rd_sl = st.number_input("Hard SL (" + ("Pts" if is_rd_idx else "%") + ")", value=20.0 if is_rd_idx else 1.0, step=5.0 if is_rd_idx else 0.2, key="rd_sl")
+            min_conf_single = st.slider("Minimum AI Confidence %", 70, 95, 80, key="rd_conf")
 
-        st.markdown("#### 🌐 Live Active Trades Accountability Monitor")
-        if st.session_state.live_active_signals:
-            active_list = []
-            for a_sym, a_data in st.session_state.live_active_signals.items():
-                active_list.append({
-                    "Asset": a_data['name'], "Action": a_data['action'], "Entry Spot": a_data['entry_spot'],
-                    "Current Target": a_data['target'], "Current SL": a_data['sl'], "Status": a_data['status']
-                })
-            st.table(pd.DataFrame(active_list))
-        else:
-            st.info("No active open signals under tracking. AI Scanner will initialize new trades below.")
-
-        if auto_scan_active or st.button("🚀 SCAN OPEN MARKETS & UPDATE ACCOUNTABILITY"):
-            with st.spinner("🔍 Auditing open markets and verifying live active trades..."):
-                dispatched_count = 0
-                now_ist_str = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
-
-                for s_sym, s_name in asset_dict.items():
-                    is_open, gate_reason = is_market_open(s_sym)
-                    if not is_open:
-                        continue
-
+        if st.button("🚀 AUDIT & BROADCAST THIS ASSET TO TG"):
+            if not is_open:
+                st.error(f"⛔ Cannot broadcast: {gate_info}. AI strictly prevents sending alerts during closed hours.")
+            else:
+                with st.spinner(f"🔍 Fetching live real-time price for {asset_dict[radar_asset]}..."):
                     try:
-                        df_live = yf.download(s_sym, period="3d", interval="5m", progress=False)
-                        if df_live.empty or len(df_live) < 20:
-                            continue
-                        if isinstance(df_live.columns, pd.MultiIndex):
-                            df_live.columns = df_live.columns.droplevel(1)
+                        df_live = yf.download(radar_asset, period="2d", interval=radar_tf, progress=False)
+                        if df_live.empty or len(df_live) < 15:
+                            st.error("❌ Live feed temporary timeout. Please retry in 5 seconds.")
+                        else:
+                            if isinstance(df_live.columns, pd.MultiIndex):
+                                df_live.columns = df_live.columns.droplevel(1)
+                            df_live = calc_indicators(df_live, {})
+                            
+                            c_bar = df_live.iloc[-1]
+                            p_bar = df_live.iloc[-2]
+                            spot = float(c_bar['Close'])
+                            rsi_v = float(c_bar['RSI'])
+                            ema20_v = float(c_bar['EMA20'])
+                            ema50_v = float(c_bar['EMA50'])
+                            st_n = int(c_bar['ST_DIR'])
+                            st_p = int(p_bar['ST_DIR'])
 
-                        df_live = calc_indicators(df_live, {})
-                        curr_bar = df_live.iloc[-1]
-                        prev_bar = df_live.iloc[-2]
+                            sig = "NEUTRAL"
+                            conf = 70
+                            logic = "Consolidating"
 
-                        spot = float(curr_bar['Close'])
-                        rsi_val = float(curr_bar['RSI'])
-                        ema20_val = float(curr_bar['EMA20'])
-                        ema50_val = float(curr_bar['EMA50'])
-                        st_now = int(curr_bar['ST_DIR'])
-                        st_prev = int(prev_bar['ST_DIR'])
+                            if ema20_v > ema50_v and spot > ema20_v and rsi_v > 52:
+                                sig = "BUY / CALL (CE) 🟢"
+                                conf = 88
+                                logic = f"20/50 EMA Bullish Momentum + RSI ({rsi_v:.1f})"
+                            elif ema20_v < ema50_v and spot < ema20_v and rsi_v < 48:
+                                sig = "SELL / PUT (PE) 🔴"
+                                conf = 88
+                                logic = f"20/50 EMA Bearish Structure + RSI ({rsi_v:.1f})"
+                            elif st_p == -1 and st_n == 1:
+                                sig = "BUY / CALL (CE) 🟢"
+                                conf = 92
+                                logic = "SuperTrend Bullish Reversal Cross"
+                            elif st_p == 1 and st_n == -1:
+                                sig = "SELL / PUT (PE) 🔴"
+                                conf = 92
+                                logic = "SuperTrend Bearish Reversal Cross"
 
-                        curr_is_index = s_sym in ["^NSEBANK", "^NSEI"]
-                        currency_sym = "₹" if not s_sym.endswith("-USD") else "$"
-
-                        # 1. ACCOUNTABILITY CHECK: Update Active Signals
-                        if s_sym in st.session_state.live_active_signals:
-                            act_trade = st.session_state.live_active_signals[s_sym]
-                            entry_p = act_trade['entry_spot']
-                            target_p = act_trade['target']
-                            sl_p = act_trade['sl']
-                            direction = act_trade['action']
-
-                            # Check Target Hit
-                            target_hit = (spot >= target_p) if "BUY" in direction else (spot <= target_p)
-                            sl_hit = (spot <= sl_p) if "BUY" in direction else (spot >= sl_p)
-
-                            if target_hit:
-                                tg_msg = (
-                                    f"🎯 <b>TARGET COMPLETED - TAKE PROFIT</b> 🎯\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"📊 <b>Asset:</b> {s_name}\n"
-                                    f"✅ <b>Result:</b> <code>FULL TARGET HIT 🚀</code>\n"
-                                    f"💵 <b>Entry:</b> {currency_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {currency_sym}{spot:,.2f}\n"
-                                    f"⏱ <b>Completed At:</b> {now_ist_str}\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🤖 <i>Accountability Logged by Sam Quantum AI</i>"
-                                )
-                                send_telegram_alert(tg_msg)
-                                del st.session_state.live_active_signals[s_sym]
-                                dispatched_count += 1
-                                continue
-
-                            elif sl_hit:
-                                tg_msg = (
-                                    f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"📊 <b>Asset:</b> {s_name}\n"
-                                    f"🛑 <b>Result:</b> <code>SL TRIGGERED</code>\n"
-                                    f"💵 <b>Entry:</b> {currency_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {currency_sym}{spot:,.2f}\n"
-                                    f"⏱ <b>Closed At:</b> {now_ist_str}\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🤖 <i>Risk Controlled via Sam Quantum Terminal</i>"
-                                )
-                                send_telegram_alert(tg_msg)
-                                del st.session_state.live_active_signals[s_sym]
-                                dispatched_count += 1
-                                continue
-
-                        # 2. NEW SIGNAL TRIGGER LOGIC
-                        sig = "NEUTRAL"
-                        conf = 70
-                        logic = ""
-
-                        if ema20_val > ema50_val and spot > ema20_val and rsi_val > 54:
-                            sig = "BUY / CALL (CE) 🟢"
-                            conf = 88
-                            logic = f"EMA 20/50 Trend + RSI Momentum ({rsi_val:.1f})"
-                        elif ema20_val < ema50_val and spot < ema20_val and rsi_val < 46:
-                            sig = "SELL / PUT (PE) 🔴"
-                            conf = 88
-                            logic = f"EMA 20/50 Bearish Structure + RSI Drop ({rsi_val:.1f})"
-                        elif st_prev == -1 and st_now == 1:
-                            sig = "BUY / CALL (CE) 🟢"
-                            conf = 92
-                            logic = "SuperTrend 10,2 Bullish Reversal"
-                        elif st_prev == 1 and st_now == -1:
-                            sig = "SELL / PUT (PE) 🔴"
-                            conf = 92
-                            logic = "SuperTrend 10,2 Bearish Reversal"
-
-                        if sig != "NEUTRAL" and conf >= min_confidence and s_sym not in st.session_state.live_active_signals:
-                            if curr_is_index:
-                                tp = spot + target_pts_index if "BUY" in sig else spot - target_pts_index
-                                sl = spot - sl_pts_index if "BUY" in sig else spot + sl_pts_index
-                                risk_str = f"Target: +{target_pts_index} Pts | SL: -{sl_pts_index} Pts"
+                            curr_sym = "₹" if not radar_asset.endswith("-USD") else "$"
+                            
+                            if is_rd_idx:
+                                tp = spot + rd_target if "BUY" in sig else spot - rd_target
+                                sl = spot - rd_sl if "BUY" in sig else spot + rd_sl
+                                risk_desc = f"Target: +{rd_target} Pts | SL: -{rd_sl} Pts"
                             else:
-                                tp = spot * (1 + (target_pct_crypto / 100.0)) if "BUY" in sig else spot * (1 - (target_pct_crypto / 100.0))
-                                sl = spot * (1 - (sl_pct_crypto / 100.0)) if "BUY" in sig else spot * (1 + (sl_pct_crypto / 100.0))
-                                risk_str = f"Target: +{target_pct_crypto}% | SL: -{sl_pct_crypto}%"
+                                tp = spot * (1 + (rd_target / 100.0)) if "BUY" in sig else spot * (1 - (rd_target / 100.0))
+                                sl = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
+                                risk_desc = f"Target: +{rd_target}% | SL: -{rd_sl}%"
 
+                            now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
+                            
                             tg_text = (
-                                f"⚡ <b>SAM QUANTUM AI - LIVE SIGNAL ALERT</b> ⚡\n"
+                                f"⚡ <b>SAM QUANTUM AI - OPPORTUNITY RADAR</b> ⚡\n"
                                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                f"📊 <b>Asset:</b> {s_name}\n"
+                                f"📊 <b>Asset:</b> {asset_dict[radar_asset]}\n"
                                 f"🎯 <b>Action:</b> <code>{sig}</code>\n"
-                                f"💵 <b>Current Live Spot:</b> {currency_sym}{spot:,.4f}\n"
-                                f"🎯 <b>Target:</b> {currency_sym}{tp:,.4f} ({risk_str.split('|')[0].strip()})\n"
-                                f"🛑 <b>Stop Loss:</b> {currency_sym}{sl:,.4f} ({risk_str.split('|')[1].strip()})\n"
-                                f"⏱ <b>Trigger Time:</b> {now_ist_str}\n"
+                                f"💵 <b>Current Live Spot:</b> {curr_sym}{spot:,.4f}\n"
+                                f"🎯 <b>Target:</b> {curr_sym}{tp:,.4f} ({risk_desc.split('|')[0].strip()})\n"
+                                f"🛑 <b>Stop Loss:</b> {curr_sym}{sl:,.4f} ({risk_desc.split('|')[1].strip()})\n"
+                                f"⏱ <b>Trigger Time:</b> {now_ist}\n"
                                 f"🧠 <b>AI Confidence:</b> <code>{conf}% Institutional Edge</code>\n"
                                 f"🔍 <b>Logic:</b> {logic}\n"
                                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                f"🤖 <i>Dispatched via Autonomous Quantum Pilot</i>"
+                                f"🤖 <i>Dispatched via Sam Quantum AI Terminal</i>"
                             )
-                            send_telegram_alert(tg_text)
-                            st.session_state.live_active_signals[s_sym] = {
-                                "name": s_name, "action": sig, "entry_spot": spot,
-                                "target": tp, "sl": sl, "status": "LIVE IN POSITION"
-                            }
-                            dispatched_count += 1
-                    except Exception:
-                        pass
-
-                if dispatched_count > 0:
-                    st.success(f"✅ Dispatched {dispatched_count} alerts / trade accountability updates to Telegram.")
-                else:
-                    st.info("Scanner complete. Open markets evaluated with zero new triggers.")
+                            
+                            ok, resp = send_telegram_alert(tg_text)
+                            if ok:
+                                st.success(f"✅ Opportunity Dispatched to @sam_quantum_signals! (Signal: {sig} @ {curr_sym}{spot:,.4f})")
+                            else:
+                                st.error(f"❌ Telegram Error: {resp}")
+                    except Exception as e:
+                        st.error(f"Error fetching live data: {str(e)}")
 
     # --- ADMIN ONLY: TAB 6 - ACCESS & REVOKE CONSOLE ---
     with tab_admin_access:
         st.markdown("### 👑 Founder Console: Member Directory & Access Control")
         col_u1, col_u2 = st.columns([1.6, 1])
         with col_u1:
-            st.markdown("#### 📋 Registered User Database (Leads)")
+            st.markdown("#### 📋 Verified User Directory")
             users_list = []
             for uid, udata in st.session_state.users_db.items():
                 users_list.append({
@@ -918,7 +686,7 @@ if is_admin:
 
             csv_users = io.StringIO()
             u_df.to_csv(csv_users, index=False)
-            st.download_button("📥 EXPORT LEADS (CSV)", data=csv_users.getvalue(), file_name="sam_quantum_users.csv", mime="text/csv")
+            st.download_button("📥 EXPORT VERIFIED LEADS (CSV)", data=csv_users.getvalue(), file_name="sam_quantum_users.csv", mime="text/csv")
 
         with col_u2:
             st.markdown("#### 🛡️ Access & Revoke Controls")
@@ -929,7 +697,7 @@ if is_admin:
                     del st.session_state.users_db[target_del]
                     save_users(st.session_state.users_db)
                     st.error(f"User '{target_del}' has been revoked.")
-                    time.sleep(1)
+                    time.sleep(0.8)
                     st.rerun()
 
                 st.markdown("---")
@@ -942,4 +710,4 @@ if is_admin:
                     time.sleep(0.8)
                     st.rerun()
             else:
-                st.info("No external registered members found yet.")
+                st.info("No external registered accounts found.")
