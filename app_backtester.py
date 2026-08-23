@@ -345,6 +345,16 @@ def calc_indicators(df, params):
 curr_tier = st.session_state.user_info.get("tier", "Free Member")
 is_admin = curr_tier == "Master Admin" or st.session_state.user_info.get("id") == "admin"
 
+STRATEGY_OPTIONS = [
+    "1. EMA Institutional Pullback (20/50 Trend)",
+    "2. EMA Golden/Death Crossover (9/21)",
+    "3. SuperTrend Trend-Rider (10, 2.0)",
+    "4. Candlestick Pattern Engine (Hammer / Engulfing)",
+    "5. Volume Spike + Momentum Breakout",
+    "6. VWAP Intraday Retest & Expansion",
+    "7. Bollinger Band Dynamic Mean Reversion"
+]
+
 with st.sidebar:
     st.markdown(f"""
     <div style="background:{'rgba(30, 27, 75, 0.8)' if is_admin else 'rgba(15, 23, 42, 0.8)'}; border:1px solid {'#818cf8' if is_admin else '#334155'}; border-radius:12px; padding:14px; margin-bottom:14px; backdrop-filter:blur(8px);">
@@ -400,12 +410,7 @@ with st.sidebar:
     st.markdown("### 🛠️ 2. Strategy Engine")
     strategy_type = st.selectbox(
         "Quantitative Archetype",
-        [
-            "1. EMA Institutional Pullback (20/50 Trend)",
-            "2. EMA Golden/Death Crossover (9/21)",
-            "3. SuperTrend Trend-Rider (10, 2.0)",
-            "4. Candlestick Pattern Engine"
-        ]
+        STRATEGY_OPTIONS
     )
 
     rsi_filter = st.checkbox("Require RSI 50-Level Momentum Filter", value=True)
@@ -873,7 +878,7 @@ if is_admin:
                     st.rerun()
 
         # ----------------------------------------------------
-        # ✍️ MODE 2: MANUAL CUSTOM DISPATCHER
+        # ✍️ MODE 2: MANUAL CUSTOM DISPATCHER (WITH DROPDOWN PRESETS)
         # ----------------------------------------------------
         else:
             st.markdown("##### ✍️ Mode 2: Manual Founder Setup & Broadcast")
@@ -887,7 +892,24 @@ if is_admin:
                 man_tp = st.text_input("Target Note", value=f"+{rd_target} Pts (1:2 R:R Trailing)", key="man_tp_txt")
                 man_sl = st.text_input("Hard Stop Loss Note", value=f"-{rd_sl} Pts Strict SL", key="man_sl_txt")
 
-            man_note = st.text_input("Setup Reasoning / Confluence Note", value="EMA 20 Pullback + Bullish Rejection Confirmation", key="man_note_txt")
+            # 🎯 STRATEGY REASONING DROPDOWN (Matches Left Sidebar Engine + Custom Option)
+            REASONING_PRESETS = [
+                "1. EMA Institutional Pullback (20/50 Trend Retest + RSI Momentum)",
+                "2. EMA Golden/Death Crossover (9/21 MA Acceleration + Volume)",
+                "3. SuperTrend Trend-Rider (10, 2.0 Dynamic Breakout)",
+                "4. Candlestick Pattern Engine (Hammer Support / Engulfing Sweep)",
+                "5. Volume Spike + Momentum Breakout (Institutional Buying)",
+                "6. VWAP Intraday Retest & Expansion Zone",
+                "7. Bollinger Band Dynamic Mean Reversion Bounce",
+                "8. ✍️ Custom Founder Strategy (Enter Manually)"
+            ]
+            
+            selected_preset = st.selectbox("Setup Reasoning / Strategy Engine", REASONING_PRESETS, index=0, key="man_preset_reason")
+            
+            if "Custom" in selected_preset:
+                man_note = st.text_input("Custom Reasoning Details", value="Key Support Bounce + Demand Zone Reversal", key="man_custom_note")
+            else:
+                man_note = selected_preset.split(".")[1].strip()
 
             if st.button("🚀 BROADCAST FOUNDER SIGNAL TO TG", type="primary"):
                 now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
@@ -899,7 +921,7 @@ if is_admin:
                     f"💵 <b>Price / Strike:</b> <code>{man_strike}</code>\n"
                     f"🎯 <b>Target:</b> {man_tp}\n"
                     f"🛑 <b>Stop Loss:</b> {man_sl}\n"
-                    f"🔍 <b>Logic:</b> {man_note}\n"
+                    f"🔍 <b>Logic / Engine:</b> {man_note}\n"
                     f"⏱ <b>Time:</b> {now_ist}\n"
                     f"━━━━━━━━━━━━━━━━━━━━━\n"
                     f"👑 <i>Dispatched by Founder via Quantum Terminal</i>"
