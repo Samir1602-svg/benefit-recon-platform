@@ -14,10 +14,10 @@ import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - PRO STREAMLIT CONFIG
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL CYBER-FINANCE UI SUITE
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Institutional Terminal",
+    page_title="SAM QUANTUM AI | Institutional Quant Engine",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -47,70 +47,121 @@ def save_users(users_dict):
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
 
-# CSS styling
+# 🌐 Ultra-Premium Obsidian & Cyan Glassmorphism Styling
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
     html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
-        overscroll-behavior-y: none !important;
-        overscroll-behavior-x: none !important;
-        -webkit-overflow-scrolling: touch;
-        background-color: #080b11 !important;
+        overscroll-behavior: none !important;
+        background: radial-gradient(circle at 50% 0%, #0d1527 0%, #050811 75%, #020408 100%) !important;
         color: #f1f5f9;
-        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
     }
 
+    /* Institutional Header Banner */
     .brand-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        border: 1px solid #334155;
-        border-radius: 14px;
-        padding: 14px 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        border-radius: 16px;
+        padding: 16px 24px;
+        margin-bottom: 18px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255,255,255,0.05);
     }
     
+    /* Obsidian Glass Cards */
     .glass-card {
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        background: rgba(13, 20, 36, 0.75);
+        border: 1px solid rgba(30, 41, 59, 0.8);
+        border-radius: 16px;
+        padding: 24px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.7);
     }
 
-    div[data-testid="stMetric"] {
-        background-color: #0f172a !important;
-        border: 1px solid #1e293b !important;
-        border-radius: 12px !important;
-        padding: 14px 16px !important;
-    }
-
-    .stButton>button {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        border: none !important;
-        border-radius: 10px !important;
-        padding: 10px 20px !important;
+    /* Glowing Status Badges */
+    .pulse-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(16, 185, 129, 0.12);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.4);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
         letter-spacing: 0.5px;
     }
 
+    .admin-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(168, 85, 247, 0.15);
+        color: #c084fc;
+        border: 1px solid rgba(168, 85, 247, 0.4);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Metric Cards */
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(11, 17, 32, 0.9) 100%) !important;
+        border: 1px solid rgba(51, 65, 85, 0.7) !important;
+        border-radius: 14px !important;
+        padding: 14px 18px !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+    }
+
+    div[data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 800 !important;
+        color: #38bdf8 !important;
+    }
+
+    /* High Precision Cyber Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 10px !important;
+        padding: 12px 24px !important;
+        letter-spacing: 0.5px;
+        box-shadow: 0 6px 20px -2px rgba(2, 132, 199, 0.4) !important;
+        transition: all 0.2s ease;
+    }
+    .stButton>button:hover {
+        border-color: #38bdf8 !important;
+        box-shadow: 0 8px 25px rgba(56, 189, 248, 0.5) !important;
+        transform: translateY(-1px);
+    }
+
+    /* Navigation Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #0f172a;
-        border-radius: 12px;
-        padding: 5px;
-        border: 1px solid #1e293b;
+        background-color: rgba(13, 20, 36, 0.85);
+        border-radius: 14px;
+        padding: 6px;
+        border: 1px solid rgba(30, 41, 59, 0.8);
         gap: 6px;
     }
     
     .stTabs [aria-selected="true"] {
-        background-color: #1e293b !important;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
         color: #38bdf8 !important;
-        border-radius: 8px;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 10px;
         font-weight: 700;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -130,32 +181,33 @@ if not st.session_state.authenticated and "uid" in query_params:
         st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
 # ==============================================================================
-# 🔐 AUTHENTICATION & MANDATORY DATA VALIDATION
+# 🔐 AUTHENTICATION PORTAL (CYBER SECURITY GRADE)
 # ==============================================================================
 if not st.session_state.authenticated:
-    col_l1, col_l2, col_l3 = st.columns([1, 1.9, 1])
+    col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
     with col_l2:
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("""
         <div class="glass-card" style="text-align: center;">
-            <div style="font-size: 36px; margin-bottom: 6px;">⚡</div>
+            <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Terminal & Real-Time Engine</p>
-            <span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">
-                ● COMMUNITY EDITION ACCESS
-            </span>
-            <hr style="border-color: #1e293b; margin-top: 18px;">
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Automated Radar</p>
+            <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
+                <span class="pulse-badge">● LIVE QUANT FEED</span>
+                <span style="background: rgba(56, 189, 248, 0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; font-family:'JetBrains Mono';">256-BIT ENCRYPTION</span>
+            </div>
+            <hr style="border-color: rgba(30, 41, 59, 0.8); margin-top: 10px;">
         </div>
         """, unsafe_allow_html=True)
         
-        auth_mode = st.radio("Mode", ["🔑 Sign In", "✨ Create Free Account"], horizontal=True, label_visibility="collapsed")
+        auth_mode = st.radio("Mode", ["🔑 Terminal Sign In", "✨ Register Verified Account"], horizontal=True, label_visibility="collapsed")
         
-        if auth_mode == "🔑 Sign In":
+        if auth_mode == "🔑 Terminal Sign In":
             with st.form("login_form"):
-                st.markdown("##### 🔒 Terminal Sign In")
-                username = st.text_input("User ID", value="admin")
-                password = st.text_input("Security Access Key", type="password", value="sam@2026")
-                if st.form_submit_button("⚡ UNLOCK TERMINAL"):
+                st.markdown("##### 🔒 Secure Terminal Authentication")
+                username = st.text_input("Operator User ID", value="admin")
+                password = st.text_input("Quantum Security Key", type="password", value="sam@2026")
+                if st.form_submit_button("⚡ UNLOCK QUANTUM TERMINAL"):
                     users = st.session_state.users_db
                     if username in users and users[username]["pass"] == password:
                         st.session_state.authenticated = True
@@ -163,27 +215,27 @@ if not st.session_state.authenticated:
                         st.query_params["uid"] = username
                         st.rerun()
                     else:
-                        st.error("⛔ Invalid Credentials.")
+                        st.error("⛔ Authentication Denied: Invalid Security Key or User ID.")
         else:
             with st.form("signup_form"):
-                st.markdown("##### 🚀 Mandatory Profile Registration")
+                st.markdown("##### 🚀 Mandatory Quantitative Trader Profile")
                 new_name = st.text_input("Full Name *", placeholder="e.g. Samir Khan")
                 new_phone = st.text_input("10-Digit Mobile / WhatsApp Number *", placeholder="e.g. 9876543210")
-                new_user = st.text_input("Create Unique User ID *", placeholder="e.g. samir_trader")
-                new_pass = st.text_input("Create Secret Password (Min 4 Characters) *", type="password")
+                new_user = st.text_input("Create Operator User ID *", placeholder="e.g. samir_quant")
+                new_pass = st.text_input("Create Access Password (Min 4 chars) *", type="password")
                 
-                if st.form_submit_button("🎉 VERIFY & GET ACCESS"):
+                if st.form_submit_button("🎉 VERIFY IDENTITY & UNLOCK ACCESS"):
                     clean_phone = re.sub(r'[^0-9]', '', new_phone)
                     if len(new_name.strip()) < 3:
-                        st.error("❌ Full Name is mandatory (Minimum 3 letters).")
+                        st.error("❌ Full Name is mandatory (Min 3 characters).")
                     elif len(clean_phone) != 10:
-                        st.error("❌ Valid 10-digit mobile number is mandatory.")
+                        st.error("❌ Valid 10-digit Indian Mobile number is mandatory.")
                     elif len(new_user.strip()) < 3:
-                        st.error("❌ Valid User ID is mandatory.")
+                        st.error("❌ Unique User ID is mandatory.")
                     elif len(new_pass.strip()) < 4:
-                        st.error("❌ Password must be at least 4 characters.")
+                        st.error("❌ Access password must be at least 4 characters.")
                     elif new_user in st.session_state.users_db:
-                        st.error("❌ Username already registered. Please choose another.")
+                        st.error("❌ User ID already registered. Please choose another.")
                     else:
                         st.session_state.users_db[new_user] = {
                             "pass": new_pass,
@@ -209,7 +261,7 @@ def is_market_open(symbol_key):
     current_time = now_ist.time()
 
     if symbol_key in ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD"]:
-        return True, "Crypto (24/7 Live Open)"
+        return True, "Crypto (24/7 Live Active)"
 
     if weekday in [5, 6]:
         return False, "Market Closed (Weekend)"
@@ -218,14 +270,14 @@ def is_market_open(symbol_key):
         market_start = dtime(9, 15)
         market_end = dtime(15, 30)
         if market_start <= current_time <= market_end:
-            return True, "NSE Cash/Options (09:15 - 15:30 IST)"
+            return True, "NSE Intraday (09:15 - 15:30 IST)"
         return False, "NSE Closed (Opens 09:15 AM Mon-Fri)"
 
     if symbol_key in ["GC=F", "SI=F", "CL=F"]:
         mcx_start = dtime(9, 0)
         mcx_end = dtime(23, 30)
         if mcx_start <= current_time <= mcx_end:
-            return True, "MCX Live (09:00 - 23:30 IST)"
+            return True, "MCX Commodity (09:00 - 23:30 IST)"
         return False, "MCX Closed"
 
     return False, "Market Closed"
@@ -303,17 +355,19 @@ def calc_indicators(df, params):
     return d
 
 # ==============================================================================
-# 🎛️ USER TIER CONTROL & SIDEBAR
+# 🎛️ SIDEBAR CONTROLS & ASSET UNIVERSE
 # ==============================================================================
 curr_tier = st.session_state.user_info.get("tier", "Free Member")
 is_admin = curr_tier == "Master Admin" or st.session_state.user_info.get("id") == "admin"
 
 with st.sidebar:
     st.markdown(f"""
-    <div style="background:{'#1e1b4b' if is_admin else '#0f172a'}; border:1px solid {'#6366f1' if is_admin else '#1e293b'}; border-radius:12px; padding:14px; margin-bottom:14px;">
-        <span style="color:#38bdf8; font-weight:800; font-size:14px;">⚡ SAM QUANTUM</span><br>
-        <span style="color:#f8fafc; font-size:12px;">User: <b>{st.session_state.user_info['name']}</b></span><br>
-        <span style="color:{'#a855f7' if is_admin else '#10b981'}; font-size:11px; font-weight:700;">● {curr_tier}</span>
+    <div style="background:{'rgba(30, 27, 75, 0.8)' if is_admin else 'rgba(15, 23, 42, 0.8)'}; border:1px solid {'#818cf8' if is_admin else '#334155'}; border-radius:12px; padding:14px; margin-bottom:14px; backdrop-filter:blur(8px);">
+        <span style="color:#38bdf8; font-weight:800; font-size:14px; font-family:'JetBrains Mono';">⚡ SAM QUANTUM OS</span><br>
+        <span style="color:#f8fafc; font-size:12px;">Operator: <b>{st.session_state.user_info['name']}</b></span><br>
+        <span class="{'admin-badge' if is_admin else 'pulse-badge'}" style="margin-top:6px;">
+            {'👑 MASTER FOUNDER' if is_admin else f'● {curr_tier.upper()}'}
+        </span>
     </div>
     """, unsafe_allow_html=True)
     
@@ -344,21 +398,24 @@ with st.sidebar:
         "DOGE-USD": "Dogecoin (DOGE/USD)"
     }
     
-    symbol = st.selectbox("Instrument", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
+    symbol = st.selectbox("Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
     
-    # Tier based timeframe restriction
     if curr_tier == "Free Member":
         allowed_tf = ["15m", "1d"]
     else:
-        allowed_tf = ["1m", "2m", "5m", "15m", "30m", "60m", "1d"]
+        allowed_tf = ["15m", "5m", "1m", "2m", "30m", "60m", "1d"]
         
-    timeframe = st.selectbox("Candle Resolution", allowed_tf, index=0)
-    lookback_days = st.slider("Lookback Period (Days)", 1, 60, 30)
+    timeframe = st.selectbox("Resolution Stream", allowed_tf, index=0)
+    
+    # Auto-adjust lookback to prevent limit errors
+    max_days = 7 if timeframe in ["1m", "2m"] else 60
+    default_days = 5 if timeframe in ["1m", "2m"] else 30
+    lookback_days = st.slider("Lookback Memory (Days)", 1, max_days, default_days)
 
     st.markdown("---")
     st.markdown("### 🛠️ 2. Strategy Engine")
     strategy_type = st.selectbox(
-        "Strategy Archetype",
+        "Quantitative Archetype",
         [
             "1. EMA Institutional Pullback (20/50 Trend)",
             "2. EMA Golden/Death Crossover (9/21)",
@@ -367,13 +424,13 @@ with st.sidebar:
         ]
     )
 
-    rsi_filter = st.checkbox("Require RSI 50-Level Filter", value=True)
+    rsi_filter = st.checkbox("Require RSI 50-Level Momentum Filter", value=True)
 
     st.markdown("---")
     st.markdown("### 🛡️ 3. Risk & Capital")
-    capital = st.number_input("Capital Allocation (₹)", value=100000.0, step=10000.0)
-    qty = st.number_input("Lot / Contract Qty", value=150, step=15)
-    delta = st.slider("Option Delta / Leverage", 0.1, 1.0, 0.5, 0.05)
+    capital = st.number_input("Capital Pool (₹)", value=100000.0, step=10000.0)
+    qty = st.number_input("Lot / Contract Quantity", value=150, step=15)
+    delta = st.slider("Option Delta / Leverage Factor", 0.1, 1.0, 0.5, 0.05)
 
     is_idx = symbol in ["^NSEBANK", "^NSEI"]
     col_k1, col_k2 = st.columns(2)
@@ -383,37 +440,41 @@ with st.sidebar:
         sl_val = st.number_input("Hard SL (" + ("Pts" if is_idx else "%") + ")", value=20.0 if is_idx else 1.0, step=5.0 if is_idx else 0.2)
 
 # ==============================================================================
-# 🚀 MAIN DASHBOARD & TIER UPGRADE DIALOG
+# 🚀 MAIN DASHBOARD & INSTITUTIONAL COCKPIT
 # ==============================================================================
-# 1-Click Upgrade Dialog
 if not is_admin and curr_tier == "Free Member":
-    with st.expander("⚡ UPGRADE TO VIP ALGO TRADER (Click to View / Dismiss)", expanded=True):
+    with st.expander("⚡ UPGRADE TO VIP ALGO TRADER (Click to Expand / Dismiss)", expanded=False):
         st.markdown("""
-        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border: 1px solid #6366f1; border-radius: 10px; padding: 14px;">
-            <h4 style="color:#38bdf8; margin:0;">Unlock 1m/5m Scalping & Institutional Indicators</h4>
-            <p style="color:#94a3b8; font-size:12px; margin:4px 0 10px 0;">Free members get 15m/1d resolutions. Upgrade to VIP to access 1m high-speed feeds and multi-strategy optimization.</p>
-            <span style="background: rgba(168,85,247,0.2); color:#c084fc; border:1px solid #a855f7; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700;">
-                Contact Admin on WhatsApp: +91-9999999999 for instant upgrade
-            </span>
+        <div style="background: linear-gradient(135deg, rgba(30, 27, 75, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%); border: 1px solid #818cf8; border-radius: 12px; padding: 16px;">
+            <h4 style="color:#38bdf8; margin:0; font-weight:800;">Unlock 1m/5m Sub-Minute Scalping & High-Speed Streams</h4>
+            <p style="color:#94a3b8; font-size:12px; margin:6px 0 12px 0;">Community plan includes 15m/1d historical validation. Upgrade to VIP for real-time institutional feeds.</p>
+            <span class="admin-badge">Contact Master Admin on WhatsApp: +91-9999999999 for instant upgrade</span>
         </div>
         """, unsafe_allow_html=True)
 
 st.markdown(f"""
 <div class="brand-header">
     <div>
-        <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM STUDIO</h3>
+        <h3 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono';">⚡ SAM QUANTUM STUDIO</h3>
         <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Single-Market Live Radar</span>
     </div>
     <div style="text-align: right;">
-        <span style="background: {'rgba(168,85,247,0.2)' if is_admin else 'rgba(16,185,129,0.2)'}; color: {'#c084fc' if is_admin else '#10b981'}; border: 1px solid {'#a855f7' if is_admin else '#10b981'}; font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 700;">
-            {'👑 FOUNDER MASTER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
+        <span class="{'admin-badge' if is_admin else 'pulse-badge'}">
+            {'👑 MASTER FOUNDER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
         </span><br>
-        <span style="color: #94a3b8; font-size: 11px;">{symbol} | {timeframe}</span>
+        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | SECURE FEED</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Tabs Routing
+# Top Bar Workspace Setup
+col_run1, col_run2 = st.columns([3, 1])
+with col_run1:
+    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Strategy: **{strategy_type.split('.')[1].strip()}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
+with col_run2:
+    execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
+
+# Tabs Setup
 if is_admin:
     tab_chart, tab_metrics, tab_trades, tab_reports, tab_single_radar, tab_admin_access = st.tabs([
         "📈 Pro Touch Chart", 
@@ -431,140 +492,164 @@ else:
         "📥 Download Reports"
     ])
 
-# Execute Backtest
-df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
+# ==============================================================================
+# 📊 BACKTEST EXECUTION ENGINE
+# ==============================================================================
+if execute_btn or 'backtest_executed' in st.session_state:
+    st.session_state.backtest_executed = True
+    
+    with st.spinner("⏳ Loading institutional price matrix and computing trades..."):
+        try:
+            df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
+            if df_raw.empty or len(df_raw) < 10:
+                st.warning("⚠️ No market data returned. Please select a higher timeframe or increase lookback days.")
+                st.stop()
 
-if df_raw.empty or len(df_raw) < 20:
-    st.error("❌ Insufficient data. Try adjusting lookback or timeframe.")
-    st.stop()
+            if isinstance(df_raw.columns, pd.MultiIndex):
+                df_raw.columns = df_raw.columns.droplevel(1)
+            df_raw.dropna(inplace=True)
 
-if isinstance(df_raw.columns, pd.MultiIndex):
-    df_raw.columns = df_raw.columns.droplevel(1)
-df_raw.dropna(inplace=True)
+            df = calc_indicators(df_raw, {})
+            ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
+            df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
 
-df = calc_indicators(df_raw, {})
-ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
-df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
-
-# Simulate trades
-trades = []
-position = None
-last_bar = -1
-
-for i in range(2, len(df)):
-    curr_spot = float(df['Close'].iloc[i])
-    rsi = float(df['RSI'].iloc[i])
-    ema20 = float(df['EMA20'].iloc[i])
-    ema50 = float(df['EMA50'].iloc[i])
-    time_lbl = df['Time_Str'].iloc[i]
-
-    if position is not None:
-        move = (curr_spot - position['entry']) if position['type'] == 'BUY/CE' else (position['entry'] - curr_spot)
-        opt_move = move if is_idx else ((move / position['entry']) * 100)
-
-        if opt_move >= target_val:
-            pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
-            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
+            trades = []
             position = None
-            last_bar = i
-        elif opt_move <= -sl_val:
-            pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
-            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
-            position = None
-            last_bar = i
-    elif last_bar != i:
-        if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
-            position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
-            last_bar = i
-        elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
-            position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
-            last_bar = i
+            last_bar = -1
 
-# --- TAB 1: PRO CHART ---
-with tab_chart:
-    st.markdown("#### 🕯️ Institutional Price Matrix (Touch Pan & Zoom)")
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
+            for i in range(2, len(df)):
+                curr_spot = float(df['Close'].iloc[i])
+                rsi = float(df['RSI'].iloc[i])
+                ema20 = float(df['EMA20'].iloc[i])
+                ema50 = float(df['EMA50'].iloc[i])
+                time_lbl = df['Time_Str'].iloc[i]
 
-    fig.add_trace(go.Candlestick(
-        x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-        name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'
-    ), row=1, col=1)
+                if position is not None:
+                    move = (curr_spot - position['entry']) if position['type'] == 'BUY/CE' else (position['entry'] - curr_spot)
+                    opt_move = move if is_idx else ((move / position['entry']) * 100)
 
-    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=2, col=1)
+                    if opt_move >= target_val:
+                        pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
+                        position = None
+                        last_bar = i
+                    elif opt_move <= -sl_val:
+                        pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
+                        position = None
+                        last_bar = i
+                elif last_bar != i:
+                    if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
+                        position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
+                        last_bar = i
+                    elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
+                        position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
+                        last_bar = i
 
-    fig.update_layout(
-        template="plotly_dark", paper_bgcolor='#080b11', plot_bgcolor='#080b11',
-        height=620, xaxis_rangeslider_visible=False, dragmode='pan',
-        margin=dict(l=5, r=5, t=10, b=5)
-    )
+            # Render Chart
+            with tab_chart:
+                st.markdown("#### 🕯️ Institutional Matrix (Touch Pan & Zoom)")
+                fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
 
-    config_touch = {
-        'scrollZoom': True, 'displayModeBar': True,
-        'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
-        'toImageButtonOptions': {'format': 'png', 'filename': f'sam_quantum_{symbol}', 'height': 1080, 'width': 1920, 'scale': 2}
-    }
-    st.plotly_chart(fig, use_container_width=True, config=config_touch)
+                fig.add_trace(go.Candlestick(
+                    x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+                    name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'
+                ), row=1, col=1)
 
-# --- TAB 2: SCORECARD & KPIS ---
-with tab_metrics:
-    if trades:
-        tdf = pd.DataFrame(trades)
-        net_pnl = tdf['PnL'].sum()
-        win_count = len(tdf[tdf['PnL'] > 0])
-        win_rate = (win_count / len(tdf)) * 100
-        tdf['Cum_PnL'] = tdf['PnL'].cumsum()
+                fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
+                fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=2, col=1)
 
-        st.markdown("#### 💎 Strategy Scorecard")
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Net PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}")
-        k2.metric("Win Rate", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
-        k3.metric("Total Trades", len(tdf))
-        k4.metric("Risk-to-Reward", "1 : 2.5")
+                fig.update_layout(
+                    template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811',
+                    height=620, xaxis_rangeslider_visible=False, dragmode='pan',
+                    margin=dict(l=5, r=5, t=10, b=5)
+                )
 
-        st.markdown("---")
-        fig_equity = go.Figure()
-        fig_equity.add_trace(go.Scatter(
-            x=tdf['Exit Time'], y=tdf['Cum_PnL'],
-            mode='lines+markers', line=dict(color='#10b981', width=2.5),
-            fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)',
-            name='Equity'
-        ))
-        fig_equity.update_layout(title="📈 Cumulative Equity Growth (₹)", template="plotly_dark", paper_bgcolor='#0f172a', plot_bgcolor='#0f172a', height=340)
-        st.plotly_chart(fig_equity, use_container_width=True, config=config_touch)
+                config_touch = {
+                    'scrollZoom': True, 'displayModeBar': True,
+                    'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
+                    'toImageButtonOptions': {'format': 'png', 'filename': f'sam_quantum_{symbol}', 'height': 1080, 'width': 1920, 'scale': 2}
+                }
+                st.plotly_chart(fig, use_container_width=True, config=config_touch)
 
-# --- TAB 3: TRADE LOGS ---
-with tab_trades:
-    if trades:
-        st.markdown("#### 📜 Trade Execution Audit Logs")
-        st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
+            # Render Metrics
+            with tab_metrics:
+                if trades:
+                    tdf = pd.DataFrame(trades)
+                    net_pnl = tdf['PnL'].sum()
+                    win_count = len(tdf[tdf['PnL'] > 0])
+                    win_rate = (win_count / len(tdf)) * 100
+                    tdf['Cum_PnL'] = tdf['PnL'].cumsum()
 
-# --- TAB 4: DOWNLOAD REPORTS ---
-with tab_reports:
-    st.markdown("### 📥 Instant Mobile Audit Reports")
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        if trades:
-            csv_buf = io.StringIO()
-            pd.DataFrame(trades).to_csv(csv_buf, index=False)
-            st.download_button("📥 DOWNLOAD CSV AUDIT", data=csv_buf.getvalue(), file_name=f"sam_quantum_{symbol}.csv", mime="text/csv")
-        else:
-            st.info("No trade data to export.")
-    with col_r2:
-        if trades:
-            html_report = f"""
-            <!DOCTYPE html><html><body style="background:#080b11;color:#f1f5f9;font-family:sans-serif;padding:20px;">
-            <h2 style="color:#38bdf8;">SAM QUANTUM AI - AUDIT</h2>
-            <p>Asset: <b>{asset_dict[symbol]}</b> | Net PnL: <b>₹{net_pnl:,.2f}</b> | Win Rate: <b>{win_rate:.1f}%</b></p>
-            {pd.DataFrame(trades).to_html(index=False)}
-            </body></html>
-            """
-            st.download_button("📥 DOWNLOAD HTML AUDIT", data=html_report, file_name=f"sam_quantum_{symbol}.html", mime="text/html")
+                    st.markdown("#### 💎 Institutional Strategy Scorecard")
+                    k1, k2, k3, k4 = st.columns(4)
+                    k1.metric("Net Realized PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}")
+                    k2.metric("Win Probability", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
+                    k3.metric("Trade Executions", len(tdf))
+                    k4.metric("Risk Factor", "1 : 2.5")
 
-# --- ADMIN ONLY: TAB 5 - SINGLE ASSET LIVE RADAR (CLEAN & SIMPLE) ---
+                    st.markdown("---")
+                    fig_equity = go.Figure()
+                    fig_equity.add_trace(go.Scatter(
+                        x=tdf['Exit Time'], y=tdf['Cum_PnL'],
+                        mode='lines+markers', line=dict(color='#10b981', width=2.5),
+                        fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)',
+                        name='Equity'
+                    ))
+                    fig_equity.update_layout(title="📈 Cumulative Equity Trajectory (₹)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=340)
+                    st.plotly_chart(fig_equity, use_container_width=True, config=config_touch)
+
+            # Render Trade Logs
+            with tab_trades:
+                if trades:
+                    st.markdown("#### 📜 Trade Execution Audit Trail")
+                    st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
+
+            # Render Reports
+            with tab_reports:
+                st.markdown("### 📥 Instant Mobile Audit Reports")
+                col_r1, col_r2 = st.columns(2)
+                with col_r1:
+                    if trades:
+                        csv_buf = io.StringIO()
+                        pd.DataFrame(trades).to_csv(csv_buf, index=False)
+                        st.download_button("📥 DOWNLOAD CSV AUDIT", data=csv_buf.getvalue(), file_name=f"sam_quantum_{symbol}.csv", mime="text/csv")
+                with col_r2:
+                    if trades:
+                        html_report = f"""
+                        <!DOCTYPE html><html><body style="background:#050811;color:#f1f5f9;font-family:sans-serif;padding:20px;">
+                        <h2 style="color:#38bdf8;">SAM QUANTUM AI - AUDIT</h2>
+                        <p>Asset: <b>{asset_dict[symbol]}</b> | Net PnL: <b>₹{net_pnl:,.2f}</b> | Win Rate: <b>{win_rate:.1f}%</b></p>
+                        {pd.DataFrame(trades).to_html(index=False)}
+                        </body></html>
+                        """
+                        st.download_button("📥 DOWNLOAD HTML AUDIT", data=html_report, file_name=f"sam_quantum_{symbol}.html", mime="text/html")
+        except Exception as e:
+            st.error(f"Error during simulation: {str(e)}")
+
+else:
+    # 🌟 Obsidian Clean Strategy Ready State (Zero Error on Launch)
+    with tab_chart:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="glass-card" style="text-align: center; padding: 48px 24px;">
+            <div style="font-size: 42px; margin-bottom: 8px;">⚡</div>
+            <h3 style="color: #38bdf8; margin: 0; font-weight: 800; font-family:'JetBrains Mono';">QUANTUM STRATEGY STUDIO READY</h3>
+            <p style="color: #94a3b8; font-size: 14px; max-width: 620px; margin: 10px auto 24px auto;">
+                Configure your strategy archetype, leverage, and stop-loss limits in the left sidebar, then click <b>'EXECUTE STRATEGY BACKTEST'</b> above to run the institutional simulation.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
+                <span class="pulse-badge">Feed: {asset_dict[symbol]}</span>
+                <span style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 5px 14px; border-radius: 8px; font-size: 12px; font-family:'JetBrains Mono';">Resolution: {timeframe}</span>
+                <span style="background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); padding: 5px 14px; border-radius: 8px; font-size: 12px; font-family:'JetBrains Mono';">Memory: {lookback_days} Days</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# --- ADMIN ONLY: TAB 5 - SINGLE ASSET LIVE RADAR ---
 if is_admin:
     with tab_single_radar:
         st.markdown("### ⚡ Single-Asset Live Opportunity Radar")
@@ -572,20 +657,20 @@ if is_admin:
 
         col_sr1, col_sr2 = st.columns(2)
         with col_sr1:
-            radar_asset = st.selectbox("Select Market to Audit", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="single_rad_asset")
+            radar_asset = st.selectbox("Target Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="single_rad_asset")
             is_open, gate_info = is_market_open(radar_asset)
             if is_open:
-                st.success(f"🟢 Market Status: {gate_info}")
+                st.success(f"🟢 Market Stream: {gate_info}")
             else:
-                st.warning(f"🔴 Market Status: {gate_info}")
+                st.warning(f"🔴 Market Stream: {gate_info}")
                 
             is_rd_idx = radar_asset in ["^NSEBANK", "^NSEI"]
             rd_target = st.number_input("Target (" + ("Pts" if is_rd_idx else "%") + ")", value=50.0 if is_rd_idx else 2.5, step=5.0 if is_rd_idx else 0.5, key="rd_tp")
             
         with col_sr2:
-            radar_tf = st.selectbox("Resolution", ["1m", "5m", "15m"], index=1, key="rd_tf")
+            radar_tf = st.selectbox("Scanning Resolution", ["1m", "5m", "15m"], index=1, key="rd_tf")
             rd_sl = st.number_input("Hard SL (" + ("Pts" if is_rd_idx else "%") + ")", value=20.0 if is_rd_idx else 1.0, step=5.0 if is_rd_idx else 0.2, key="rd_sl")
-            min_conf_single = st.slider("Minimum AI Confidence %", 70, 95, 80, key="rd_conf")
+            min_conf_single = st.slider("Minimum AI Edge Confidence %", 70, 95, 80, key="rd_conf")
 
         if st.button("🚀 AUDIT & BROADCAST THIS ASSET TO TG"):
             if not is_open:
@@ -665,14 +750,14 @@ if is_admin:
                             else:
                                 st.error(f"❌ Telegram Error: {resp}")
                     except Exception as e:
-                        st.error(f"Error fetching live data: {str(e)}")
+                        st.error(f"Error fetching live feed: {str(e)}")
 
     # --- ADMIN ONLY: TAB 6 - ACCESS & REVOKE CONSOLE ---
     with tab_admin_access:
         st.markdown("### 👑 Founder Console: Member Directory & Access Control")
         col_u1, col_u2 = st.columns([1.6, 1])
         with col_u1:
-            st.markdown("#### 📋 Verified User Directory")
+            st.markdown("#### 📋 Verified Operator Directory")
             users_list = []
             for uid, udata in st.session_state.users_db.items():
                 users_list.append({
@@ -686,22 +771,22 @@ if is_admin:
 
             csv_users = io.StringIO()
             u_df.to_csv(csv_users, index=False)
-            st.download_button("📥 EXPORT VERIFIED LEADS (CSV)", data=csv_users.getvalue(), file_name="sam_quantum_users.csv", mime="text/csv")
+            st.download_button("📥 EXPORT VERIFIED OPERATORS (CSV)", data=csv_users.getvalue(), file_name="sam_quantum_users.csv", mime="text/csv")
 
         with col_u2:
             st.markdown("#### 🛡️ Access & Revoke Controls")
             removable_users = [u for u in st.session_state.users_db.keys() if u != "admin"]
             if removable_users:
                 target_del = st.selectbox("Select Account to Ban / Revoke", removable_users)
-                if st.button("🚫 REVOKE ACCESS & BAN USER", type="secondary"):
+                if st.button("🚫 REVOKE ACCESS & BAN OPERATOR", type="secondary"):
                     del st.session_state.users_db[target_del]
                     save_users(st.session_state.users_db)
-                    st.error(f"User '{target_del}' has been revoked.")
+                    st.error(f"Operator '{target_del}' has been revoked.")
                     time.sleep(0.8)
                     st.rerun()
 
                 st.markdown("---")
-                target_up = st.selectbox("Select User for Tier Upgrade", removable_users, key="up_target")
+                target_up = st.selectbox("Select Operator for Tier Upgrade", removable_users, key="up_target")
                 new_tier = st.selectbox("Select Access Tier", ["Free Member", "VIP Algo Trader", "Institutional Pro", "Master Admin"])
                 if st.button("👑 UPDATE ACCESS TIER"):
                     st.session_state.users_db[target_up]["tier"] = new_tier
@@ -710,4 +795,4 @@ if is_admin:
                     time.sleep(0.8)
                     st.rerun()
             else:
-                st.info("No external registered accounts found.")
+                st.info("No external registered operators found.")
