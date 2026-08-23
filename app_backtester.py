@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime
+from datetime import datetime, time as dtime
+import pytz
 import io
 import json
 import os
@@ -12,10 +13,10 @@ import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - CONFIG & ANTI-REFRESH
+# 💎 SAM QUANTUM TERMINAL - HIGH-RES PRO TYPOGRAPHY & TOUCH CONFIG
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Institutional Terminal & Live Dispatcher",
+    page_title="SAM QUANTUM AI | Institutional Trading Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -45,58 +46,76 @@ def save_users(users_dict):
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
 
+# 🛡️ High-Resolution Mobile Dark UI & Anti-Swipe Reload Lock
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
     html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
         overscroll-behavior-y: none !important;
         overscroll-behavior-x: none !important;
-        background-color: #0b0e14 !important;
-        color: #e6edf3;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+        -webkit-overflow-scrolling: touch;
+        background-color: #080b11 !important;
+        color: #f1f5f9;
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
     }
+
     .brand-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background: linear-gradient(135deg, #111722 0%, #161f30 100%);
-        border: 1px solid #1f293d;
-        border-radius: 12px;
-        padding: 12px 18px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border: 1px solid #334155;
+        border-radius: 14px;
+        padding: 14px 20px;
         margin-bottom: 15px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
+    
     .glass-card {
-        background: #111722;
-        border: 1px solid #1f293d;
+        background: #0f172a;
+        border: 1px solid #1e293b;
         border-radius: 14px;
         padding: 20px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     }
+
     div[data-testid="stMetric"] {
-        background-color: #111722 !important;
-        border: 1px solid #1f293d !important;
-        border-radius: 10px !important;
-        padding: 12px 14px !important;
+        background-color: #0f172a !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 12px !important;
+        padding: 14px 16px !important;
     }
+
     .stButton>button {
         background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        color: white !important;
+        color: #ffffff !important;
         font-weight: 700 !important;
         border: none !important;
-        border-radius: 8px !important;
-        padding: 10px 18px !important;
+        border-radius: 10px !important;
+        padding: 10px 20px !important;
+        letter-spacing: 0.5px;
     }
+
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #111722;
-        border-radius: 10px;
-        padding: 4px;
-        border: 1px solid #1f293d;
+        background-color: #0f172a;
+        border-radius: 12px;
+        padding: 5px;
+        border: 1px solid #1e293b;
+        gap: 6px;
     }
+    
     .stTabs [aria-selected="true"] {
-        background-color: #1f293d !important;
+        background-color: #1e293b !important;
         color: #38bdf8 !important;
-        border-radius: 6px;
-        font-weight: 600;
+        border-radius: 8px;
+        font-weight: 700;
+    }
+
+    .js-plotly-plot .plotly .modebar {
+        orientation: h;
+        background: rgba(15, 23, 42, 0.8) !important;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -121,13 +140,13 @@ if not st.session_state.authenticated:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
         <div class="glass-card" style="text-align: center;">
-            <div style="font-size: 32px; margin-bottom: 6px;">⚡</div>
-            <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Studio & Live Telegram Dispatcher</p>
+            <div style="font-size: 36px; margin-bottom: 6px;">⚡</div>
+            <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px;">SAM QUANTUM AI</h2>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Terminal & Autonomous Pilot</p>
             <span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">
-                ● FREE LIFETIME TRADER EDITION
+                ● FREE LIFETIME TRADER ACCESS
             </span>
-            <hr style="border-color: #1f293d; margin-top: 18px;">
+            <hr style="border-color: #1e293b; margin-top: 18px;">
         </div>
         """, unsafe_allow_html=True)
         
@@ -168,28 +187,53 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# 📡 TELEGRAM DISPATCHER FUNCTION
+# ⏰ STRICT MARKET GATEKEEPER
 # ==============================================================================
-def send_telegram_alert(token, chat_id, message):
-    if not token or not chat_id:
-        return False, "Bot Token or Channel ID missing."
-    url = f"https://api.telegram.org/bot{token.strip()}/sendMessage"
-    payload = {
-        "chat_id": chat_id.strip(),
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=8)
-        if resp.status_code == 200:
-            return True, "Alert dispatched successfully to Telegram!"
-        else:
-            return False, f"Telegram Error {resp.status_code}: {resp.text}"
-    except Exception as e:
-        return False, f"Network/API Error: {str(e)}"
+def is_market_open(symbol_key):
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    weekday = now_ist.weekday()
+    current_time = now_ist.time()
+
+    if symbol_key == "BTC-USD":
+        return True, "Crypto (24/7 Live)"
+
+    if weekday in [5, 6]:
+        return False, "Market Closed (Weekend)"
+
+    if symbol_key in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS"]:
+        market_start = dtime(9, 15)
+        market_end = dtime(15, 30)
+        if market_start <= current_time <= market_end:
+            return True, "NSE Live (09:15 - 15:30 IST)"
+        return False, "NSE Closed (Opens 09:15 AM Mon-Fri)"
+
+    if symbol_key in ["GC=F", "SI=F"]:
+        mcx_start = dtime(9, 0)
+        mcx_end = dtime(23, 30)
+        if mcx_start <= current_time <= mcx_end:
+            return True, "MCX Live (09:00 - 23:30 IST)"
+        return False, "MCX Closed"
+
+    return False, "Market Closed"
 
 # ==============================================================================
-# 🧮 QUANT INDICATORS ENGINE
+# 📡 TELEGRAM DISPATCHER
+# ==============================================================================
+TG_BOT_TOKEN = "8928886896:AAG_K3y8ltCsHPqfva-ONzfjXVu1R9vD5ko"
+TG_CHAT_ID = "@sam_quantum_signals"
+
+def send_telegram_alert(message):
+    url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TG_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        resp = requests.post(url, json=payload, timeout=8)
+        return resp.status_code == 200, resp.text
+    except Exception as e:
+        return False, str(e)
+
+# ==============================================================================
+# 🧮 INDICATORS ENGINE
 # ==============================================================================
 def calc_indicators(df, params):
     d = df.copy()
@@ -197,17 +241,8 @@ def calc_indicators(df, params):
 
     d['EMA9'] = c.ewm(span=9, adjust=False).mean()
     d['EMA20'] = c.ewm(span=20, adjust=False).mean()
-    d['EMA21'] = c.ewm(span=21, adjust=False).mean()
     d['EMA50'] = c.ewm(span=50, adjust=False).mean()
-    d['EMA200'] = c.ewm(span=200, adjust=False).mean()
     d['SMA20'] = c.rolling(window=20).mean()
-
-    typical_price = (h + l + c) / 3.0
-    date_group = d.index.date if hasattr(d.index, 'date') else np.zeros(len(d))
-    pv = typical_price * v
-    d['Cum_PV'] = pv.groupby(date_group).cumsum()
-    d['Cum_Vol'] = v.groupby(date_group).cumsum()
-    d['VWAP'] = (d['Cum_PV'] / d['Cum_Vol'].replace(0, np.nan)).fillna(c)
 
     delta = c.diff()
     gain = delta.clip(lower=0)
@@ -217,23 +252,16 @@ def calc_indicators(df, params):
     rs = avg_gain / avg_loss.replace(0, np.nan)
     d['RSI'] = (100 - (100 / (1 + rs))).fillna(50)
 
-    d['BB_MID'] = d['SMA20']
-    bb_std = c.rolling(window=20).std()
-    d['BB_UP'] = d['BB_MID'] + (params.get('bb_std', 2.0) * bb_std)
-    d['BB_LOW'] = d['BB_MID'] - (params.get('bb_std', 2.0) * bb_std)
-
     hl = h - l
     hc = (h - c.shift(1)).abs()
     lc = (l - c.shift(1)).abs()
     tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
     d['ATR'] = tr.rolling(window=14).mean().fillna(tr)
 
-    st_period = params.get('st_period', 10)
-    st_mult = params.get('st_mult', 2.0)
-    st_atr = tr.ewm(com=st_period-1, adjust=False).mean()
+    st_atr = tr.ewm(com=9, adjust=False).mean()
     hl2 = (h + l) / 2.0
-    basic_ub = hl2 + (st_mult * st_atr)
-    basic_lb = hl2 - (st_mult * st_atr)
+    basic_ub = hl2 + (2.0 * st_atr)
+    basic_lb = hl2 - (2.0 * st_atr)
     final_ub = basic_ub.copy()
     final_lb = basic_lb.copy()
     direction = np.zeros(len(d))
@@ -258,26 +286,20 @@ def calc_indicators(df, params):
 
     d['ST_DIR'] = direction
     d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
-    d['PCT_CHANGE'] = ((c - o) / o.replace(0, np.nan)) * 100
-
-    body = (c - o).abs()
-    d['IS_HAMMER'] = ((l <= o.combine(c, min) - (body * 1.8)) & (h <= o.combine(c, max) + (body * 0.3)) & (body > 0))
-    d['IS_ENGULFING_BULL'] = ((c > o) & (c.shift(1) < o.shift(1)) & (c >= o.shift(1)) & (o <= c.shift(1)))
-    d['IS_ENGULFING_BEAR'] = ((c < o) & (c.shift(1) > o.shift(1)) & (c <= o.shift(1)) & (o >= c.shift(1)))
     return d
 
 # ==============================================================================
-# 🎛️ SIDEBAR CONTROLS
+# 🎛️ SIDEBAR
 # ==============================================================================
 with st.sidebar:
     st.markdown(f"""
-    <div style="background:#111722; border:1px solid #1f293d; border-radius:10px; padding:12px 14px; margin-bottom:12px;">
+    <div style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px 14px; margin-bottom:12px;">
         <span style="color:#38bdf8; font-weight:800; font-size:14px;">⚡ SAM QUANTUM</span><br>
         <span style="color:#94a3b8; font-size:12px;">User: <b>{st.session_state.user_info['name']}</b></span><br>
         <span style="color:#10b981; font-size:11px; font-weight:700;">● {st.session_state.user_info['tier']}</span>
     </div>
     """, unsafe_allow_html=True)
-    
+
     if st.button("🚪 Logout Terminal"):
         st.session_state.authenticated = False
         st.session_state.user_info = None
@@ -286,13 +308,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.markdown("### ✈️ Telegram Channel Config")
-    # PRE-CONFIGURED CREDENTIALS
-    tg_bot_token = st.text_input("Telegram Bot Token", value="8928886896:AAG_K3y8ltCsHPqfva-ONzfjXVu1R9vD5ko", type="password")
-    tg_chat_id = st.text_input("Channel Username / ID", value="@sam_quantum_signals")
-    
-    st.markdown("---")
-    st.markdown("### 📊 1. Asset & Timeframe")
     asset_dict = {
         "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
         "^NSEI": "Nifty 50 Index (^NSEI)",
@@ -304,45 +319,7 @@ with st.sidebar:
     }
     symbol = st.selectbox("Instrument", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
     timeframe = st.selectbox("Candle Resolution", ["1m", "2m", "5m", "15m", "30m", "60m", "1d"], index=3)
-    lookback_days = st.slider("Lookback Period (Days)", 1, 60, 30)
-
-    st.markdown("---")
-    st.markdown("### 🛠️ 2. Strategy Engine")
-    strategy_type = st.selectbox(
-        "Quantitative Archetype",
-        [
-            "1. EMA Institutional Pullback (20/50 Trend)",
-            "2. EMA Golden/Death Crossover (9/21 or 20/50)",
-            "3. SuperTrend Trend-Rider (10, Multiplier)",
-            "4. Momentum + Volume Spike Breakout (2.5x Vol)",
-            "5. Candlestick Pattern Engine (Hammer/Engulfing)",
-            "6. Bollinger Band Bounce (Mean Reversion)",
-            "7. VWAP Intraday Breakout & Retest"
-        ]
-    )
-
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st_mult = st.number_input("ST Multiplier", value=2.0, step=0.5)
-        fast_ema = st.selectbox("Fast EMA", [9, 20], index=0)
-    with col_s2:
-        st_period = st.number_input("ST Length", value=10, step=1)
-        slow_ema = st.selectbox("Slow EMA", [21, 50, 200], index=1)
-
-    rsi_filter = st.checkbox("Require RSI 50-Level Filter", value=True)
-    vol_filter = st.checkbox("Require Volume Spike Confirmation", value=False)
-
-    st.markdown("---")
-    st.markdown("### 🛡️ 3. Risk & Capital Management")
-    capital = st.number_input("Capital Allocation (₹)", value=100000.0, step=10000.0)
-    qty = st.number_input("Position Units / Lot Qty", value=150, step=15)
-    delta = st.slider("Option Delta / Leverage", 0.1, 1.0, 0.5, 0.05)
-
-    col_k1, col_k2 = st.columns(2)
-    with col_k1:
-        target_pts = st.number_input("Target (Pts)", value=50.0, step=5.0)
-    with col_k2:
-        sl_pts = st.number_input("Hard SL (Pts)", value=20.0, step=5.0)
+    lookback_days = st.slider("Lookback (Days)", 1, 60, 30)
 
 # ==============================================================================
 # 🚀 MAIN DASHBOARD
@@ -350,208 +327,305 @@ with st.sidebar:
 st.markdown(f"""
 <div class="brand-header">
     <div>
-        <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Strategy Studio & Telegram Live Dispatcher</span>
+        <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM TERMINAL</h3>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Quant Studio & Real-Time Touch Engine</span>
     </div>
     <div style="text-align: right;">
-        <span style="background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 700;">FEED: CONNECTED</span><br>
+        <span style="background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 700;">PRO ENGINE LIVE</span><br>
         <span style="color: #94a3b8; font-size: 11px;">{symbol} | {timeframe}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Top Action Buttons
-col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
-with col_b1:
-    st.write(f"💼 **Selected:** {asset_dict[symbol]} | Strategy: {strategy_type.split('.')[1].strip()}")
-with col_b2:
-    execute_btn = st.button("⚡ EXECUTE BACKTEST", type="primary")
-with col_b3:
-    dispatch_all_btn = st.button("✈️ SCAN & BROADCAST TO TG")
+is_admin = st.session_state.user_info.get("tier") == "Master Admin" or st.session_state.user_info.get("id") == "admin"
 
-# --- LIVE SCANNER & TELEGRAM BROADCAST LOGIC ---
-if dispatch_all_btn:
-    with st.spinner("🤖 AI Quantum Engine Scanning all markets for live setups..."):
-        scan_results = []
-        for sym_key, sym_name in asset_dict.items():
-            try:
-                df_live = yf.download(sym_key, period="5d", interval=timeframe, progress=False)
-                if df_live.empty or len(df_live) < 25:
-                    continue
-                if isinstance(df_live.columns, pd.MultiIndex):
-                    df_live.columns = df_live.columns.droplevel(1)
-                
-                params = {'st_period': 10, 'st_mult': 2.0, 'bb_std': 2.0}
-                d_ind = calc_indicators(df_live, params)
-                
-                last_bar = d_ind.iloc[-1]
-                prev_bar = d_ind.iloc[-2]
-                
-                spot_price = float(last_bar['Close'])
-                rsi_val = float(last_bar['RSI'])
-                ema20_val = float(last_bar['EMA20'])
-                ema50_val = float(last_bar['EMA50'])
-                st_dir = int(last_bar['ST_DIR'])
-                prev_st_dir = int(prev_bar['ST_DIR'])
-                
-                signal = "NEUTRAL"
-                ai_confidence = 70
-                setup_reason = ""
-                
-                if ema20_val > ema50_val and spot_price > ema20_val and rsi_val > 52:
-                    signal = "BUY / CALL (CE) 🟢"
-                    ai_confidence = 88
-                    setup_reason = f"Bullish 20/50 EMA Pullback + RSI Momentum ({rsi_val:.1f})"
-                elif ema20_val < ema50_val and spot_price < ema20_val and rsi_val < 48:
-                    signal = "SELL / PUT (PE) 🔴"
-                    ai_confidence = 85
-                    setup_reason = f"Bearish 20/50 EMA Rejection + RSI Weakness ({rsi_val:.1f})"
-                elif prev_st_dir == -1 and st_dir == 1:
-                    signal = "BUY / CALL (CE) 🟢"
-                    ai_confidence = 92
-                    setup_reason = "SuperTrend Bullish Reversal Cross"
-                elif prev_st_dir == 1 and st_dir == -1:
-                    signal = "SELL / PUT (PE) 🔴"
-                    ai_confidence = 90
-                    setup_reason = "SuperTrend Bearish Reversal Cross"
-                
-                if signal != "NEUTRAL":
-                    target_calc = spot_price + target_pts if "BUY" in signal else spot_price - target_pts
-                    sl_calc = spot_price - sl_pts if "BUY" in signal else spot_price + sl_pts
-                    
-                    tg_msg = (
-                        f"⚡ <b>SAM QUANTUM AI - LIVE SIGNAL ALERT</b> ⚡\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"📊 <b>Asset:</b> {sym_name}\n"
-                        f"🎯 <b>Action:</b> <code>{signal}</code>\n"
-                        f"💵 <b>Entry Price:</b> ₹{spot_price:,.2f}\n"
-                        f"🎯 <b>Target:</b> ₹{target_calc:,.2f} (+{target_pts} pts)\n"
-                        f"🛑 <b>Stop Loss:</b> ₹{sl_calc:,.2f} (-{sl_pts} pts)\n"
-                        f"⏱ <b>Timeframe:</b> {timeframe}\n"
-                        f"🧠 <b>AI Confidence:</b> <code>{ai_confidence}% Institutional Edge</code>\n"
-                        f"🔍 <b>Setup Logic:</b> {setup_reason}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"⚠️ <i>Strictly adhere to 1:2 R:R. Trailing SL recommended.</i>\n"
-                        f"🤖 <i>Generated via Sam Quantum Terminal</i>"
-                    )
-                    
-                    ok, resp_str = send_telegram_alert(tg_bot_token, tg_chat_id, tg_msg)
-                    scan_results.append({"Asset": sym_name, "Signal": signal, "Spot": spot_price, "AI Score": f"{ai_confidence}%", "TG Status": "Sent ✅" if ok else f"Failed ❌ ({resp_str})"})
-            except Exception as e:
-                pass
-                
-        if scan_results:
-            st.success(f"🚀 AI Scanner complete! Dispatched {len(scan_results)} setups to your Telegram Channel.")
-            st.table(pd.DataFrame(scan_results))
-        else:
-            st.info("Market is currently consolidative with no high-probability setups meeting threshold.")
+tab_chart, tab_metrics, tab_trades, tab_reports, tab_auto_pilot = st.tabs([
+    "📈 Pro Touch Chart", 
+    "📊 KPIs & Curve", 
+    "📜 Trade Logs", 
+    "📥 Download Reports", 
+    "👑 1-Click AI Auto-Pilot"
+])
 
-# --- STANDARD BACKTESTER TABBED VIEW ---
-if execute_btn or 'sim_ran' in st.session_state:
-    st.session_state.sim_ran = True
-    df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
-    if not df_raw.empty and len(df_raw) >= 25:
-        if isinstance(df_raw.columns, pd.MultiIndex):
-            df_raw.columns = df_raw.columns.droplevel(1)
-        df_raw.dropna(inplace=True)
-        params = {'st_period': int(st_period), 'st_mult': float(st_mult), 'bb_std': 2.0}
-        df = calc_indicators(df_raw, params)
+# --- ADMIN AUTONOMOUS SCANNER TAB ---
+with tab_auto_pilot:
+    if not is_admin:
+        st.warning("🔒 Access Restricted to Master Admin / Founder.")
+    else:
+        st.markdown("### 🤖 Autonomous Live Multi-Market Pilot")
+        st.caption("Validates market hours before dispatching real-time signals to Telegram.")
 
-        ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
-        df['IST_Hour'] = ist_time.hour
-        df['IST_Minute'] = ist_time.minute
-        df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
-        df.dropna(inplace=True)
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            auto_scan_active = st.toggle("⚡ ACTIVATE AUTO PILOT LOOP", value=False)
+            target_pts = st.number_input("Index Target Pts", value=50.0, step=5.0)
+        with col_p2:
+            min_confidence = st.slider("Minimum AI Confidence Threshold", 75, 95, 85)
+            sl_pts = st.number_input("Index Hard SL Pts", value=20.0, step=5.0)
 
-        trades = []
-        position = None
-        last_traded_bar = -1
+        st.markdown("#### 🌐 Real-Time Market Gates")
+        status_data = []
+        for s_sym, s_name in asset_dict.items():
+            is_open, reason = is_market_open(s_sym)
+            status_data.append({
+                "Instrument": s_name,
+                "Status": "🟢 LIVE OPEN" if is_open else "🔴 CLOSED",
+                "Gatekeeper Info": reason
+            })
+        st.table(pd.DataFrame(status_data))
 
-        for i in range(2, len(df)):
-            curr_spot = float(df['Close'].iloc[i])
-            rsi = float(df['RSI'].iloc[i])
-            ema20 = float(df['EMA20'].iloc[i])
-            ema50 = float(df['EMA50'].iloc[i])
-            time_label = df['Time_Str'].iloc[i]
+        if auto_scan_active or st.button("🚀 SCAN CURRENTLY OPEN MARKETS"):
+            with st.spinner("🔍 Auditing open markets for real-time confluences..."):
+                dispatched_count = 0
+                for s_sym, s_name in asset_dict.items():
+                    is_open, gate_reason = is_market_open(s_sym)
+                    if not is_open:
+                        continue
 
-            if position is not None:
-                spot_move = (curr_spot - position['entry_spot']) if position['type'] == 'BUY/CE' else (position['entry_spot'] - curr_spot)
-                opt_move = spot_move * delta
+                    try:
+                        df_live = yf.download(s_sym, period="3d", interval="5m", progress=False)
+                        if df_live.empty or len(df_live) < 20:
+                            continue
+                        if isinstance(df_live.columns, pd.MultiIndex):
+                            df_live.columns = df_live.columns.droplevel(1)
 
-                if opt_move >= target_pts:
-                    trades.append({'Entry Time': position['entry_time'], 'Exit Time': time_label, 'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_pts, 'PnL': target_pts * qty})
-                    position = None
-                    last_traded_bar = i
-                elif opt_move <= -position['sl_pts']:
-                    trades.append({'Entry Time': position['entry_time'], 'Exit Time': time_label, 'Type': position['type'], 'Entry Price': position['entry_spot'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -position['sl_pts'], 'PnL': -position['sl_pts'] * qty})
-                    position = None
-                    last_traded_bar = i
+                        df_live = calc_indicators(df_live, {})
+                        curr_bar = df_live.iloc[-1]
+                        prev_bar = df_live.iloc[-2]
 
-            elif last_traded_bar != i:
-                pass_rsi = (rsi > 50) if rsi_filter else True
-                pass_rsi_s = (rsi < 50) if rsi_filter else True
+                        spot = float(curr_bar['Close'])
+                        rsi = float(curr_bar['RSI'])
+                        ema20 = float(curr_bar['EMA20'])
+                        ema50 = float(curr_bar['EMA50'])
+                        st_now = int(curr_bar['ST_DIR'])
+                        st_prev = int(prev_bar['ST_DIR'])
 
-                buy_sig = (ema20 > ema50) and (curr_spot > ema20) and pass_rsi
-                sell_sig = (ema20 < ema50) and (curr_spot < ema20) and pass_rsi_s
+                        sig = "NEUTRAL"
+                        conf = 70
+                        logic = ""
 
-                if buy_sig:
-                    position = {'type': 'BUY/CE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_pts': sl_pts}
-                    last_traded_bar = i
-                elif sell_sig:
-                    position = {'type': 'SELL/PE', 'entry_spot': curr_spot, 'entry_time': time_label, 'sl_pts': sl_pts}
-                    last_traded_bar = i
+                        if ema20 > ema50 and spot > ema20 and rsi > 54:
+                            sig = "BUY / CALL (CE) 🟢"
+                            conf = 88
+                            logic = f"EMA 20/50 Trend + RSI Momentum ({rsi:.1f})"
+                        elif ema20 < ema50 and spot < ema20 and rsi < 46:
+                            sig = "SELL / PUT (PE) 🔴"
+                            conf = 88
+                            logic = f"EMA 20/50 Bearish Structure + RSI Drop ({rsi:.1f})"
+                        elif st_prev == -1 and st_now == 1:
+                            sig = "BUY / CALL (CE) 🟢"
+                            conf = 92
+                            logic = "SuperTrend 10,2 Bullish Reversal"
+                        elif st_prev == 1 and st_now == -1:
+                            sig = "SELL / PUT (PE) 🔴"
+                            conf = 92
+                            logic = "SuperTrend 10,2 Bearish Reversal"
 
-        tab_chart, tab_metrics, tab_trades, tab_tg = st.tabs(["📈 Pro Chart", "📊 Scorecard & KPIs", "📜 Trade Logs", "✈️ Live Telegram Signal Logs"])
-        
-        with tab_chart:
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
-            fig.add_trace(go.Candlestick(x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#10b981', decreasing_line_color='#ef4444'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
-            fig.update_layout(template="plotly_dark", paper_bgcolor='#0b0e14', plot_bgcolor='#0b0e14', height=650, xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+                        if sig != "NEUTRAL" and conf >= min_confidence:
+                            tp = spot + target_pts if "BUY" in sig else spot - target_pts
+                            sl = spot - sl_pts if "BUY" in sig else spot + sl_pts
+                            ist_now_str = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
+                            tg_text = (
+                                f"⚡ <b>SAM QUANTUM AI - LIVE SIGNAL ALERT</b> ⚡\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"📊 <b>Asset:</b> {s_name}\n"
+                                f"🎯 <b>Action:</b> <code>{sig}</code>\n"
+                                f"💵 <b>Current Live Spot:</b> ₹{spot:,.2f}\n"
+                                f"🎯 <b>Target:</b> ₹{tp:,.2f} (+{target_pts} pts)\n"
+                                f"🛑 <b>Stop Loss:</b> ₹{sl:,.2f} (-{sl_pts} pts)\n"
+                                f"⏱ <b>Trigger Time:</b> {ist_now_str}\n"
+                                f"🧠 <b>AI Confidence:</b> <code>{conf}% Institutional Edge</code>\n"
+                                f"🔍 <b>Logic:</b> {logic}\n"
+                                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"🤖 <i>Dispatched via Autonomous Quantum Pilot</i>"
+                            )
+                            send_telegram_alert(tg_text)
+                            dispatched_count += 1
+                    except Exception:
+                        pass
 
-        with tab_metrics:
-            if trades:
-                tdf = pd.DataFrame(trades)
-                net_pnl = tdf['PnL'].sum()
-                win_rate = (len(tdf[tdf['PnL'] > 0]) / len(tdf)) * 100
-                st.markdown("#### 💎 Strategy Scorecard")
-                k1, k2, k3 = st.columns(3)
-                k1.metric("Net PnL", f"₹{net_pnl:,.2f}")
-                k2.metric("Win Rate", f"{win_rate:.1f}%")
-                k3.metric("Total Executions", len(tdf))
-
-        with tab_trades:
-            if trades:
-                st.dataframe(pd.DataFrame(trades), use_container_width=True)
-
-        with tab_tg:
-            st.markdown("### ✈️ Send Instant Custom Setup to Telegram")
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                custom_action = st.selectbox("Action", ["BUY / CALL (CE) 🟢", "SELL / PUT (PE) 🔴"])
-                custom_strike = st.text_input("Recommended Strike / Price", value=f"{df['Close'].iloc[-1]:,.0f}")
-            with col_m2:
-                custom_sl = st.text_input("Stop Loss Note", value="Strict 20 Pts Hard SL")
-                custom_tp = st.text_input("Target Note", value="50 Pts (1:2 R:R Trailing)")
-            
-            if st.button("🚀 BROADCAST THIS CUSTOM SIGNAL"):
-                msg = (
-                    f"⚡ <b>SAM QUANTUM AI - EXCLUSIVE SIGNAL</b> ⚡\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Asset:</b> {asset_dict[symbol]}\n"
-                    f"🎯 <b>Action:</b> <code>{custom_action}</code>\n"
-                    f"💵 <b>Price/Strike:</b> {custom_strike}\n"
-                    f"🎯 <b>Target:</b> {custom_tp}\n"
-                    f"🛑 <b>Stop Loss:</b> {custom_sl}\n"
-                    f"⏱ <b>Timeframe:</b> {timeframe}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"🤖 <i>Dispatched by Master Admin via Sam Quantum AI</i>"
-                )
-                ok, res = send_telegram_alert(tg_bot_token, tg_chat_id, msg)
-                if ok:
-                    st.success("✅ Broadcasted to your Telegram Channel in 1 second!")
+                if dispatched_count > 0:
+                    st.success(f"✅ Dispatched {dispatched_count} live signals to @sam_quantum_signals.")
                 else:
-                    st.error(f"❌ Failed: {res}")
+                    st.info("Scanner complete. Currently active markets have no setups meeting strict AI confidence threshold.")
+
+# --- PRO BACKTESTER ENGINE ---
+df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
+
+if df_raw.empty or len(df_raw) < 25:
+    st.error("Insufficient market data. Try adjusting lookback or resolution.")
+    st.stop()
+
+if isinstance(df_raw.columns, pd.MultiIndex):
+    df_raw.columns = df_raw.columns.droplevel(1)
+df_raw.dropna(inplace=True)
+df = calc_indicators(df_raw, {})
+ist_time = df.index.tz_convert('Asia/Kolkata') if df.index.tz is not None else df.index + pd.Timedelta(hours=5, minutes=30)
+df['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
+
+# Simulate trades
+trades = []
+position = None
+last_bar = -1
+target_pts_sim = 50.0
+sl_pts_sim = 20.0
+qty_sim = 150
+
+for i in range(2, len(df)):
+    curr_spot = float(df['Close'].iloc[i])
+    rsi = float(df['RSI'].iloc[i])
+    ema20 = float(df['EMA20'].iloc[i])
+    ema50 = float(df['EMA50'].iloc[i])
+    time_lbl = df['Time_Str'].iloc[i]
+
+    if position is not None:
+        move = (curr_spot - position['entry']) if position['type'] == 'BUY/CE' else (position['entry'] - curr_spot)
+        opt_move = move * 0.5
+
+        if opt_move >= target_pts_sim:
+            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_pts_sim, 'PnL': target_pts_sim * qty_sim})
+            position = None
+            last_bar = i
+        elif opt_move <= -sl_pts_sim:
+            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_pts_sim, 'PnL': -sl_pts_sim * qty_sim})
+            position = None
+            last_bar = i
+    elif last_bar != i:
+        if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
+            position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
+            last_bar = i
+        elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
+            position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
+            last_bar = i
+
+# --- 1. PRO TOUCH CHART TAB ---
+with tab_chart:
+    st.markdown("#### 🕯️ Institutional Price Action (Mobile Touch & Pinch-to-Zoom Enabled)")
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.04)
+
+    fig.add_trace(go.Candlestick(
+        x=df['Time_Str'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+        increasing_line_color='#10b981', decreasing_line_color='#ef4444',
+        name="Candles"
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['Time_Str'], y=df['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI 14'), row=2, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=2, col=1)
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor='#080b11',
+        plot_bgcolor='#080b11',
+        height=580,
+        xaxis_rangeslider_visible=False,
+        dragmode='pan',
+        margin=dict(l=5, r=5, t=10, b=5),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    # 📱 Mobile Touch Controls & HD PNG Download Button inside Toolbar
+    config_mobile = {
+        'scrollZoom': True,
+        'displayModeBar': True,
+        'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
+        'toImageButtonOptions': {
+            'format': 'png',
+            'filename': f'sam_quantum_{symbol}_{datetime.now().strftime("%Y%m%d")}',
+            'height': 1080,
+            'width': 1920,
+            'scale': 2
+        }
+    }
+    st.plotly_chart(fig, use_container_width=True, config=config_mobile)
+
+# --- 2. KPIS & EQUITY CURVE TAB ---
+with tab_metrics:
+    if trades:
+        tdf = pd.DataFrame(trades)
+        net_pnl = tdf['PnL'].sum()
+        win_count = len(tdf[tdf['PnL'] > 0])
+        win_rate = (win_count / len(tdf)) * 100
+        tdf['Cum_PnL'] = tdf['PnL'].cumsum()
+
+        st.markdown("#### 💎 Strategy Scorecard")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Net PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}")
+        k2.metric("Win Rate", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
+        k3.metric("Total Trades", len(tdf))
+        k4.metric("Avg R:R", "1 : 2.5")
+
+        st.markdown("---")
+        fig_equity = go.Figure()
+        fig_equity.add_trace(go.Scatter(
+            x=tdf['Exit Time'], y=tdf['Cum_PnL'],
+            mode='lines+markers', line=dict(color='#10b981', width=2.5),
+            fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.08)',
+            name='Equity Growth'
+        ))
+        fig_equity.update_layout(template="plotly_dark", paper_bgcolor='#0f172a', plot_bgcolor='#0f172a', height=350, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_equity, use_container_width=True, config=config_mobile)
+
+# --- 3. TRADE LOGS TAB ---
+with tab_trades:
+    if trades:
+        st.markdown("#### 📜 Institutional Trade Execution Audit Logs")
+        st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
+
+# --- 4. DOWNLOAD REPORTS (PNG / CSV / HTML AUDIT) ---
+with tab_reports:
+    st.markdown("### 📥 Instant Mobile Audit & Report Export")
+    st.write("Generate high-res trading audits to share on WhatsApp or save on your mobile device.")
+
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        st.markdown("##### 📄 1. Full Strategy Audit Sheet (CSV)")
+        if trades:
+            csv_buf = io.StringIO()
+            pd.DataFrame(trades).to_csv(csv_buf, index=False)
+            st.download_button(
+                label="📥 DOWNLOAD CSV AUDIT",
+                data=csv_buf.getvalue(),
+                file_name=f"sam_quantum_audit_{symbol}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("No trades to export.")
+
+    with col_r2:
+        st.markdown("##### 📑 2. Formatted HTML Executive Summary")
+        if trades:
+            html_report = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #080b11; color: #f1f5f9; padding: 25px; }}
+                    .card {{ background: #0f172a; border: 1px solid #1e293b; padding: 20px; border-radius: 12px; }}
+                    h1 {{ color: #38bdf8; margin: 0; }}
+                    .tag {{ background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 10px; border-radius: 6px; font-weight: bold; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                    th, td {{ border: 1px solid #1e293b; padding: 10px; text-align: left; }}
+                    th {{ background-color: #1e293b; color: #38bdf8; }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>⚡ SAM QUANTUM AI - AUDIT REPORT</h1>
+                    <p>Asset: <b>{symbol}</b> | Resolution: <b>{timeframe}</b> | Generated On: <b>{datetime.now().strftime('%d-%b-%Y %H:%M')}</b></p>
+                    <span class="tag">NET PnL: ₹{net_pnl:,.2f}</span> | <span class="tag">WIN RATE: {win_rate:.1f}%</span>
+                    <hr style="border-color: #1e293b; margin: 20px 0;">
+                    <h3>Trade Log Records</h3>
+                    {pd.DataFrame(trades).to_html(classes='table', index=False)}
+                </div>
+            </body>
+            </html>
+            """
+            st.download_button(
+                label="📥 DOWNLOAD HTML SUMMARY",
+                data=html_report,
+                file_name=f"sam_quantum_report_{symbol}.html",
+                mime="text/html"
+            )
