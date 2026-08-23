@@ -485,76 +485,169 @@ else:
     ])
 
 # ==============================================================================
-# 📑 EMBEDDED OPERATING MANUAL HTML GENERATOR (PDF READY)
+# 📑 COMPREHENSIVE STEP-BY-STEP OPERATING MANUAL (HTML + PDF READY)
 # ==============================================================================
 manual_html_doc = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SAM QUANTUM AI — Operating Manual</title>
+<title>SAM QUANTUM AI — Master Trader Operating Manual & Workflow Blueprint</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-    @page { size: A4; margin: 20mm 18mm; }
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080b11; color: #e2e8f0; margin: 0; padding: 24px; line-height: 1.55; }
-    .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 20px 24px; margin-bottom: 22px; }
-    .brand-title { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 800; color: #38bdf8; margin: 0; }
-    .brand-sub { font-size: 13px; color: #94a3b8; margin-top: 4px; }
-    .doc-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; margin-top: 10px; border-top: 1px solid rgba(51, 65, 85, 0.7); padding-top: 8px; display: flex; justify-content: space-between; }
+    @page { size: A4; margin: 18mm 16mm; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080b11; color: #e2e8f0; margin: 0; padding: 28px; line-height: 1.6; }
+    .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 22px 26px; margin-bottom: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); }
+    .brand-title { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 800; color: #38bdf8; margin: 0; }
+    .brand-sub { font-size: 13.5px; color: #94a3b8; margin-top: 4px; }
+    .doc-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; margin-top: 12px; border-top: 1px solid rgba(51, 65, 85, 0.7); padding-top: 8px; display: flex; justify-content: space-between; }
     .badge { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-    .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 3px solid #38bdf8; padding-left: 10px; margin: 22px 0 10px 0; text-transform: uppercase; }
-    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; font-size: 12.5px; color: #cbd5e1; }
-    ul { margin: 6px 0; padding-left: 18px; }
-    li { margin-bottom: 5px; }
+    .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 4px solid #38bdf8; padding-left: 10px; margin: 26px 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; font-size: 12.8px; color: #cbd5e1; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .step-box { background: rgba(30, 41, 59, 0.5); border-left: 3px solid #10b981; padding: 12px 16px; margin: 10px 0; border-radius: 0 8px 8px 0; }
+    .step-num { color: #10b981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    ul, ol { margin: 6px 0; padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    strong { color: #f8fafc; }
+    code { font-family: 'JetBrains Mono', monospace; background: #1e293b; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11.5px; }
     table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 11.5px; }
-    th, td { border: 1px solid #1e293b; padding: 8px 10px; text-align: left; }
+    th, td { border: 1px solid #1e293b; padding: 10px 12px; text-align: left; }
     th { background-color: #1e293b; color: #38bdf8; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
     td { background-color: rgba(15, 23, 42, 0.6); }
-    .print-btn { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 700; font-size: 14px; border: none; border-radius: 8px; padding: 12px 24px; cursor: pointer; margin-bottom: 20px; }
+    .print-btn { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 700; font-size: 14px; border: none; border-radius: 8px; padding: 12px 26px; cursor: pointer; margin-bottom: 20px; }
     @media print { .no-print { display: none !important; } body { padding: 0; background: #080b11; } }
 </style>
 </head>
 <body>
+
 <div class="no-print" style="text-align: center; margin-bottom: 20px;">
-    <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Manual</button>
+    <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Master Manual</button>
 </div>
+
 <div class="header-card">
     <div class="brand-title">⚡ SAM QUANTUM AI</div>
-    <div class="brand-sub">Institutional Quantitative Operating Manual & Trader Guide</div>
+    <div class="brand-sub">Master Trader Operating Manual & Algorithmic Strategy Blueprint</div>
     <div class="doc-meta">
-        <span>DOC ID: SQ-MAN-2026-V1.0</span>
-        <span>LATENCY: 12ms</span>
-        <span class="badge">OFFICIAL TRADER MANUAL</span>
+        <span>DOC ID: SQ-MAN-2026-V2.0</span>
+        <span>ENGINE LATENCY: 12ms</span>
+        <span class="badge">OFFICIAL TRADER HANDBOOK</span>
     </div>
 </div>
-<div class="section-title">1. Executive Summary & Philosophy</div>
+
+<div class="section-title">1. Introduction & Terminal Philosophy</div>
 <div class="card">
-    <p><strong>SAM QUANTUM AI</strong> is an institutional quantitative backtesting and algorithmic surveillance engine built for Indian Indices (Bank Nifty, Nifty 50), MCX Commodities, Equities, and 24/7 Digital Assets.</p>
+    <p>Welcome to <strong>SAM QUANTUM AI</strong>. This institutional quantitative engine is engineered to eliminate emotional trading bias by replacing guesswork with mathematical edge.</p>
+    <p>90% of retail traders lose capital because they execute without statistical validation. This terminal allows you to test, optimize, and audit any trading strategy across Indian Indices, Commodities, and 24/7 Digital Assets before risking real funds.</p>
 </div>
-<div class="section-title">2. Strategy Engines</div>
+
+<div class="section-title">2. Complete Step-by-Step Backtesting Workflow</div>
+<div class="card">
+    <div class="step-box">
+        <span class="step-num">STEP 1:</span> <strong>Select Instrument & Timeframe (Left Sidebar)</strong><br>
+        Choose your market (e.g. <code>Bank Nifty</code>, <code>Nifty 50</code>, <code>Gold</code>, <code>BTC/USD</code>). Select your resolution (15m for intraday momentum, 5m for fast scalping, 1D for positional swing).
+    </div>
+    <div class="step-box">
+        <span class="step-num">STEP 2:</span> <strong>Choose Strategy Archetype & Filters</strong><br>
+        Select from 4 pre-compiled institutional algorithms (e.g. 20/50 EMA Pullback). Check <code>Require RSI 50-Level Filter</code> to eliminate choppy market noise.
+    </div>
+    <div class="step-box">
+        <span class="step-num">STEP 3:</span> <strong>Set Position Sizing & Risk Rules</strong><br>
+        Enter your Capital Pool (e.g. ₹1,00,000) and Lot Quantity. Define your Target (e.g. 50 Pts) and Hard SL (e.g. 20 Pts) to ensure a minimum 1:2 Risk-to-Reward ratio.
+    </div>
+    <div class="step-box">
+        <span class="step-num">STEP 4:</span> <strong>Click 'EXECUTE STRATEGY BACKTEST'</strong><br>
+        The terminal computes all historical bars, triggers entries/exits, plots visual buy/sell triangles on the chart, and populates the Performance Scorecard.
+    </div>
+</div>
+
+<div class="section-title">3. Quantitative Strategy Archetypes Explained</div>
 <div class="card">
     <ul>
-        <li><strong>EMA Institutional Pullback (20/50):</strong> Mean-reversion retest into support/resistance confirmed by RSI-14 momentum.</li>
-        <li><strong>EMA Golden / Death Crossover (9/21):</strong> Captures trend initiation with moving average crosses.</li>
-        <li><strong>SuperTrend Trend-Rider (10, 2.0):</strong> Volatility-adaptive breakout model utilizing dynamic ATR bands.</li>
+        <li><strong>1. EMA Institutional Pullback (20/50 Trend):</strong> Waits for clear trend separation where Fast EMA (20) is above Slow EMA (50). Triggers CE/Buy only when price pulls back to touch the 20 EMA and bounces upward, confirmed by RSI &gt; 50.</li>
+        <li><strong>2. EMA Golden / Death Crossover (9/21):</strong> High-velocity momentum model. Triggers when the 9 EMA crosses above 21 EMA (Buy) or below (Sell) for trend-following swings.</li>
+        <li><strong>3. SuperTrend Trend-Rider (10, 2.0):</strong> Volatility-adaptive breakout model that uses dynamic ATR bands to catch multi-session rallies while keeping you out of flat chop.</li>
+        <li><strong>4. Candlestick Pattern Engine:</strong> Detects high-probability institutional liquidity sweeps (Hammer at support for Buy / Bearish Engulfing at resistance for Sell).</li>
     </ul>
 </div>
-<div class="section-title">3. Membership Tiers</div>
+
+<div class="section-title">4. How to Read Your Scorecard & Key KPIs</div>
+<div class="card">
+    <ul>
+        <li><strong>Net Realized PnL:</strong> Total rupee profit or loss generated after all historical trades.</li>
+        <li><strong>Win Probability (%):</strong> Percentage of winning trades. A solid 1:2 R:R strategy needs only 40%+ win rate to be highly profitable.</li>
+        <li><strong>Cumulative Equity Trajectory:</strong> An upward sloping green equity curve proves that your strategy has a true quantitative edge.</li>
+        <li><strong>Max Drawdown (DD):</strong> The maximum peak-to-trough dip in capital. Lower drawdown means less stress and better capital protection.</li>
+    </ul>
+</div>
+
+<div class="section-title">5. Pro Touch Chart Controls (Mobile & Desktop)</div>
+<div class="card">
+    <ul>
+        <li><strong>Pinch-to-Zoom (Mobile):</strong> Use two fingers on your phone screen to smoothly zoom into individual 1m/5m candles.</li>
+        <li><strong>Pan & Drag:</strong> Drag left or right to inspect historical trade executions and candlestick formations.</li>
+        <li><strong>1080p HD PNG Export:</strong> Tap the Camera icon at the top right of the chart to download a high-res screenshot to share on WhatsApp or Twitter.</li>
+    </ul>
+</div>
+
+<div class="section-title">6. Membership Tiers & Capabilities</div>
 <table>
-    <thead><tr><th>Matrix</th><th>🟢 Free Member</th><th>🔵 VIP Algo Trader</th><th>🟣 Institutional Pro</th></tr></thead>
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>🟢 Free Member</th>
+            <th>🔵 VIP Algo Trader</th>
+            <th>🟣 Institutional Pro</th>
+        </tr>
+    </thead>
     <tbody>
-        <tr><td><strong>Resolutions</strong></td><td>15m, 1D</td><td>1m, 5m, 15m, 1D</td><td>Sub-Minute (1m–1D)</td></tr>
-        <tr><td><strong>Universe</strong></td><td>Core Indices & BTC</td><td>Indices, MCX & Crypto</td><td>Full Global Grid</td></tr>
-        <tr><td><strong>Capital Cap</strong></td><td>₹1,00,000</td><td>₹10,00,000</td><td>Unlimited (₹1 Cr+)</td></tr>
+        <tr>
+            <td><strong>Resolution Stream</strong></td>
+            <td>15m, 1D</td>
+            <td>1m, 5m, 15m, 1D</td>
+            <td>Sub-Minute (1m–1D)</td>
+        </tr>
+        <tr>
+            <td><strong>Market Universe</strong></td>
+            <td>Core Indices & BTC</td>
+            <td>Indices, MCX & Top Crypto</td>
+            <td>Full Global Grid & Altcoins</td>
+        </tr>
+        <tr>
+            <td><strong>Strategy Archetypes</strong></td>
+            <td>4 Core Engines</td>
+            <td>All Advanced Engines</td>
+            <td>Full Multi-Strategy Suite</td>
+        </tr>
+        <tr>
+            <td><strong>Capital Pool Cap</strong></td>
+            <td>₹1,00,000</td>
+            <td>Up to ₹10,00,000</td>
+            <td>Unlimited (₹1 Cr+ Testing)</td>
+        </tr>
+        <tr>
+            <td><strong>Audit Exports</strong></td>
+            <td>HD PNG + CSV</td>
+            <td>HD PNG + CSV + HTML</td>
+            <td>Full Executive PDF Suite</td>
+        </tr>
     </tbody>
 </table>
-<div class="section-title">4. Verification & Community Links</div>
+
+<div class="section-title">7. Official Links & Community Radar</div>
 <div class="card">
     <ul>
-        <li><strong>Terminal Web:</strong> https://sam-ai-recon-platform-76dht2tcjgwf9ar7o7ehhn.streamlit.app</li>
-        <li><strong>Telegram Radar:</strong> @sam_quantum_signals</li>
+        <li><strong>Terminal Web Access:</strong> <code>https://sam-ai-recon-platform-76dht2tcjgwf9ar7o7ehhn.streamlit.app</code></li>
+        <li><strong>Live Signals & Trade Updates:</strong> Join official Telegram broadcast at <code>@sam_quantum_signals</code> for real-time market opportunity alerts.</li>
+        <li><strong>Account Upgrade & Support:</strong> Contact Master Admin on WhatsApp or Telegram to unlock VIP/Pro licenses.</li>
     </ul>
 </div>
-</body></html>"""
+
+<div class="section-title">8. Risk Disclaimer</div>
+<div class="card" style="font-size: 11.5px; color: #94a3b8;">
+    SAM QUANTUM AI is an algorithmic modeling and educational backtesting engine. Historical simulation metrics do not guarantee future market returns. Traders must always manage leverage and adhere strictly to defined stop-loss limits.
+</div>
+
+</body>
+</html>"""
 
 # ==============================================================================
 # 📊 BACKTEST EXECUTION ENGINE
@@ -674,7 +767,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
             # Render Reports with Direct PDF / Print Guide Download Button
             with tab_reports:
-                st.markdown("### 📥 Instant Mobile Audit Reports & Documentation")
+                st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
                 col_r1, col_r2, col_r3 = st.columns(3)
                 with col_r1:
                     if trades:
@@ -692,7 +785,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         """
                         st.download_button("📥 DOWNLOAD HTML AUDIT", data=html_report, file_name=f"sam_quantum_{symbol}.html", mime="text/html")
                 with col_r3:
-                    st.download_button("📄 DOWNLOAD OPERATING MANUAL (PDF)", data=manual_html_doc, file_name="sam_quantum_operating_manual.html", mime="text/html")
+                    st.download_button("📄 DOWNLOAD MASTER MANUAL (PDF)", data=manual_html_doc, file_name="sam_quantum_master_manual.html", mime="text/html")
         except Exception as e:
             st.error(f"Error during simulation: {str(e)}")
 
@@ -716,8 +809,8 @@ else:
         """, unsafe_allow_html=True)
 
     with tab_reports:
-        st.markdown("### 📥 Instant Official Documentation Download")
-        st.download_button("📄 DOWNLOAD OPERATING MANUAL (PDF / PRINT GUIDE)", data=manual_html_doc, file_name="sam_quantum_operating_manual.html", mime="text/html")
+        st.markdown("### 📥 Instant Master Trader Manual Download")
+        st.download_button("📄 DOWNLOAD MASTER OPERATING MANUAL (PDF / PRINT GUIDE)", data=manual_html_doc, file_name="sam_quantum_master_manual.html", mime="text/html")
 
 # --- ADMIN ONLY: TAB 5 - SINGLE ASSET LIVE RADAR ---
 if is_admin:
