@@ -123,7 +123,7 @@ if not st.session_state.authenticated:
         <div class="glass-card" style="text-align: center;">
             <div style="font-size: 32px; margin-bottom: 6px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Studio & Live Dispatcher</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 16px 0;">Institutional Strategy Studio & Live Telegram Dispatcher</p>
             <span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;">
                 ● FREE LIFETIME TRADER EDITION
             </span>
@@ -135,8 +135,8 @@ if not st.session_state.authenticated:
         if auth_mode == "🔑 Sign In":
             with st.form("login_form"):
                 st.markdown("##### 🔒 Terminal Sign In")
-                username = st.text_input("User ID / Mobile Number")
-                password = st.text_input("Security Access Key", type="password")
+                username = st.text_input("User ID / Mobile Number", value="admin")
+                password = st.text_input("Security Access Key", type="password", value="sam@2026")
                 if st.form_submit_button("⚡ UNLOCK TERMINAL"):
                     users = st.session_state.users_db
                     if username in users and users[username]["pass"] == password:
@@ -168,7 +168,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# 📡 TELEGRAM DISPATCHER HELPER
+# 📡 TELEGRAM DISPATCHER FUNCTION
 # ==============================================================================
 def send_telegram_alert(token, chat_id, message):
     if not token or not chat_id:
@@ -287,8 +287,9 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### ✈️ Telegram Channel Config")
-    tg_bot_token = st.text_input("Telegram Bot Token", value="", type="password", placeholder="Paste bot token")
-    tg_chat_id = st.text_input("Channel Username / ID", value="", placeholder="@MyTradingChannel or -100xxx")
+    # PRE-CONFIGURED CREDENTIALS
+    tg_bot_token = st.text_input("Telegram Bot Token", value="8928886896:AAG_K3y8ltCsHPqfva-ONzfjXVu1R9vD5ko", type="password")
+    tg_chat_id = st.text_input("Channel Username / ID", value="@sam_quantum_signals")
     
     st.markdown("---")
     st.markdown("### 📊 1. Asset & Timeframe")
@@ -359,7 +360,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Top Bar Action Buttons
+# Top Action Buttons
 col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
 with col_b1:
     st.write(f"💼 **Selected:** {asset_dict[symbol]} | Strategy: {strategy_type.split('.')[1].strip()}")
@@ -374,7 +375,6 @@ if dispatch_all_btn:
         scan_results = []
         for sym_key, sym_name in asset_dict.items():
             try:
-                # Fetch recent live 5m/15m data
                 df_live = yf.download(sym_key, period="5d", interval=timeframe, progress=False)
                 if df_live.empty or len(df_live) < 25:
                     continue
@@ -393,13 +393,11 @@ if dispatch_all_btn:
                 ema50_val = float(last_bar['EMA50'])
                 st_dir = int(last_bar['ST_DIR'])
                 prev_st_dir = int(prev_bar['ST_DIR'])
-                vwap_val = float(last_bar['VWAP'])
                 
                 signal = "NEUTRAL"
                 ai_confidence = 70
                 setup_reason = ""
                 
-                # Check Strategy Formations
                 if ema20_val > ema50_val and spot_price > ema20_val and rsi_val > 52:
                     signal = "BUY / CALL (CE) 🟢"
                     ai_confidence = 88
@@ -471,14 +469,9 @@ if execute_btn or 'sim_ran' in st.session_state:
 
         for i in range(2, len(df)):
             curr_spot = float(df['Close'].iloc[i])
-            vol = float(df['Volume'].iloc[i])
-            vol_sma = float(df['VOL_SMA20'].iloc[i])
-            pct = float(df['PCT_CHANGE'].iloc[i])
             rsi = float(df['RSI'].iloc[i])
             ema20 = float(df['EMA20'].iloc[i])
             ema50 = float(df['EMA50'].iloc[i])
-            st_dir = int(df['ST_DIR'].iloc[i])
-            prev_st_dir = int(df['ST_DIR'].iloc[i-1])
             time_label = df['Time_Str'].iloc[i]
 
             if position is not None:
@@ -535,7 +528,7 @@ if execute_btn or 'sim_ran' in st.session_state:
                 st.dataframe(pd.DataFrame(trades), use_container_width=True)
 
         with tab_tg:
-            st.markdown("### ✈️ Send Instant Manual Setup to Telegram")
+            st.markdown("### ✈️ Send Instant Custom Setup to Telegram")
             col_m1, col_m2 = st.columns(2)
             with col_m1:
                 custom_action = st.selectbox("Action", ["BUY / CALL (CE) 🟢", "SELL / PUT (PE) 🔴"])
