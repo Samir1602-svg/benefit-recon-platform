@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -382,10 +383,57 @@ def calc_indicators(df, params):
     return d
 
 # ==============================================================================
-# 🎛️ SIDEBAR CONTROLS
+# 🎛️ SIDEBAR CONTROLS & TIER MAPPING
 # ==============================================================================
 curr_tier = st.session_state.user_info.get("tier", "Free Member")
 is_admin = curr_tier == "Master Admin" or st.session_state.user_info.get("id") == "admin"
+
+FULL_ASSETS = {
+    "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
+    "^NSEI": "Nifty 50 Index (^NSEI)",
+    "RELIANCE.NS": "Reliance Industries",
+    "HDFCBANK.NS": "HDFC Bank",
+    "TCS.NS": "Tata Consultancy Services",
+    "INFY.NS": "Infosys",
+    "GC=F": "MCX Gold Mini / Spot (GC=F)",
+    "SI=F": "MCX Silver Mini (SI=F)",
+    "BTC-USD": "Bitcoin (BTC/USD)",
+    "ETH-USD": "Ethereum (ETH/USD)",
+    "SOL-USD": "Solana (SOL/USD)",
+    "BNB-USD": "Binance Coin (BNB/USD)",
+    "XRP-USD": "Ripple (XRP/USD)",
+    "DOGE-USD": "Dogecoin (DOGE/USD)"
+}
+
+TV_MAP = {
+    "^NSEBANK": "NSE:BANKNIFTY",
+    "^NSEI": "NSE:NIFTY",
+    "RELIANCE.NS": "NSE:RELIANCE",
+    "HDFCBANK.NS": "NSE:HDFCBANK",
+    "TCS.NS": "NSE:TCS",
+    "INFY.NS": "NSE:INFY",
+    "GC=F": "MCX:GOLD1!",
+    "SI=F": "MCX:SILVER1!",
+    "BTC-USD": "BINANCE:BTCUSDT",
+    "ETH-USD": "BINANCE:ETHUSDT",
+    "SOL-USD": "BINANCE:SOLUSDT",
+    "BNB-USD": "BINANCE:BNBUSDT",
+    "XRP-USD": "BINANCE:XRPUSDT",
+    "DOGE-USD": "BINANCE:DOGEUSDT"
+}
+
+# Filter universe based on Tier
+if curr_tier == "Free Member":
+    allowed_asset_keys = ["^NSEBANK", "^NSEI", "BTC-USD"]
+    allowed_tf = ["15m", "1d"]
+elif curr_tier == "VIP Algo Trader":
+    allowed_asset_keys = ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "GC=F", "SI=F", "BTC-USD", "ETH-USD", "SOL-USD"]
+    allowed_tf = ["15m", "5m", "1m", "30m", "1d"]
+else: # Institutional Pro & Admin
+    allowed_asset_keys = list(FULL_ASSETS.keys())
+    allowed_tf = ["15m", "5m", "1m", "2m", "30m", "60m", "1d"]
+
+asset_dict = {k: FULL_ASSETS[k] for k in allowed_asset_keys}
 
 STRATEGY_OPTIONS = [
     "1. EMA Institutional Pullback (20/50 Trend)",
@@ -418,30 +466,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 1. Asset & Resolution")
     
-    asset_dict = {
-        "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
-        "^NSEI": "Nifty 50 Index (^NSEI)",
-        "RELIANCE.NS": "Reliance Industries",
-        "HDFCBANK.NS": "HDFC Bank",
-        "TCS.NS": "Tata Consultancy Services",
-        "INFY.NS": "Infosys",
-        "GC=F": "MCX Gold Mini / Spot (GC=F)",
-        "SI=F": "MCX Silver Mini (SI=F)",
-        "BTC-USD": "Bitcoin (BTC/USD)",
-        "ETH-USD": "Ethereum (ETH/USD)",
-        "SOL-USD": "Solana (SOL/USD)",
-        "BNB-USD": "Binance Coin (BNB/USD)",
-        "XRP-USD": "Ripple (XRP/USD)",
-        "DOGE-USD": "Dogecoin (DOGE/USD)"
-    }
-    
     symbol = st.selectbox("Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
-    
-    if curr_tier == "Free Member":
-        allowed_tf = ["15m", "1d"]
-    else:
-        allowed_tf = ["15m", "5m", "1m", "2m", "30m", "60m", "1d"]
-        
     timeframe = st.selectbox("Resolution Stream", allowed_tf, index=0)
     
     max_days = 7 if timeframe in ["1m", "2m"] else 60
@@ -473,8 +498,8 @@ if not is_admin and curr_tier == "Free Member":
     with st.expander("⚡ UPGRADE TO VIP ALGO TRADER (Click to Expand / Dismiss)", expanded=False):
         st.markdown("""
         <div style="background: linear-gradient(135deg, rgba(30, 27, 75, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%); border: 1px solid #818cf8; border-radius: 12px; padding: 16px;">
-            <h4 style="color:#38bdf8; margin:0; font-weight:800;">Unlock 1m/5m Sub-Minute Scalping & High-Speed Streams</h4>
-            <p style="color:#94a3b8; font-size:12px; margin:6px 0 12px 0;">Community plan includes 15m/1d historical validation. Upgrade to VIP for real-time institutional feeds.</p>
+            <h4 style="color:#38bdf8; margin:0; font-weight:800;">Unlock 1m/5m Sub-Minute Scalping & Full MCX / Equity Feeds</h4>
+            <p style="color:#94a3b8; font-size:12px; margin:6px 0 12px 0;">Free community tier includes Bank Nifty, Nifty 50 & BTC. Upgrade to VIP for all commodities, stocks, and sub-minute feeds.</p>
             <span class="admin-badge">Contact Master Admin on WhatsApp: +91-9999999999 for instant upgrade</span>
         </div>
         """, unsafe_allow_html=True)
@@ -483,7 +508,7 @@ st.markdown(f"""
 <div class="brand-header">
     <div>
         <h3 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono';">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Dual Autonomous Radar</span>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio, Demat Live Charting & Dual Autonomous Radar</span>
     </div>
     <div style="text-align: right;">
         <span class="{'admin-badge' if is_admin else 'pulse-badge'}">
@@ -502,8 +527,9 @@ with col_run2:
 
 # Tabs Setup
 if is_admin:
-    tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_ai_logbook, tab_admin_access = st.tabs([
-        "📈 Pro Touch Chart", 
+    tab_tv_chart, tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_ai_logbook, tab_admin_access = st.tabs([
+        "📊 Live Demat Chart Studio (TradingView)",
+        "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
         "📥 Download Reports", 
@@ -512,14 +538,81 @@ if is_admin:
         "👑 Access & Revoke Console"
     ])
 else:
-    tab_chart, tab_metrics, tab_trades, tab_reports = st.tabs([
-        "📈 Pro Touch Chart", 
+    tab_tv_chart, tab_chart, tab_metrics, tab_trades, tab_reports = st.tabs([
+        "📊 Live Demat Chart Studio (TradingView)",
+        "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
         "📥 Download Reports"
     ])
 
-# Operating Manual Document
+# ==============================================================================
+# 📊 TAB 1: LIVE DEMAT CHART STUDIO (TRADINGVIEW WITH LINE MAKING)
+# ==============================================================================
+with tab_tv_chart:
+    st.markdown("#### 📊 Live Demat Interactive Charting Matrix")
+    st.caption("Complete institutional TradingView engine with real-time ticks, multi-timeframe candle streams, and full toolbar for Support/Resistance trendlines.")
+
+    col_c1, col_c2, col_c3 = st.columns([1.5, 1, 1])
+    with col_c1:
+        demat_asset = st.selectbox("Select Demat Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="demat_feed_sel")
+    with col_c2:
+        demat_tf_view = st.selectbox("Interval", ["1", "5", "15", "60", "D"], index=2, key="demat_tf_sel")
+    with col_c3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"<span class='pulse-badge'>● LIVE {curr_tier.upper()} STREAM</span>", unsafe_allow_html=True)
+
+    tv_symbol_code = TV_MAP.get(demat_asset, "NSE:BANKNIFTY")
+
+    # Embedded TradingView Advanced Real-Time Widget with full drawing toolbar
+    tv_widget_html = f"""
+    <div class="tradingview-widget-container" style="height:650px;width:100%;">
+      <div id="tradingview_chart_sam" style="height:650px;width:100%;"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+        "autosize": true,
+        "symbol": "{tv_symbol_code}",
+        "interval": "{demat_tf_view}",
+        "timezone": "Asia/Kolkata",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#0f172a",
+        "enable_publishing": false,
+        "hide_top_toolbar": false,
+        "hide_legend": false,
+        "save_image": true,
+        "container_id": "tradingview_chart_sam",
+        "drawings_access": {{
+            "type": "black",
+            "tools": [
+                {{ "name": "Trend Line" }},
+                {{ "name": "Horizontal Line" }},
+                {{ "name": "Horizontal Ray" }},
+                {{ "name": "Rectangle" }},
+                {{ "name": "Parallel Channel" }},
+                {{ "name": "Fib Retracement" }}
+            ]
+        }},
+        "studies": [
+            "MASimple@tv-basicstudies",
+            "EMA@tv-basicstudies",
+            "RSI@tv-basicstudies",
+            "Volume@tv-basicstudies"
+        ],
+        "loading_screen": {{ "backgroundColor": "#080b11" }}
+      }}
+      );
+      </script>
+    </div>
+    """
+    components.html(tv_widget_html, height=660)
+
+# ==============================================================================
+# 📑 OPERATING MANUAL DOCUMENT
+# ==============================================================================
 manual_html_doc = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -607,7 +700,8 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         last_bar = i
 
             with tab_chart:
-                st.markdown("#### 🕯️ Institutional Matrix (Touch Pan & Zoom)")
+                st.markdown("#### 🕯️ Institutional Matrix (Touch Pan & Draw Lines)")
+                st.caption("Use the top-right toolbar to draw horizontal Support & Resistance lines directly onto the chart.")
                 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
 
                 fig.add_trace(go.Candlestick(
@@ -623,13 +717,15 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
                 fig.update_layout(
                     template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811',
-                    height=620, xaxis_rangeslider_visible=False, dragmode='pan',
+                    height=620, xaxis_rangeslider_visible=False, dragmode='drawline',
+                    newshape=dict(line_color="#38bdf8", line_width=2),
                     margin=dict(l=5, r=5, t=10, b=5)
                 )
 
                 config_touch = {
                     'scrollZoom': True, 'displayModeBar': True,
-                    'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
+                    'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'drawrect', 'eraseshape'],
+                    'modeBarButtonsToRemove': ['lasso2d'],
                     'toImageButtonOptions': {'format': 'png', 'filename': f'sam_quantum_{symbol}', 'height': 1080, 'width': 1920, 'scale': 2}
                 }
                 st.plotly_chart(fig, use_container_width=True, config=config_touch)
@@ -711,7 +807,7 @@ else:
         st.download_button("📄 DOWNLOAD MASTER OPERATING MANUAL (PDF / PRINT GUIDE)", data=manual_html_doc, file_name="sam_quantum_master_manual.html", mime="text/html")
 
 # ==============================================================================
-# 👑 ADMIN ONLY: TAB 5 - DUAL RADAR: FULL AUTONOMOUS PILOT + MANUAL DISPATCHER
+# 👑 ADMIN ONLY: TAB 6 - DUAL RADAR: FULL AUTONOMOUS PILOT + MANUAL DISPATCHER
 # ==============================================================================
 if is_admin:
     with tab_dual_radar:
@@ -1068,7 +1164,7 @@ if is_admin:
         else:
             st.info("No active open positions currently running. Autopilot / Manual signals will appear here in real time.")
 
-    # --- TAB 6: DEDICATED DAILY AI SIGNAL LOGBOOK ---
+    # --- TAB 7: DEDICATED DAILY AI SIGNAL LOGBOOK ---
     with tab_ai_logbook:
         st.markdown("### 📑 Official Daily AI Signal Logbook & Execution Audit")
         st.caption("Complete running log of all signals dispatched today. Automatically purges history after 12 hours.")
@@ -1095,7 +1191,7 @@ if is_admin:
         else:
             st.info("Logbook is empty for the last 12 hours. As soon as signals trigger, they will be archived here.")
 
-    # --- ADMIN ONLY: TAB 7 - ACCESS & REVOKE CONSOLE ---
+    # --- ADMIN ONLY: TAB 8 - ACCESS & REVOKE CONSOLE ---
     with tab_admin_access:
         st.markdown("### 👑 Founder Console: Member Directory & Access Control")
         col_u1, col_u2 = st.columns([1.6, 1])
