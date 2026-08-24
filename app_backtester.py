@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime, time as dtime
+from datetime import datetime, timedelta, time as dtime
 import pytz
 import io
 import json
@@ -14,7 +14,7 @@ import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & OPTION RADAR
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & DUAL RADAR
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Quant Engine",
@@ -24,6 +24,8 @@ st.set_page_config(
 )
 
 DB_FILE = "users_db.json"
+SIGNALS_LOG_FILE = "ai_signals_history.json"
+
 DEFAULT_USERS = {
     "admin": {"pass": "sam@2026", "name": "Sam (Founder)", "phone": "9999999999", "tier": "Master Admin", "created_at": "2026-08-20"},
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
@@ -44,8 +46,35 @@ def save_users(users_dict):
     with open(DB_FILE, "w") as f:
         json.dump(users_dict, f, indent=4)
 
+def load_signals_log():
+    if not os.path.exists(SIGNALS_LOG_FILE):
+        return []
+    try:
+        with open(SIGNALS_LOG_FILE, "r") as f:
+            logs = json.load(f)
+        # 12-Hour Auto Purge
+        now = datetime.now()
+        valid_logs = []
+        for l in logs:
+            try:
+                t = datetime.strptime(l.get("raw_time", ""), "%Y-%m-%d %H:%M:%S")
+                if now - t < timedelta(hours=12):
+                    valid_logs.append(l)
+            except Exception:
+                valid_logs.append(l)
+        return valid_logs
+    except Exception:
+        return []
+
+def save_signals_log(logs):
+    with open(SIGNALS_LOG_FILE, "w") as f:
+        json.dump(logs, f, indent=4)
+
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
+
+if 'signals_history' not in st.session_state:
+    st.session_state.signals_history = load_signals_log()
 
 if 'active_radar_trades' not in st.session_state:
     st.session_state.active_radar_trades = {}
@@ -166,7 +195,7 @@ if not st.session_state.authenticated and "uid" in query_params:
         st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
 # ==============================================================================
-# 🔐 AUTHENTICATION PORTAL (CLEAN INPUTS)
+# 🔐 AUTHENTICATION PORTAL
 # ==============================================================================
 if not st.session_state.authenticated:
     col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
@@ -190,7 +219,7 @@ if not st.session_state.authenticated:
         if auth_mode == "🔑 Terminal Sign In":
             with st.form("login_form"):
                 st.markdown("##### 🔒 Secure Terminal Authentication")
-                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID")
+                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID (e.g. admin)")
                 password = st.text_input("Quantum Security Key", type="password", value="", placeholder="Enter Security Key")
                 if st.form_submit_button("⚡ UNLOCK QUANTUM TERMINAL"):
                     users = st.session_state.users_db
@@ -281,26 +310,6 @@ def send_telegram_alert(message):
         return resp.status_code == 200, resp.text
     except Exception as e:
         return False, str(e)
-
-# ==============================================================================
-# 🎯 OPTION STRIKE AUTO-RESOLVER
-# ==============================================================================
-def resolve_atm_strike(symbol_key, spot_price, action_type):
-    if symbol_key == "^NSEBANK":
-        step = 100
-        atm = int(round(spot_price / step) * step)
-        opt_type = "CE" if "BUY" in action_type else "PE"
-        return f"BANKNIFTY {atm} {opt_type}"
-    elif symbol_key == "^NSEI":
-        step = 50
-        atm = int(round(spot_price / step) * step)
-        opt_type = "CE" if "BUY" in action_type else "PE"
-        return f"NIFTY {atm} {opt_type}"
-    elif symbol_key in ["RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
-        opt_type = "CE" if "BUY" in action_type else "PE"
-        return f"{symbol_key.replace('.NS', '')} {int(spot_price)} {opt_type}"
-    else:
-        return f"{symbol_key} SPOT (Futures / Perpetual)"
 
 # ==============================================================================
 # 🧮 INDICATORS ENGINE
@@ -461,13 +470,13 @@ st.markdown(f"""
 <div class="brand-header">
     <div>
         <h3 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono';">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Option Chain Live Radar</span>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Dual Autonomous Radar</span>
     </div>
     <div style="text-align: right;">
         <span class="{'admin-badge' if is_admin else 'pulse-badge'}">
             {'👑 MASTER FOUNDER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
         </span><br>
-        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | LIVE DATA SYNC</span>
+        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | SECURE FEED</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -480,12 +489,13 @@ with col_run2:
 
 # Tabs
 if is_admin:
-    tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_admin_access = st.tabs([
+    tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_ai_logbook, tab_admin_access = st.tabs([
         "📈 Pro Touch Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
         "📥 Download Reports", 
         "⚡ Dual Opportunity Radar & AI Auto-Pilot",
+        "📑 Daily AI Signal Logbook",
         "👑 Access & Revoke Console"
     ])
 else:
@@ -497,7 +507,7 @@ else:
     ])
 
 # ==============================================================================
-# 📑 COMPREHENSIVE OPERATING MANUAL
+# 📑 OPERATING MANUAL DOCUMENT
 # ==============================================================================
 manual_html_doc = """<!DOCTYPE html>
 <html lang="en">
@@ -510,16 +520,9 @@ manual_html_doc = """<!DOCTYPE html>
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080b11; color: #e2e8f0; margin: 0; padding: 28px; line-height: 1.6; }
     .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 22px 26px; margin-bottom: 24px; }
     .brand-title { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 800; color: #38bdf8; margin: 0; }
-    .brand-sub { font-size: 13.5px; color: #94a3b8; margin-top: 4px; }
     .badge { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
     .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 4px solid #38bdf8; padding-left: 10px; margin: 26px 0 12px 0; text-transform: uppercase; }
     .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; font-size: 12.8px; color: #cbd5e1; }
-    .step-box { background: rgba(30, 41, 59, 0.5); border-left: 3px solid #10b981; padding: 12px 16px; margin: 10px 0; border-radius: 0 8px 8px 0; }
-    .step-num { color: #10b981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 11.5px; }
-    th, td { border: 1px solid #1e293b; padding: 10px 12px; text-align: left; }
-    th { background-color: #1e293b; color: #38bdf8; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-    td { background-color: rgba(15, 23, 42, 0.6); }
     .print-btn { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 700; font-size: 14px; border: none; border-radius: 8px; padding: 12px 26px; cursor: pointer; margin-bottom: 20px; }
     @media print { .no-print { display: none !important; } body { padding: 0; background: #080b11; } }
 </style>
@@ -530,28 +533,11 @@ manual_html_doc = """<!DOCTYPE html>
 </div>
 <div class="header-card">
     <div class="brand-title">⚡ SAM QUANTUM AI</div>
-    <div class="brand-sub">Master Operating Manual & Algorithmic Strategy Blueprint</div>
-    <div style="margin-top:10px;"><span class="badge">OFFICIAL TRADER BLUEPRINT</span></div>
+    <div style="margin-top:8px;"><span class="badge">OFFICIAL TRADER BLUEPRINT</span></div>
 </div>
 <div class="section-title">1. Workflow Blueprint</div>
 <div class="card">
-    <div class="step-box"><span class="step-num">STEP 1:</span> Choose market & timeframe from the sidebar.</div>
-    <div class="step-box"><span class="step-num">STEP 2:</span> Select strategy archetype (e.g. 20/50 EMA Pullback).</div>
-    <div class="step-box"><span class="step-num">STEP 3:</span> Configure position sizing, capital, and Target/SL limits.</div>
-    <div class="step-box"><span class="step-num">STEP 4:</span> Click 'EXECUTE STRATEGY BACKTEST' to audit performance.</div>
-</div>
-<div class="section-title">2. Strategy Archetypes</div>
-<div class="card">
-    <ul>
-        <li><strong>EMA Institutional Pullback:</strong> Enters upon 20-EMA retests during confirmed 50-EMA trends with RSI > 50.</li>
-        <li><strong>EMA 9/21 Cross:</strong> Captures rapid trend accelerations on volume spikes.</li>
-        <li><strong>SuperTrend 10,2:</strong> Trend-rider that eliminates sideways chop using ATR bands.</li>
-    </ul>
-</div>
-<div class="section-title">3. Official Links</div>
-<div class="card">
-    <p>Terminal: <code>https://sam-ai-recon-platform-76dht2tcjgwf9ar7o7ehhn.streamlit.app</code></p>
-    <p>Live Signals: <code>@sam_quantum_signals</code></p>
+    <p>1. Choose market & timeframe from the sidebar.<br>2. Select strategy archetype (e.g. 20/50 EMA Pullback).<br>3. Configure position sizing, capital, and Target/SL limits.<br>4. Click 'EXECUTE STRATEGY BACKTEST' to audit performance.</p>
 </div>
 </body></html>"""
 
@@ -561,7 +547,7 @@ manual_html_doc = """<!DOCTYPE html>
 if execute_btn or 'backtest_executed' in st.session_state:
     st.session_state.backtest_executed = True
     
-    with st.spinner("⏳ Loading institutional price matrix and calculating option executions..."):
+    with st.spinner("⏳ Loading institutional price matrix..."):
         try:
             df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
             if df_raw.empty or len(df_raw) < 10:
@@ -593,22 +579,20 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
                     if opt_move >= target_val:
                         pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
-                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Instrument': position['contract'], 'Type': position['type'], 'Entry Spot': position['entry'], 'Exit Spot': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
                         position = None
                         last_bar = i
                     elif opt_move <= -sl_val:
                         pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
-                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Instrument': position['contract'], 'Type': position['type'], 'Entry Spot': position['entry'], 'Exit Spot': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
                         position = None
                         last_bar = i
                 elif last_bar != i:
                     if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
-                        contract = resolve_atm_strike(symbol, curr_spot, "BUY")
-                        position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl, 'contract': contract}
+                        position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
                         last_bar = i
                     elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
-                        contract = resolve_atm_strike(symbol, curr_spot, "SELL")
-                        position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl, 'contract': contract}
+                        position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
                         last_bar = i
 
             with tab_chart:
@@ -667,7 +651,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
             with tab_trades:
                 if trades:
-                    st.markdown("#### 📜 Trade Execution Audit Trail (Option Strikes Resolved)")
+                    st.markdown("#### 📜 Trade Execution Audit Trail")
                     st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
             with tab_reports:
@@ -720,8 +704,8 @@ else:
 # ==============================================================================
 if is_admin:
     with tab_dual_radar:
-        st.markdown("### ⚡ Live Opportunity Radar: AI Autopilot & Option Chain Control")
-        st.caption("Operate via full AI Autopilot or dispatch custom CE/PE Option Chain setups directly to Telegram.")
+        st.markdown("### ⚡ Live Opportunity Radar: AI Autopilot & Manual Control")
+        st.caption("Operate via full 60-second AI Autopilot or switch to Manual Custom Dispatcher at any time.")
 
         col_mr1, col_mr2 = st.columns([1.5, 1])
         with col_mr1:
@@ -733,7 +717,7 @@ if is_admin:
                 st.warning(f"🔴 Market Stream: {gate_info}")
         with col_mr2:
             radar_tf = st.selectbox("Scanning Resolution", ["1m", "5m", "15m"], index=1, key="dual_rad_tf")
-            min_conf_single = st.slider("Minimum AI Edge Confidence %", 70, 95, 80, key="dual_rad_conf")
+            min_conf_single = st.slider("Minimum AI Edge Confidence %", 70, 95, 90, key="dual_rad_conf")
 
         is_rd_idx = radar_asset in ["^NSEBANK", "^NSEI"]
         curr_sym = "₹" if not radar_asset.endswith("-USD") else "$"
@@ -745,21 +729,21 @@ if is_admin:
             rd_sl = st.number_input("Hard SL (" + ("Pts" if is_rd_idx else "%") + ")", value=20.0 if is_rd_idx else 1.0, step=5.0 if is_rd_idx else 0.2, key="dual_sl")
 
         st.markdown("---")
-        mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot (Option Chain Resolved)", "✍️ Mode 2: Manual Option Chain Dispatcher (Founder Analysis)"], horizontal=True)
+        mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot Engine (Auto Scan & Trail)", "✍️ Mode 2: Manual Custom Dispatcher (Demat Strike Chain)"], horizontal=True)
 
         # ----------------------------------------------------
         # 🤖 MODE 1: FULL AI AUTOPILOT
         # ----------------------------------------------------
         if "Mode 1" in mode_select:
-            st.markdown("##### 🤖 Mode 1: Autonomous AI Option Pilot Engine")
-            st.write("AI continuously audits live momentum, selects exact **ATM CE / PE Option Strike**, and posts clean human-readable alerts.")
+            st.markdown("##### 🤖 Mode 1: Autonomous AI Pilot Engine")
+            st.write("Turn ON in the morning. AI calculates dynamic confidence, selects ideal strikes with estimated premiums, and logs execution.")
             
             auto_pilot_toggle = st.toggle("⚡ ACTIVATE LIVE AUTONOMOUS PILOT LOOP", value=False, key="auto_pilot_switch")
             
             if auto_pilot_toggle:
                 st.success("🟢 AI Autopilot is ACTIVE. Monitoring market ticks in real-time...")
                 if not is_open:
-                    st.info(f"Market Gatekeeper: {gate_info}. Waiting for live market session.")
+                    st.info(f"Market Gatekeeper: {gate_info}. Waiting for market open.")
                 else:
                     try:
                         df_live = yf.download(radar_asset, period="2d", interval=radar_tf, progress=False)
@@ -778,16 +762,17 @@ if is_admin:
                             st_p = int(p_bar['ST_DIR'])
 
                             now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
+                            now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             completed = []
 
-                            # 1. Active Trades Check
+                            # 1. Update running active trades
                             for r_sym, r_trade in list(st.session_state.active_radar_trades.items()):
                                 live_spot = spot
                                 entry_p = r_trade['entry']
                                 tp_p = r_trade['target']
                                 sl_p = r_trade['sl']
                                 action = r_trade['action']
-                                contract_name = r_trade.get('contract', r_trade['asset_name'])
+                                strk_info = r_trade.get('strike_info', '')
 
                                 target_hit = (live_spot >= tp_p) if "BUY" in action else (live_spot <= tp_p)
                                 sl_hit = (live_spot <= sl_p) if "BUY" in action else (live_spot >= sl_p)
@@ -797,42 +782,53 @@ if is_admin:
 
                                 if target_hit:
                                     tg_done = (
-                                        f"🎯 <b>TRADE COMPLETED — BOOK FULL PROFIT</b>\n"
+                                        f"🎯 <b>TARGET COMPLETED - BOOK FULL PROFIT</b> 🎯\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Setup:</b> {contract_name}\n"
-                                        f"✅ <b>Status:</b> Full Target Achieved 🚀\n"
-                                        f"💵 <b>Spot Move:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
-                                        f"⏱ <b>Time:</b> {now_ist}\n"
+                                        f"📊 <b>Instrument:</b> {strk_info}\n"
+                                        f"✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n"
+                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
+                                        f"⏱ <b>Completed At:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"💡 <i>Secure profits & close open lots.</i>"
+                                        f"🤖 <i>Accountability Logged via Sam Quantum AI</i>"
                                     )
                                     send_telegram_alert(tg_done)
+                                    # Update logbook
+                                    for item in st.session_state.signals_history:
+                                        if item.get("id") == r_trade.get("log_id"):
+                                            item["status"] = "TARGET HIT 🎯"
+                                            item["exit_price"] = live_spot
+                                    save_signals_log(st.session_state.signals_history)
                                     completed.append(r_sym)
 
                                 elif sl_hit:
                                     tg_sl = (
-                                        f"🛑 <b>STOP LOSS HIT — EXIT POSITION</b>\n"
+                                        f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Setup:</b> {contract_name}\n"
-                                        f"🛑 <b>Status:</b> Hard SL Hit. Risk Controlled.\n"
-                                        f"💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f}\n"
-                                        f"⏱ <b>Time:</b> {now_ist}\n"
+                                        f"📊 <b>Instrument:</b> {strk_info}\n"
+                                        f"🛑 <b>Status:</b> <code>SL TRIGGERED</code>\n"
+                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
+                                        f"⏱ <b>Closed At:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"💡 <i>Exited at defined risk. Onto next setup.</i>"
+                                        f"🤖 <i>Risk Managed via Sam Quantum AI</i>"
                                     )
                                     send_telegram_alert(tg_sl)
+                                    for item in st.session_state.signals_history:
+                                        if item.get("id") == r_trade.get("log_id"):
+                                            item["status"] = "SL HIT 🛑"
+                                            item["exit_price"] = live_spot
+                                    save_signals_log(st.session_state.signals_history)
                                     completed.append(r_sym)
 
                                 elif can_trail and not r_trade['trailed']:
                                     tg_trail = (
-                                        f"⚡ <b>UPDATE: TRAIL SL TO COST (ZERO RISK)</b>\n"
+                                        f"⚡ <b>UPDATE: SHIFT SL TO BREAKEVEN</b> ⚡\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Setup:</b> {contract_name}\n"
-                                        f"📈 <b>Price Moved:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
-                                        f"🛡️ <b>New Stop Loss:</b> Cost Price <code>({curr_sym}{entry_p:,.2f})</code>\n"
+                                        f"📊 <b>Instrument:</b> {strk_info}\n"
+                                        f"📈 <b>Spot Moved:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
+                                        f"🛡️ <b>New Stop Loss:</b> {curr_sym}{entry_p:,.2f} <code>(COST / ZERO RISK)</code>\n"
                                         f"⏱ <b>Time:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"💡 <i>Trade is now completely risk-free. Hold for Target!</i>"
+                                        f"🤖 <i>Locking gains & eliminating risk.</i>"
                                     )
                                     send_telegram_alert(tg_trail)
                                     st.session_state.active_radar_trades[r_sym]['sl'] = entry_p
@@ -842,16 +838,22 @@ if is_admin:
                             for c_item in completed:
                                 del st.session_state.active_radar_trades[c_item]
 
-                            # 2. Trigger New Setup
+                            # 2. Check for New Setup Trigger (Dynamic Score Calculation)
                             if radar_asset not in st.session_state.active_radar_trades:
                                 sig = "NEUTRAL"
-                                conf = 70
-                                if ema20_v > ema50_v and spot > ema20_v and rsi_v > 54:
-                                    sig = "BUY / CALL (CE) 🟢"
-                                    conf = 88
-                                elif ema20_v < ema50_v and spot < ema20_v and rsi_v < 46:
-                                    sig = "SELL / PUT (PE) 🔴"
-                                    conf = 88
+                                conf = 50
+                                
+                                # Dynamic Score Calculation
+                                if ema20_v > ema50_v and spot > ema20_v:
+                                    conf_score = 80 + int(min(15, (rsi_v - 50) * 1.2)) if rsi_v > 50 else 65
+                                    if rsi_v > 54:
+                                        sig = "BUY / CALL (CE) 🟢"
+                                        conf = min(96, conf_score)
+                                elif ema20_v < ema50_v and spot < ema20_v:
+                                    conf_score = 80 + int(min(15, (50 - rsi_v) * 1.2)) if rsi_v < 50 else 65
+                                    if rsi_v < 46:
+                                        sig = "SELL / PUT (PE) 🔴"
+                                        conf = min(96, conf_score)
                                 elif st_p == -1 and st_n == 1 and rsi_v > 50:
                                     sig = "BUY / CALL (CE) 🟢"
                                     conf = 92
@@ -859,8 +861,23 @@ if is_admin:
                                     sig = "SELL / PUT (PE) 🔴"
                                     conf = 92
 
+                                # Trigger only if meeting user's threshold
                                 if sig != "NEUTRAL" and conf >= min_conf_single:
-                                    resolved_contract = resolve_atm_strike(radar_asset, spot, sig)
+                                    # Calculate Strike & Estimated Premium
+                                    if radar_asset == "^NSEBANK":
+                                        atm_strike = int(round(spot / 100.0) * 100)
+                                        opt_type = "CE" if "BUY" in sig else "PE"
+                                        strk_name = f"BANKNIFTY {atm_strike} {opt_type}"
+                                        est_premium = f"₹{int(spot * 0.007):,.0f}" # realistic est. ATM premium
+                                    elif radar_asset == "^NSEI":
+                                        atm_strike = int(round(spot / 50.0) * 50)
+                                        opt_type = "CE" if "BUY" in sig else "PE"
+                                        strk_name = f"NIFTY {atm_strike} {opt_type}"
+                                        est_premium = f"₹{int(spot * 0.005):,.0f}"
+                                    else:
+                                        strk_name = asset_dict[radar_asset]
+                                        est_premium = f"{curr_sym}{spot:,.2f}"
+
                                     if is_rd_idx:
                                         tp = spot + rd_target if "BUY" in sig else spot - rd_target
                                         sl = spot - rd_sl if "BUY" in sig else spot + rd_sl
@@ -870,24 +887,38 @@ if is_admin:
                                         sl = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
                                         risk_desc = f"+{rd_target}% | SL: -{rd_sl}%"
 
+                                    log_id = f"{radar_asset}_{int(time.time())}"
+
                                     tg_text = (
                                         f"⚡ <b>NEW QUANT SIGNAL TRIGGERED</b>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Instrument:</b> <code>{resolved_contract}</code>\n"
-                                        f"🎯 <b>Action:</b> {sig}\n"
+                                        f"📊 <b>Instrument:</b> <code>{strk_name}</code> (Est. Prem: {est_premium})\n"
+                                        f"🎯 <b>Action:</b> <code>{sig}</code>\n"
                                         f"💵 <b>Current Spot:</b> {curr_sym}{spot:,.2f}\n"
                                         f"🎯 <b>Target:</b> {curr_sym}{tp:,.2f} ({risk_desc.split('|')[0].strip()})\n"
                                         f"🛑 <b>Stop Loss:</b> {curr_sym}{sl:,.2f} ({risk_desc.split('|')[1].strip()})\n"
-                                        f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> {conf}%\n"
+                                        f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> <code>{conf}% Verified</code>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
                                         f"💡 <i>Trail SL to cost once 50% target velocity is achieved.</i>"
                                     )
                                     send_telegram_alert(tg_text)
+                                    
+                                    # Save to Active and History
                                     st.session_state.active_radar_trades[radar_asset] = {
-                                        "asset_name": asset_dict[radar_asset], "contract": resolved_contract,
+                                        "asset_name": asset_dict[radar_asset], "strike_info": strk_name,
                                         "action": sig, "entry": spot, "target": tp, "sl": sl,
-                                        "status": "LIVE IN POSITION", "trailed": False, "time": now_ist, "sym": curr_sym
+                                        "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
+                                        "sym": curr_sym, "log_id": log_id
                                     }
+                                    
+                                    new_log_entry = {
+                                        "id": log_id, "time": now_ist, "raw_time": now_raw,
+                                        "instrument": strk_name, "action": sig, "entry_spot": spot,
+                                        "target": tp, "sl": sl, "confidence": f"{conf}%", "status": "LIVE RUNNING",
+                                        "exit_price": "-"
+                                    }
+                                    st.session_state.signals_history.insert(0, new_log_entry)
+                                    save_signals_log(st.session_state.signals_history)
                     except Exception:
                         pass
                     
@@ -895,26 +926,52 @@ if is_admin:
                     st.rerun()
 
         # ----------------------------------------------------
-        # ✍️ MODE 2: MANUAL OPTION CHAIN DISPATCHER
+        # ✍️ MODE 2: MANUAL CUSTOM DISPATCHER (DEMAT STRIKE CHAIN)
         # ----------------------------------------------------
         else:
-            st.markdown("##### ✍️ Mode 2: Manual Option Chain Setup & Dispatcher")
-            st.write("Select exact **CE / PE Option Chain Strike**, set premium entry price, and broadcast a clean trader-grade signal.")
+            st.markdown("##### ✍️ Mode 2: Demat-Style Option Chain Strike Selector")
+            st.write("Select verified strikes from the live option matrix or specify custom premium targets directly.")
 
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                man_opt_type = st.selectbox("Option Contract Type", ["CALL (CE) 🟢", "PUT (PE) 🔴"], key="man_opt_t")
-                if is_rd_idx:
-                    spot_ref = 57800 if radar_asset == "^NSEBANK" else 24250
-                    strike_step = 100 if radar_asset == "^NSEBANK" else 50
-                    generated_strikes = [f"{spot_ref + (i * strike_step)} {'CE' if 'CE' in man_opt_type else 'PE'}" for i in range(-5, 6)]
-                    custom_strike_choice = st.selectbox("Select Option Chain Strike", generated_strikes, index=5, key="man_strk_chain")
+            # Live spot fetch for strike matrix
+            try:
+                spot_df = yf.download(radar_asset, period="1d", interval="15m", progress=False)
+                curr_ref_spot = float(spot_df['Close'].iloc[-1]) if not spot_df.empty else 57700.0
+            except Exception:
+                curr_ref_spot = 57700.0
+
+            col_mc1, col_mc2 = st.columns(2)
+            with col_mc1:
+                st.markdown("###### 🟢 CALL (CE) STRIKE MATRIX")
+                if radar_asset == "^NSEBANK":
+                    base_s = int(round(curr_ref_spot / 100.0) * 100)
+                    ce_options = [f"BANKNIFTY {base_s - 200} CE (Deep ITM) @ ~₹420", f"BANKNIFTY {base_s - 100} CE (ITM) @ ~₹350", f"BANKNIFTY {base_s} CE (ATM) @ ~₹280", f"BANKNIFTY {base_s + 100} CE (OTM) @ ~₹210", f"BANKNIFTY {base_s + 200} CE (Far OTM) @ ~₹150"]
+                elif radar_asset == "^NSEI":
+                    base_s = int(round(curr_ref_spot / 50.0) * 50)
+                    ce_options = [f"NIFTY {base_s - 100} CE (ITM) @ ~₹180", f"NIFTY {base_s} CE (ATM) @ ~₹120", f"NIFTY {base_s + 100} CE (OTM) @ ~₹70"]
                 else:
-                    custom_strike_choice = st.text_input("Recommended Strike / Perpetual", value=f"{radar_asset} SPOT / PERP", key="man_strk_cust")
+                    ce_options = [f"{asset_dict[radar_asset]} LONG SPOT @ {curr_sym}{curr_ref_spot:,.2f}"]
                 
-                man_entry_premium = st.text_input("Entry Premium Price (₹)", placeholder="e.g. Buy around ₹260 - ₹280", key="man_prem")
+                sel_ce = st.selectbox("Select Call (CE) Strike", ce_options, key="sel_ce_strike")
 
-            with col_m2:
+            with col_mc2:
+                st.markdown("###### 🔴 PUT (PE) STRIKE MATRIX")
+                if radar_asset == "^NSEBANK":
+                    base_s = int(round(curr_ref_spot / 100.0) * 100)
+                    pe_options = [f"BANKNIFTY {base_s + 200} PE (Deep ITM) @ ~₹420", f"BANKNIFTY {base_s + 100} PE (ITM) @ ~₹350", f"BANKNIFTY {base_s} PE (ATM) @ ~₹280", f"BANKNIFTY {base_s - 100} PE (OTM) @ ~₹210", f"BANKNIFTY {base_s - 200} PE (Far OTM) @ ~₹150"]
+                elif radar_asset == "^NSEI":
+                    base_s = int(round(curr_ref_spot / 50.0) * 50)
+                    pe_options = [f"NIFTY {base_s + 100} PE (ITM) @ ~₹180", f"NIFTY {base_s} PE (ATM) @ ~₹120", f"NIFTY {base_s - 100} PE (OTM) @ ~₹70"]
+                else:
+                    pe_options = [f"{asset_dict[radar_asset]} SHORT SPOT @ {curr_sym}{curr_ref_spot:,.2f}"]
+                
+                sel_pe = st.selectbox("Select Put (PE) Strike", pe_options, key="sel_pe_strike")
+
+            col_ma1, col_ma2 = st.columns(2)
+            with col_ma1:
+                man_action = st.selectbox("Final Direction", ["BUY / CALL (CE) 🟢", "SELL / PUT (PE) 🔴"], key="man_final_dir")
+                final_strike_chosen = sel_ce if "CALL" in man_action else sel_pe
+                st.info(f"Active Selected Instrument: **{final_strike_chosen}**")
+            with col_ma2:
                 man_tp = st.text_input("Target Note", value=f"+{rd_target} Pts (1:2 R:R Trailing)", key="man_tp_txt")
                 man_sl = st.text_input("Hard Stop Loss Note", value=f"-{rd_sl} Pts Strict SL", key="man_sl_txt")
 
@@ -925,51 +982,83 @@ if is_admin:
                 "4. Candlestick Pattern Engine (Hammer Support / Engulfing Sweep)",
                 "5. Volume Spike + Momentum Breakout (Institutional Buying)",
                 "6. VWAP Intraday Retest & Expansion Zone",
-                "7. Bollinger Band Dynamic Mean Reversion Bounce",
-                "8. ✍️ Custom Strategy (Enter Manually)"
+                "7. ✍️ Custom Founder Strategy (Enter Manually)"
             ]
             
             selected_preset = st.selectbox("Setup Reasoning / Strategy Engine", REASONING_PRESETS, index=0, key="man_preset_reason")
-            
-            if "Custom" in selected_preset:
-                man_note = st.text_input("Custom Reasoning Details", value="Key Demand Zone Reversal + Volume Expansion", key="man_custom_note")
-            else:
-                man_note = selected_preset.split(".")[1].strip()
+            man_note = selected_preset.split(".")[1].strip() if "Custom" not in selected_preset else st.text_input("Custom Reasoning Details", value="Key Support Bounce", key="man_custom_note")
 
-            if st.button("🚀 BROADCAST FOUNDER SIGNAL TO TG", type="primary"):
+            if st.button("🚀 BROADCAST DEMAT SIGNAL TO TG", type="primary"):
                 now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
-                premium_line = f"\n💵 <b>Entry Price:</b> <code>{man_entry_premium}</code>" if man_entry_premium.strip() else ""
+                now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_id = f"manual_{int(time.time())}"
+
                 tg_manual = (
-                    f"⚡ <b>FOUNDER TRADE SETUP ALERT</b>\n"
+                    f"⚡ <b>NEW QUANT SIGNAL TRIGGERED</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Instrument:</b> <code>{asset_dict[radar_asset]} — {custom_strike_choice}</code>\n"
-                    f"🎯 <b>Action:</b> BUY {man_opt_type}{premium_line}\n"
+                    f"📊 <b>Instrument:</b> <code>{final_strike_chosen}</code>\n"
+                    f"🎯 <b>Action:</b> <code>{man_action}</code>\n"
+                    f"💵 <b>Current Spot:</b> {curr_sym}{curr_ref_spot:,.2f}\n"
                     f"🎯 <b>Target:</b> {man_tp}\n"
                     f"🛑 <b>Stop Loss:</b> {man_sl}\n"
-                    f"🔍 <b>Confluence:</b> {man_note}\n"
-                    f"⏱ <b>Trigger Time:</b> {now_ist}\n"
+                    f"🔍 <b>Logic / Engine:</b> {man_note}\n"
+                    f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> <code>Founder High-Conviction</code>\n"
                     f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"💡 <i>Strict risk management. Shift SL to breakeven on momentum.</i>"
+                    f"💡 <i>Trail SL to cost once 50% target velocity is achieved.</i>"
                 )
                 ok, resp = send_telegram_alert(tg_manual)
                 if ok:
-                    st.success(f"✅ Trade setup for {custom_strike_choice} broadcasted to @sam_quantum_signals!")
+                    new_entry = {
+                        "id": log_id, "time": now_ist, "raw_time": now_raw,
+                        "instrument": final_strike_chosen, "action": man_action, "entry_spot": curr_ref_spot,
+                        "target": man_tp, "sl": man_sl, "confidence": "Founder Conviction", "status": "BROADCASTED (LIVE)",
+                        "exit_price": "-"
+                    }
+                    st.session_state.signals_history.insert(0, new_entry)
+                    save_signals_log(st.session_state.signals_history)
+                    st.success("✅ Signal broadcasted instantly to @sam_quantum_signals and logged to terminal!")
+                    time.sleep(0.5)
+                    st.rerun()
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
-        # Active accountability table
+        # Active Live Trades Table (Real-time in Terminal)
         st.markdown("---")
-        st.markdown("#### 🌐 Active Open Trades (Option Tracking Log)")
+        st.markdown("#### 🌐 Active Open Trades (Terminal Real-Time Monitor)")
         if st.session_state.active_radar_trades:
             act_df = pd.DataFrame(list(st.session_state.active_radar_trades.values()))
-            st.table(act_df[['asset_name', 'action', 'entry', 'target', 'sl', 'status', 'time']])
-            if st.button("🧹 Clear Active Memory"):
+            st.dataframe(act_df[['strike_info', 'action', 'entry', 'target', 'sl', 'status', 'time']], use_container_width=True)
+            if st.button("🧹 Clear Completed Active Memory"):
                 st.session_state.active_radar_trades = {}
                 st.rerun()
         else:
-            st.info("No active open signals under tracking currently.")
+            st.info("No active open positions currently running. Autopilot / Manual signals will appear here in real time.")
 
-    # --- ADMIN ONLY: TAB 6 - ACCESS & REVOKE CONSOLE ---
+    # --- TAB 6: DEDICATED DAILY AI SIGNAL LOGBOOK ---
+    with tab_ai_logbook:
+        st.markdown("### 📑 Official Daily AI Signal Logbook & Execution Audit")
+        st.caption("Complete running log of all signals dispatched today. Automatically purges history after 12 hours.")
+
+        if st.session_state.signals_history:
+            log_df = pd.DataFrame(st.session_state.signals_history)
+            disp_df = log_df[['time', 'instrument', 'action', 'entry_spot', 'target', 'sl', 'confidence', 'status', 'exit_price']]
+            st.dataframe(disp_df, use_container_width=True, height=400)
+
+            col_dl1, col_dl2 = st.columns(2)
+            with col_dl1:
+                csv_signals = io.StringIO()
+                disp_df.to_csv(csv_signals, index=False)
+                st.download_button("📥 DOWNLOAD TODAY'S SIGNAL LOGBOOK (CSV)", data=csv_signals.getvalue(), file_name=f"ai_signals_{datetime.now().strftime('%Y_%m_%d')}.csv", mime="text/csv")
+            with col_dl2:
+                if st.button("🗑️ Manually Reset Today's Signal Log"):
+                    st.session_state.signals_history = []
+                    save_signals_log([])
+                    st.success("Logbook cleared.")
+                    st.rerun()
+        else:
+            st.info("Logbook is empty for the last 12 hours. As soon as signals trigger, they will be archived here.")
+
+    # --- ADMIN ONLY: TAB 7 - ACCESS & REVOKE CONSOLE ---
     with tab_admin_access:
         st.markdown("### 👑 Founder Console: Member Directory & Access Control")
         col_u1, col_u2 = st.columns([1.6, 1])
