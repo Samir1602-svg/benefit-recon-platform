@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -405,24 +404,6 @@ FULL_ASSETS = {
     "DOGE-USD": "Dogecoin (DOGE/USD)"
 }
 
-# Fully working TradingView Global Embed Mappings
-TV_MAP = {
-    "^NSEBANK": "NSEIX:BANKNIFTY1!",
-    "^NSEI": "NSEIX:NIFTY1!",
-    "RELIANCE.NS": "NSE:RELIANCE",
-    "HDFCBANK.NS": "NSE:HDFCBANK",
-    "TCS.NS": "NSE:TCS",
-    "INFY.NS": "NSE:INFY",
-    "GC=F": "MCX:GOLD1!",
-    "SI=F": "MCX:SILVER1!",
-    "BTC-USD": "BINANCE:BTCUSDT",
-    "ETH-USD": "BINANCE:ETHUSDT",
-    "SOL-USD": "BINANCE:SOLUSDT",
-    "BNB-USD": "BINANCE:BNBUSDT",
-    "XRP-USD": "BINANCE:XRPUSDT",
-    "DOGE-USD": "BINANCE:DOGEUSDT"
-}
-
 if curr_tier == "Free Member":
     allowed_asset_keys = ["^NSEBANK", "^NSEI", "BTC-USD"]
     allowed_tf = ["15m", "1d"]
@@ -528,7 +509,7 @@ with col_run2:
 # Tabs Setup
 if is_admin:
     tab_tv_chart, tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_ai_logbook, tab_admin_access = st.tabs([
-        "📊 Live Demat Chart Studio (TradingView)",
+        "📊 Live Demat Chart Studio",
         "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
@@ -539,7 +520,7 @@ if is_admin:
     ])
 else:
     tab_tv_chart, tab_chart, tab_metrics, tab_trades, tab_reports = st.tabs([
-        "📊 Live Demat Chart Studio (TradingView)",
+        "📊 Live Demat Chart Studio",
         "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
@@ -547,69 +528,96 @@ else:
     ])
 
 # ==============================================================================
-# 📊 TAB 1: LIVE DEMAT CHART STUDIO (PERFECT MAPPING WITH LINE TOOLS)
+# 📊 TAB 1: INSTITUTIONAL REAL-TIME DEMAT LIVE CHART (ZERO POPUPS)
 # ==============================================================================
 with tab_tv_chart:
-    st.markdown("#### 📊 Live Demat Interactive Charting Matrix")
-    st.caption("Complete institutional TradingView engine with real-time ticks, multi-timeframe candle streams, and full toolbar for Support/Resistance trendlines.")
+    st.markdown("#### 📊 Live Demat Real-Time Interactive Chart Studio")
+    st.caption("Live streaming price feed with touch pan/zoom, full support & resistance line drawing tools, and real multi-currency format.")
 
-    col_c1, col_c2, col_c3 = st.columns([1.5, 1, 1])
-    with col_c1:
-        demat_asset = st.selectbox("Select Demat Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="demat_feed_sel")
-    with col_c2:
-        demat_tf_view = st.selectbox("Interval", ["1", "5", "15", "60", "D"], index=2, key="demat_tf_sel")
-    with col_c3:
+    col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
+    with col_dc1:
+        live_chart_asset = st.selectbox("Market Stream Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="live_demat_asset")
+    with col_dc2:
+        live_chart_tf = st.selectbox("Resolution Stream", ["1m", "5m", "15m", "30m", "60m", "1d"], index=1, key="live_demat_tf")
+    with col_dc3:
+        is_usd = live_chart_asset.endswith("-USD")
+        curr_label = "$" if is_usd else "₹"
         st.markdown("<br>", unsafe_allow_html=True)
-        is_curr_usd = demat_asset.endswith("-USD")
-        st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_curr_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
 
-    tv_symbol_code = TV_MAP.get(demat_asset, "NSEIX:BANKNIFTY1!")
+    with st.spinner(f"⚡ Streaming live market matrix for {asset_dict[live_chart_asset]}..."):
+        try:
+            period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
+            df_demat = yf.download(live_chart_asset, period=period_str, interval=live_chart_tf, progress=False)
+            
+            if df_demat.empty:
+                st.warning("⚠️ Live feed temporary pause. Please select 5m or 15m resolution.")
+            else:
+                if isinstance(df_demat.columns, pd.MultiIndex):
+                    df_demat.columns = df_demat.columns.droplevel(1)
+                df_demat.dropna(inplace=True)
+                df_demat = calc_indicators(df_demat, {})
 
-    # Embedded TradingView Advanced Real-Time Widget with full drawing toolbar
-    tv_widget_html = f"""
-    <div class="tradingview-widget-container" style="height:650px;width:100%;">
-      <div id="tradingview_chart_sam" style="height:650px;width:100%;"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget(
-      {{
-        "autosize": true,
-        "symbol": "{tv_symbol_code}",
-        "interval": "{demat_tf_view}",
-        "timezone": "Asia/Kolkata",
-        "theme": "dark",
-        "style": "1",
-        "locale": "in",
-        "toolbar_bg": "#0f172a",
-        "enable_publishing": false,
-        "hide_top_toolbar": false,
-        "hide_legend": false,
-        "save_image": true,
-        "container_id": "tradingview_chart_sam",
-        "drawings_access": {{
-            "type": "black",
-            "tools": [
-                {{ "name": "Trend Line" }},
-                {{ "name": "Horizontal Line" }},
-                {{ "name": "Horizontal Ray" }},
-                {{ "name": "Rectangle" }},
-                {{ "name": "Parallel Channel" }},
-                {{ "name": "Fib Retracement" }}
-            ]
-        }},
-        "studies": [
-            "MASimple@tv-basicstudies",
-            "EMA@tv-basicstudies",
-            "RSI@tv-basicstudies",
-            "Volume@tv-basicstudies"
-        ],
-        "loading_screen": {{ "backgroundColor": "#080b11" }}
-      }}
-      );
-      </script>
-    </div>
-    """
-    components.html(tv_widget_html, height=660)
+                ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
+                df_demat['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time_demat]
+
+                latest_candle = df_demat.iloc[-1]
+                prev_candle = df_demat.iloc[-2] if len(df_demat) > 1 else latest_candle
+                spot_price = float(latest_candle['Close'])
+                change_val = spot_price - float(prev_candle['Close'])
+                pct_val = (change_val / float(prev_candle['Close'])) * 100
+
+                # Live High-Impact Header Metric
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                col_m1.metric("Live Market Spot", f"{curr_label}{spot_price:,.2f}", f"{'+' if change_val >= 0 else ''}{change_val:,.2f} ({pct_val:+.2f}%)")
+                col_m2.metric("24h High", f"{curr_label}{float(df_demat['High'].max()):,.2f}")
+                col_m3.metric("24h Low", f"{curr_label}{float(df_demat['Low'].min()):,.2f}")
+                col_m4.metric("RSI Momentum (14)", f"{float(latest_candle['RSI']):.1f}", "Bullish" if latest_candle['RSI'] > 50 else "Bearish")
+
+                # Subplot Candlestick + RSI + Volume
+                fig_demat = make_subplots(
+                    rows=3, cols=1, shared_xaxes=True,
+                    row_heights=[0.65, 0.18, 0.17],
+                    vertical_spacing=0.02
+                )
+
+                # 1. Main Candlestick
+                fig_demat.add_trace(go.Candlestick(
+                    x=df_demat['Time_Str'], open=df_demat['Open'], high=df_demat['High'],
+                    low=df_demat['Low'], close=df_demat['Close'], name=asset_dict[live_chart_asset],
+                    increasing_line_color='#10b981', decreasing_line_color='#ef4444'
+                ), row=1, col=1)
+
+                # Overlays
+                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
+                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
+
+                # 2. Volume Bars
+                colors = ['#10b981' if c >= o else '#ef4444' for c, o in zip(df_demat['Close'], df_demat['Open'])]
+                fig_demat.add_trace(go.Bar(x=df_demat['Time_Str'], y=df_demat['Volume'], marker_color=colors, name='Volume'), row=2, col=1)
+
+                # 3. RSI
+                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=3, col=1)
+                fig_demat.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.5)", row=3, col=1)
+                fig_demat.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.5)", row=3, col=1)
+
+                fig_demat.update_layout(
+                    template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811',
+                    height=680, xaxis_rangeslider_visible=False, dragmode='drawline',
+                    newshape=dict(line_color="#38bdf8", line_width=2),
+                    margin=dict(l=10, r=10, t=10, b=10)
+                )
+
+                config_demat = {
+                    'scrollZoom': True, 'displayModeBar': True,
+                    'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'drawrect', 'eraseshape'],
+                    'modeBarButtonsToRemove': ['lasso2d'],
+                    'toImageButtonOptions': {'format': 'png', 'filename': f'live_chart_{live_chart_asset}', 'height': 1080, 'width': 1920, 'scale': 2}
+                }
+                st.plotly_chart(fig_demat, use_container_width=True, config=config_demat)
+                st.caption("💡 **Demat Line Tools Active:** Click & drag anywhere on the chart to draw instant Support & Resistance lines or Supply/Demand zones.")
+        except Exception as e:
+            st.error(f"Error fetching real-time data: {str(e)}")
 
 # ==============================================================================
 # 📑 OPERATING MANUAL DOCUMENT
@@ -873,7 +881,7 @@ if is_admin:
                             now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             completed = []
 
-                            # 1. Update running active trades
+                            # 1. Update running active trades (Check Milestone points & SL/Target)
                             current_active = load_active_trades()
                             st.session_state.active_radar_trades = current_active
 
