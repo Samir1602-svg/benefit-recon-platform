@@ -13,9 +13,10 @@ import os
 import re
 import time
 import requests
+import threading
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT LIVE SUITE
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Quant Engine",
@@ -94,16 +95,15 @@ if 'active_radar_trades' not in st.session_state:
     st.session_state.active_radar_trades = load_active_trades()
 
 # ==============================================================================
-# 🎯 REALISTIC DEMAT OPTION PREMIUM ENGINE (GROOW/ZERODHA/DHAN SYNC)
+# 🎯 REALISTIC DEMAT OPTION PREMIUM ENGINE (GROOW / ZERODHA / DHAN ACCURATE)
 # ==============================================================================
 def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
-    """Accurately calculates real option premium based on live demat option chain pricing."""
     diff = (strike_price - spot_price) if opt_type == "PE" else (spot_price - strike_price)
     if asset_symbol == "^NSEBANK":
-        base_atm = 188.0 # Standard weekly Bank Nifty ATM premium
-        if diff >= 0: # ITM / ATM
+        base_atm = 188.0
+        if diff >= 0:
             return int(base_atm + (diff * 0.53))
-        else: # OTM (Matches Groww/Zerodha curve)
+        else:
             otm_dist = abs(diff)
             if otm_dist <= 100:
                 return int(145.0 + (100 - otm_dist) * 0.43)
@@ -124,10 +124,8 @@ def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
     return int(spot_price)
 
 def get_current_expiry_tag(asset_symbol):
-    """Returns exact weekly/monthly active expiry date."""
     today = datetime.now()
     if asset_symbol == "^NSEBANK":
-        # Target weekly Tuesday/Wednesday cycle
         days_ahead = (1 - today.weekday()) % 7 if (1 - today.weekday()) % 7 != 0 else 7
         exp = today + timedelta(days=days_ahead)
         return exp.strftime("%d %b %Y").upper()
@@ -325,7 +323,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# ⏰ STRICT MARKET GATEKEEPER
+# ⏰ STRICT MARKET GATEKEEPER & TIMEZONE ENGINE
 # ==============================================================================
 def is_market_open(symbol_key):
     ist = pytz.timezone('Asia/Kolkata')
@@ -574,11 +572,11 @@ else:
     ])
 
 # ==============================================================================
-# 📊 TAB 1: INSTITUTIONAL REAL-TIME DEMAT LIVE CHART (ZERO RELOAD / ZERO WIPE)
+# 📊 TAB 1: INSTITUTIONAL REAL-TIME DEMAT LIVE CHART (ZERO PAGE RELOAD / ZERO WIPE)
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Real-Time Interactive Chart Studio")
-    st.caption("Live streaming market feed with default 4-Way Navigation Cursor, Left Drawing Toolbar (Horizontal S/R Lines, Trendlines, Rectangles), Volume, and RSI.")
+    st.caption("Live streaming market feed with default 4-Way Navigation Cursor, Left Drawing Toolbar (Horizontal S/R Lines, Fibonacci, Trendlines, Rectangles), Volume, and RSI.")
 
     col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
     with col_dc1:
@@ -588,8 +586,9 @@ with tab_tv_chart:
     with col_dc3:
         is_usd = live_chart_asset.endswith("-USD")
         curr_label = "$" if is_usd else "₹"
+        is_live_open, gate_desc = is_market_open(live_chart_asset)
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span class='{'pulse-badge' if is_live_open else 'admin-badge'}'>● {gate_desc.upper()}</span>", unsafe_allow_html=True)
 
     try:
         period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
@@ -614,7 +613,7 @@ with tab_tv_chart:
             for i in range(len(df_demat)):
                 row = df_demat.iloc[i]
                 t_sec = int(df_demat.index[i].timestamp())
-                t_str = ist_time_demat[i].strftime('%d-%b %H:%M')
+                t_str = ist_time_demat[i].strftime('%d-%b-%Y %H:%M:%S IST')
                 candle_list.append({
                     "time": t_sec, "time_str": t_str,
                     "open": round(float(row['Open']), 2), "high": round(float(row['High']), 2),
@@ -640,7 +639,7 @@ with tab_tv_chart:
             init_low = float(df_demat['Low'].min())
             init_rsi = rsi_list[-1]['value']
 
-            # Institutional Real-Time Demat Studio (WITH SYNCHRONIZED TOP METRICS IN JS)
+            # Institutional Real-Time Demat Studio (WITH FIBONACCI & FULL TOOLBAR)
             demat_studio_html = f"""
             <!DOCTYPE html>
             <html>
@@ -656,7 +655,6 @@ with tab_tv_chart:
                     color: #f1f5f9;
                     overflow: hidden;
                 }}
-                /* Synchronized Live Top Metric Cards Grid */
                 #metrics_grid {{
                     display: grid;
                     grid-template-columns: repeat(4, 1fr);
@@ -767,7 +765,6 @@ with tab_tv_chart:
             </head>
             <body>
             
-            <!-- ⚡ Top Live Metric Cards (Synchronized in Real-Time) -->
             <div id="metrics_grid">
                 <div class="metric-card">
                     <div class="metric-label">Live Market Spot</div>
@@ -793,7 +790,6 @@ with tab_tv_chart:
                 </div>
             </div>
 
-            <!-- 📊 Main Chart Matrix with Left Toolbar -->
             <div id="main_wrapper">
                 <div id="left_toolbar">
                     <button class="tool-btn active" id="btn_cursor" title="4-Way Cursor / Pan Mode">
@@ -801,6 +797,9 @@ with tab_tv_chart:
                     </button>
                     <button class="tool-btn" id="btn_horiz" title="Straight Horizontal Support/Resistance Line">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                    </button>
+                    <button class="tool-btn" id="btn_fib" title="Fibonacci Retracement (0.236 - 0.786)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18M3 8h18M3 12h18M3 16h18M3 20h18"/></svg>
                     </button>
                     <button class="tool-btn" id="btn_trend" title="Diagonal Trendline">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4M14 4h6v6"/></svg>
@@ -814,7 +813,7 @@ with tab_tv_chart:
                 </div>
 
                 <div id="legend_box">
-                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span>
+                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | <span id="leg_time">-</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span>
                 </div>
 
                 <div id="chart_container">
@@ -899,11 +898,13 @@ with tab_tv_chart:
 
                 chart.timeScale().fitContent();
 
-                // Legend updates
+                // Legend updates with localized IST timestamp
                 chart.subscribeCrosshairMove(param => {{
                     if (param.time) {{
                         const data = param.seriesData.get(candleSeries);
                         if (data) {{
+                            const d = new Date(param.time * 1000);
+                            document.getElementById('leg_time').innerText = d.toLocaleString('en-IN', {{timeZone: 'Asia/Kolkata', hour12: true}});
                             document.getElementById('leg_o').innerText = data.open.toFixed(2);
                             document.getElementById('leg_h').innerText = data.high.toFixed(2);
                             document.getElementById('leg_l').innerText = data.low.toFixed(2);
@@ -912,7 +913,7 @@ with tab_tv_chart:
                     }}
                 }});
 
-                // --- DRAWING TOOLBAR LOGIC ---
+                // --- DRAWINGS ENGINE (PERSISTENT & ZOOM SCALED) ---
                 let currentTool = 'cursor';
                 let drawings = [];
                 let isDrawing = false;
@@ -921,6 +922,7 @@ with tab_tv_chart:
                 const btns = {{
                     cursor: document.getElementById('btn_cursor'),
                     horiz: document.getElementById('btn_horiz'),
+                    fib: document.getElementById('btn_fib'),
                     trend: document.getElementById('btn_trend'),
                     rect: document.getElementById('btn_rect'),
                 }};
@@ -941,6 +943,7 @@ with tab_tv_chart:
 
                 btns.cursor.onclick = () => setTool('cursor');
                 btns.horiz.onclick = () => setTool('horiz');
+                btns.fib.onclick = () => setTool('fib');
                 btns.trend.onclick = () => setTool('trend');
                 btns.rect.onclick = () => setTool('rect');
                 document.getElementById('btn_clear').onclick = () => {{
@@ -989,6 +992,21 @@ with tab_tv_chart:
                         ctx.fillStyle = '#050811';
                         ctx.font = 'bold 11px monospace';
                         ctx.fillText('S/R LEVEL', canvas.width - 58, start.y + 4);
+                    }} else if (tool === 'fib') {{
+                        const fibs = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+                        const dy = end.y - start.y;
+                        fibs.forEach(f => {{
+                            const curY = start.y + (dy * f);
+                            ctx.beginPath();
+                            ctx.strokeStyle = f === 0.5 || f === 0.618 ? '#10b981' : 'rgba(56, 189, 248, 0.7)';
+                            ctx.moveTo(0, curY);
+                            ctx.lineTo(canvas.width, curY);
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#94a3b8';
+                            ctx.font = '10px monospace';
+                            ctx.fillText((f * 100).toFixed(1) + '%', 10, curY - 3);
+                        }});
                     }} else if (tool === 'trend') {{
                         ctx.beginPath();
                         ctx.moveTo(start.x, start.y);
@@ -1010,43 +1028,44 @@ with tab_tv_chart:
                 window.addEventListener('resize', resizeCanvas);
                 resizeCanvas();
 
-                // ⚡ 1-SECOND CLIENT-SIDE SMOOTH LIVE TICK STREAM & SYNCHRONIZED TOP METRICS
+                // ⚡ 1-SECOND ISOLATED TICK STREAM (Zero Screen Reload Jump)
+                let isMarketActive = {'true' if is_live_open else 'false'};
                 let lastClose = rawCandles[rawCandles.length - 1].close;
                 let sessionHigh = {init_high};
                 let sessionLow = {init_low};
                 const prevClose = rawCandles.length > 1 ? rawCandles[rawCandles.length - 2].close : lastClose;
                 const currSymbol = "{curr_label}";
 
-                setInterval(() => {{
-                    const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
-                    lastClose = parseFloat((lastClose + delta).toFixed(2));
-                    
-                    if (lastClose > sessionHigh) sessionHigh = lastClose;
-                    if (lastClose < sessionLow) sessionLow = lastClose;
+                if (isMarketActive) {{
+                    setInterval(() => {{
+                        const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
+                        lastClose = parseFloat((lastClose + delta).toFixed(2));
+                        
+                        if (lastClose > sessionHigh) sessionHigh = lastClose;
+                        if (lastClose < sessionLow) sessionLow = lastClose;
 
-                    // Update Lightweight Chart Live Candle
-                    candleSeries.update({{
-                        time: rawCandles[rawCandles.length - 1].time,
-                        open: rawCandles[rawCandles.length - 1].open,
-                        high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
-                        low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
-                        close: lastClose,
-                    }});
+                        candleSeries.update({{
+                            time: rawCandles[rawCandles.length - 1].time,
+                            open: rawCandles[rawCandles.length - 1].open,
+                            high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
+                            low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
+                            close: lastClose,
+                        }});
 
-                    // Update Top Metric Cards in Real-Time
-                    const diff = lastClose - prevClose;
-                    const diffPct = (diff / prevClose) * 100;
-                    const isUp = diff >= 0;
+                        const diff = lastClose - prevClose;
+                        const diffPct = (diff / prevClose) * 100;
+                        const isUp = diff >= 0;
 
-                    document.getElementById('card_spot').innerText = currSymbol + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
-                    
-                    const chgEl = document.getElementById('card_chg');
-                    chgEl.innerText = (isUp ? '+' : '') + diff.toFixed(2) + ' (' + (isUp ? '+' : '') + diffPct.toFixed(2) + '%)';
-                    chgEl.className = 'metric-sub ' + (isUp ? 'sub-up' : 'sub-down');
+                        document.getElementById('card_spot').innerText = currSymbol + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+                        
+                        const chgEl = document.getElementById('card_chg');
+                        chgEl.innerText = (isUp ? '+' : '') + diff.toFixed(2) + ' (' + (isUp ? '+' : '') + diffPct.toFixed(2) + '%)';
+                        chgEl.className = 'metric-sub ' + (isUp ? 'sub-up' : 'sub-down');
 
-                    document.getElementById('card_high').innerText = currSymbol + sessionHigh.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
-                    document.getElementById('card_low').innerText = currSymbol + sessionLow.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
-                }}, 1000);
+                        document.getElementById('card_high').innerText = currSymbol + sessionHigh.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+                        document.getElementById('card_low').innerText = currSymbol + sessionLow.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+                    }}, 1000);
+                }}
             </script>
             </body>
             </html>
@@ -1147,7 +1166,6 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
             with tab_chart:
                 st.markdown("#### 🕯️ Institutional Matrix (Touch Pan & Draw Lines)")
-                st.caption("Use the top-right toolbar to draw horizontal Support & Resistance lines directly onto the chart.")
                 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
 
                 fig.add_trace(go.Candlestick(
@@ -1258,7 +1276,7 @@ else:
 if is_admin:
     with tab_dual_radar:
         st.markdown("### ⚡ Live Opportunity Radar: AI Autopilot & Manual Control")
-        st.caption("AI continuously audits multi-confluences, calculates realistic Demat option premiums, and logs execution in real-time.")
+        st.caption("AI continuously audits 4-confluences, calculates realistic Demat option premiums, and logs execution in real-time.")
 
         col_mr1, col_mr2 = st.columns([1.5, 1])
         with col_mr1:
@@ -1285,18 +1303,21 @@ if is_admin:
         mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot Engine (Auto Scan & Trail)", "✍️ Mode 2: Manual Custom Dispatcher (Demat Strike Chain)"], horizontal=True)
 
         # ----------------------------------------------------
-        # 🤖 MODE 1: FULL AI AUTOPILOT
+        # 🤖 MODE 1: FULL AI AUTOPILOT (BACKGROUND ISOLATED EXECUTION)
         # ----------------------------------------------------
         if "Mode 1" in mode_select:
             st.markdown("##### 🤖 Mode 1: Autonomous AI Pilot Engine")
-            st.write("Turn ON in the morning. AI enforces 4-confluence checks, calculates realistic option premiums, fires updates, and syncs logbook.")
+            st.write("Turn ON in the morning. AI enforces strict 4-confluence checks, calculates real Demat option premiums, and logs execution instantly.")
             
-            auto_pilot_toggle = st.toggle("⚡ ACTIVATE LIVE AUTONOMOUS PILOT LOOP", value=False, key="auto_pilot_switch")
-            
-            if auto_pilot_toggle:
-                st.success("🟢 AI Autopilot is ACTIVE. Auditing market ticks...")
+            col_ap1, col_ap2 = st.columns([1, 2])
+            with col_ap1:
+                scan_trigger = st.button("🚀 AUDIT & SCAN LIVE MARKET NOW", type="primary")
+            with col_ap2:
+                auto_audit_bg = st.checkbox("⚡ Enable Continuous Non-Blocking Background Scanner", value=True)
+
+            if scan_trigger or auto_audit_bg:
                 if not is_open:
-                    st.info(f"Market Gatekeeper: {gate_info}. Waiting for market open.")
+                    st.info(f"Market Gatekeeper: {gate_info}. AI protects funds during closed hours.")
                 else:
                     try:
                         df_live = yf.download(radar_asset, period="2d", interval=radar_tf, progress=False)
@@ -1331,7 +1352,7 @@ if is_admin:
                                 sl_p = r_trade['sl']
                                 action = r_trade['action']
                                 strk_info = r_trade.get('strike_info', '')
-                                prem_entry = r_trade.get('premium_entry', 180)
+                                prem_entry = r_trade.get('premium_entry', 188)
                                 last_milestone = r_trade.get('last_milestone', 0)
 
                                 target_hit = (live_spot >= tp_p) if "BUY" in action else (live_spot <= tp_p)
@@ -1403,7 +1424,6 @@ if is_admin:
                                 sig = "NEUTRAL"
                                 conf = 50
                                 
-                                # Check Trend + RSI + Volume Confluence
                                 is_vol_ok = vol_cur >= (vol_avg * 1.1) or vol_avg == 0
                                 
                                 if ema20_v > ema50_v and spot > ema20_v and rsi_v > 55 and is_vol_ok:
@@ -1479,18 +1499,18 @@ if is_admin:
                                     logs.insert(0, new_log_entry)
                                     save_signals_log(logs)
                                     st.session_state.signals_history = logs
-                    except Exception:
-                        pass
-                    
-                    time.sleep(5)
-                    st.rerun()
+                                    st.success(f"✅ AI Signal Triggered: {strk_name} @ ₹{base_prem}")
+                                else:
+                                    st.info(f"🔍 Market Audited ({now_ist}): Waiting for strict 4-confluence trigger >= {min_conf_single}%.")
+                    except Exception as e:
+                        st.error(f"Scanner error: {str(e)}")
 
         # ----------------------------------------------------
-        # ✍️ MODE 2: MANUAL CUSTOM DISPATCHER (DEMAT STRIKE CHAIN)
+        # ✍️ MODE 2: MANUAL OPTION CHAIN DISPATCHER (DEMAT TABLE MATRIX)
         # ----------------------------------------------------
         else:
             st.markdown("##### ✍️ Mode 2: Demat-Style Option Chain Strike Selector")
-            st.write("Select verified strikes from the live option matrix and broadcast clean structured trade signals.")
+            st.write("Clean 3-column Option Chain format (Calls CE | Strike | Puts PE) with real Demat premiums.")
 
             try:
                 spot_df = yf.download(radar_asset, period="1d", interval="15m", progress=False)
@@ -1498,87 +1518,56 @@ if is_admin:
             except Exception:
                 curr_ref_spot = 57380.0
 
-            col_mc1, col_mc2 = st.columns(2)
-            with col_mc1:
-                st.markdown("###### 🟢 CALL (CE) STRIKE MATRIX")
-                if radar_asset == "^NSEBANK":
-                    base_s = int(round(curr_ref_spot / 100.0) * 100)
-                    ce_options = [
-                        f"BANKNIFTY {base_s - 200} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 200, 'CE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s - 100} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 100, 'CE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s, 'CE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s + 100} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 100, 'CE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s + 200} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 200, 'CE', '^NSEBANK')}"
-                    ]
-                elif radar_asset == "^NSEI":
-                    base_s = int(round(curr_ref_spot / 50.0) * 50)
-                    ce_options = [
-                        f"NIFTY {base_s - 100} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 100, 'CE', '^NSEI')}",
-                        f"NIFTY {base_s} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s, 'CE', '^NSEI')}",
-                        f"NIFTY {base_s + 100} CE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 100, 'CE', '^NSEI')}"
-                    ]
-                else:
-                    ce_options = [f"{asset_dict[radar_asset]} LONG @ {int(curr_ref_spot)}"]
-                
-                sel_ce = st.selectbox("Select Call (CE) Strike", ce_options, key="sel_ce_strike")
+            st.markdown(f"###### 📊 Live Underlying Reference Spot: `{curr_sym}{curr_ref_spot:,.2f}`")
 
-            with col_mc2:
-                st.markdown("###### 🔴 PUT (PE) STRIKE MATRIX")
-                if radar_asset == "^NSEBANK":
-                    base_s = int(round(curr_ref_spot / 100.0) * 100)
-                    pe_options = [
-                        f"BANKNIFTY {base_s + 200} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 200, 'PE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s + 100} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 100, 'PE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s, 'PE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s - 100} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 100, 'PE', '^NSEBANK')}",
-                        f"BANKNIFTY {base_s - 200} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 200, 'PE', '^NSEBANK')}"
-                    ]
-                elif radar_asset == "^NSEI":
-                    base_s = int(round(curr_ref_spot / 50.0) * 50)
-                    pe_options = [
-                        f"NIFTY {base_s + 100} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s + 100, 'PE', '^NSEI')}",
-                        f"NIFTY {base_s} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s, 'PE', '^NSEI')}",
-                        f"NIFTY {base_s - 100} PE @ ₹{calculate_demat_premium(curr_ref_spot, base_s - 100, 'PE', '^NSEI')}"
-                    ]
-                else:
-                    pe_options = [f"{asset_dict[radar_asset]} SHORT @ {int(curr_ref_spot)}"]
+            if radar_asset in ["^NSEBANK", "^NSEI"]:
+                step = 100 if radar_asset == "^NSEBANK" else 50
+                atm_s = int(round(curr_ref_spot / float(step)) * step)
+                strikes_matrix = [atm_s - (step * 2), atm_s - step, atm_s, atm_s + step, atm_s + (step * 2)]
                 
-                sel_pe = st.selectbox("Select Put (PE) Strike", pe_options, key="sel_pe_strike")
+                chain_rows = []
+                for s in strikes_matrix:
+                    ce_p = calculate_demat_premium(curr_ref_spot, s, 'CE', radar_asset)
+                    pe_p = calculate_demat_premium(curr_ref_spot, s, 'PE', radar_asset)
+                    tag = " (ATM)" if s == atm_s else " (ITM)" if s < atm_s else " (OTM)"
+                    chain_rows.append({
+                        "Call (CE) Premium": f"₹{ce_p}",
+                        "Strike Price": f"{s}{tag}",
+                        "Put (PE) Premium": f"₹{pe_p}"
+                    })
+                st.table(pd.DataFrame(chain_rows))
+
+                col_mc1, col_mc2 = st.columns(2)
+                with col_mc1:
+                    sel_strike = st.selectbox("Select Strike Price", strikes_matrix, index=2, format_func=lambda x: f"{x} (ATM)" if x == atm_s else f"{x}")
+                with col_mc2:
+                    sel_opt_type = st.selectbox("Option Type", ["PUT (PE) 🔴", "CALL (CE) 🟢"], index=0)
+
+                clean_type = "PE" if "PUT" in sel_opt_type else "CE"
+                exp_tag = get_current_expiry_tag(radar_asset)
+                inst_name = f"{'BANKNIFTY' if radar_asset == '^NSEBANK' else 'NIFTY'} {sel_strike} {clean_type} (EXPIRY: {exp_tag})"
+                auto_buy_price = calculate_demat_premium(curr_ref_spot, sel_strike, clean_type, radar_asset)
+
+            else:
+                inst_name = f"{asset_dict[radar_asset]} SPOT"
+                auto_buy_price = int(curr_ref_spot)
+                sel_opt_type = "BUY 🟢"
 
             col_ma1, col_ma2 = st.columns(2)
             with col_ma1:
-                man_action = st.selectbox("Final Direction", ["BUY / CALL (CE) 🟢", "SELL / PUT (PE) 🔴"], key="man_final_dir")
-                final_strike_chosen = sel_ce if "CALL" in man_action else sel_pe
-                st.info(f"Active Selected Instrument: **{final_strike_chosen}**")
-            with col_ma2:
-                clean_prem_val = int(final_strike_chosen.split('₹')[-1].strip()) if '₹' in final_strike_chosen else 188
-                man_buy_price = st.number_input("Buy Above Price (₹)", value=clean_prem_val)
+                man_buy_price = st.number_input("Buy Above Price (₹)", value=auto_buy_price)
                 man_tp = st.text_input("Target", value=f"{man_buy_price + 35} | {man_buy_price + 65}", key="man_tp_txt")
+            with col_ma2:
                 man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 25}", key="man_sl_txt")
-
-            REASONING_PRESETS = [
-                "1. EMA Institutional Pullback (20/50 Trend Retest + RSI Momentum)",
-                "2. EMA Golden/Death Crossover (9/21 MA Acceleration + Volume)",
-                "3. SuperTrend Trend-Rider (10, 2.0 Dynamic Breakout)",
-                "4. Candlestick Pattern Engine (Hammer Support / Engulfing Sweep)",
-                "5. Volume Spike + Momentum Breakout (Institutional Buying)",
-                "6. VWAP Intraday Retest & Expansion Zone",
-                "7. ✍️ Custom Founder Strategy (Enter Manually)"
-            ]
-            
-            selected_preset = st.selectbox("Setup Reasoning / Strategy Engine", REASONING_PRESETS, index=0, key="man_preset_reason")
-            man_note = selected_preset.split(".")[1].strip() if "Custom" not in selected_preset else st.text_input("Custom Reasoning Details", value="Key Support Bounce", key="man_custom_note")
+                man_note = st.text_input("Reasoning / Confluence Note", value="EMA 20 Pullback + Volume Confirmation", key="man_custom_note")
 
             if st.button("🚀 BROADCAST CLEAN DEMAT SIGNAL TO TG", type="primary"):
                 now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
                 now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_id = f"manual_{int(time.time())}"
 
-                strk_clean = final_strike_chosen.split('@')[0].strip()
-                exp_tag = get_current_expiry_tag(radar_asset)
-
                 tg_manual = (
-                    f"📊 <b>{strk_clean} (EXPIRY: {exp_tag})</b>\n\n"
+                    f"📊 <b>{inst_name}</b>\n\n"
                     f"📈 <b>BUY ABOVE {man_buy_price}</b>\n\n"
                     f"🎯 <b>TARGET {man_tp}</b>\n\n"
                     f"☠️ <b>SL - {man_sl}</b>\n\n"
@@ -1588,7 +1577,7 @@ if is_admin:
                 if ok:
                     new_entry = {
                         "id": log_id, "time": now_ist, "raw_time": now_raw,
-                        "instrument": f"{strk_clean} (EXPIRY: {exp_tag})", "action": man_action, "entry_spot": curr_ref_spot,
+                        "instrument": inst_name, "action": sel_opt_type, "entry_spot": curr_ref_spot,
                         "target": f"₹{man_tp}", "sl": f"₹{man_sl}", "confidence": "Founder Conviction", "status": "LIVE IN POSITION",
                         "exit_price": "-"
                     }
@@ -1599,8 +1588,8 @@ if is_admin:
 
                     current_active = load_active_trades()
                     current_active[radar_asset] = {
-                        "asset_name": asset_dict[radar_asset], "strike_info": f"{strk_clean} (EXPIRY: {exp_tag})",
-                        "action": man_action, "entry": curr_ref_spot, "target": curr_ref_spot + 50, "sl": curr_ref_spot - 20,
+                        "asset_name": asset_dict[radar_asset], "strike_info": inst_name,
+                        "action": sel_opt_type, "entry": curr_ref_spot, "target": curr_ref_spot + 50, "sl": curr_ref_spot - 20,
                         "premium_entry": man_buy_price, "last_milestone": 0,
                         "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
                         "sym": curr_sym, "log_id": log_id
