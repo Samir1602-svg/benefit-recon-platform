@@ -15,7 +15,7 @@ import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT LIVE SUITE
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Quant Engine",
@@ -97,8 +97,41 @@ if 'auto_pilot_running' not in st.session_state:
     st.session_state.auto_pilot_running = False
 
 # ==============================================================================
-# 🎯 REALISTIC DEMAT OPTION PREMIUM ENGINE (GROOW / ZERODHA / DHAN ACCURATE)
+# 🎯 DYNAMIC EXPIRY & DEMAT PREMIUM ROLLOVER ENGINE
 # ==============================================================================
+def get_dynamic_expiry_and_tag(asset_symbol):
+    """Calculates active contract expiry with automatic post-market rollover."""
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    current_time = now_ist.time()
+    
+    # 1. Crypto - Perpetual Contracts
+    if asset_symbol.endswith("-USD"):
+        return "PERPETUAL / NO EXPIRY", "CRYPTO"
+    
+    # 2. MCX Commodities (Monthly Delivery)
+    if asset_symbol in ["GC=F", "SI=F", "CL=F"]:
+        cur_month = now_ist.month
+        cur_year = now_ist.year
+        if now_ist.day > 5:
+            cur_month += 1
+            if cur_month > 12:
+                cur_month = 1
+                cur_year += 1
+        exp_date = datetime(cur_year, cur_month, 5)
+        return f"FUTURES: {exp_date.strftime('%d %b %Y').upper()}", "MCX"
+    
+    # 3. Indian Index & Equities (Weekly / Monthly Derivative Cycle)
+    target_weekday = 1 if asset_symbol in ["^NSEBANK", "^NSEI"] else 3  # Tuesday standard for NSE indices
+    days_ahead = (target_weekday - now_ist.weekday()) % 7
+    
+    # If today is expiry day and session is over (past 15:30 IST), roll over to next week
+    if days_ahead == 0 and current_time > dtime(15, 30):
+        days_ahead = 7
+        
+    exp_date = now_ist + timedelta(days=days_ahead)
+    return f"EXPIRY: {exp_date.strftime('%d %b %Y').upper()}", "NSE"
+
 def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
     diff = (strike_price - spot_price) if opt_type == "PE" else (spot_price - strike_price)
     if asset_symbol == "^NSEBANK":
@@ -124,19 +157,6 @@ def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
         else:
             return max(15, int(base_atm * np.exp(diff / 150.0)))
     return int(spot_price)
-
-def get_current_expiry_tag(asset_symbol):
-    today = datetime.now()
-    if asset_symbol == "^NSEBANK":
-        days_ahead = (1 - today.weekday()) % 7 if (1 - today.weekday()) % 7 != 0 else 7
-        exp = today + timedelta(days=days_ahead)
-        return exp.strftime("%d %b %Y").upper()
-    elif asset_symbol == "^NSEI":
-        days_ahead = (1 - today.weekday()) % 7 if (1 - today.weekday()) % 7 != 0 else 7
-        exp = today + timedelta(days=days_ahead)
-        return exp.strftime("%d %b %Y").upper()
-    else:
-        return today.strftime("%d %b %Y").upper()
 
 st.markdown("""
 <style>
@@ -939,7 +959,6 @@ with tab_tv_chart:
                 btns.cursor.onclick = () => setTool('cursor');
                 btns.horiz.onclick = () => setTool('horiz');
                 btns.fib.onclick = () => {{
-                    // Auto Fib Retracement
                     const minPrice = {init_low};
                     const maxPrice = {init_high};
                     const diff = maxPrice - minPrice;
@@ -1397,7 +1416,7 @@ if is_admin:
                             save_active_trades(current_active)
                             st.session_state.active_radar_trades = current_active
 
-                            # 2. Strict 4-Confluence Setup Check (Zero Blind Entries)
+                            # 2. Strict 4-Confluence Setup Check
                             if radar_asset not in current_active:
                                 sig = "NEUTRAL"
                                 conf = 50
@@ -1405,60 +1424,75 @@ if is_admin:
                                 is_vol_ok = vol_cur >= (vol_avg * 1.1) or vol_avg == 0
                                 
                                 if ema20_v > ema50_v and spot > ema20_v and rsi_v > 55 and is_vol_ok:
-                                    sig = "BUY / CALL (CE) 🟢"
+                                    sig = "BUY / CALL (CE) 🟢" if is_rd_idx or not radar_asset.endswith("-USD") else "BUY / LONG 🟢"
                                     conf = min(96, 85 + int((rsi_v - 50) * 1.2))
                                 elif ema20_v < ema50_v and spot < ema20_v and rsi_v < 45 and is_vol_ok:
-                                    sig = "SELL / PUT (PE) 🔴"
+                                    sig = "SELL / PUT (PE) 🔴" if is_rd_idx or not radar_asset.endswith("-USD") else "SELL / SHORT 🔴"
                                     conf = min(96, 85 + int((50 - rsi_v) * 1.2))
                                 elif st_p == -1 and st_n == 1 and rsi_v > 52:
-                                    sig = "BUY / CALL (CE) 🟢"
+                                    sig = "BUY / CALL (CE) 🟢" if is_rd_idx or not radar_asset.endswith("-USD") else "BUY / LONG 🟢"
                                     conf = 92
                                 elif st_p == 1 and st_n == -1 and rsi_v < 48:
-                                    sig = "SELL / PUT (PE) 🔴"
+                                    sig = "SELL / PUT (PE) 🔴" if is_rd_idx or not radar_asset.endswith("-USD") else "SELL / SHORT 🔴"
                                     conf = 92
 
                                 if sig != "NEUTRAL" and conf >= min_conf_single:
-                                    exp_tag = get_current_expiry_tag(radar_asset)
+                                    exp_tag, market_cat = get_dynamic_expiry_and_tag(radar_asset)
 
-                                    if radar_asset == "^NSEBANK":
-                                        strike_val = int(round(spot / 100.0) * 100)
+                                    if market_cat == "NSE":
+                                        strike_step = 100 if radar_asset == "^NSEBANK" else 50
+                                        strike_val = int(round(spot / float(strike_step)) * strike_step)
                                         opt_type = "CE" if "BUY" in sig else "PE"
-                                        strk_name = f"BANKNIFTY {strike_val} {opt_type} (EXPIRY: {exp_tag})"
-                                        base_prem = calculate_demat_premium(spot, strike_val, opt_type, "^NSEBANK")
-                                    elif radar_asset == "^NSEI":
-                                        strike_val = int(round(spot / 50.0) * 50)
-                                        opt_type = "CE" if "BUY" in sig else "PE"
-                                        strk_name = f"NIFTY {strike_val} {opt_type} (EXPIRY: {exp_tag})"
-                                        base_prem = calculate_demat_premium(spot, strike_val, opt_type, "^NSEI")
-                                    else:
-                                        strk_name = f"{asset_dict[radar_asset]} (EXPIRY: {exp_tag})"
-                                        base_prem = int(spot)
-
-                                    if is_rd_idx:
-                                        tp = spot + rd_target if "BUY" in sig else spot - rd_target
-                                        sl = spot - rd_sl if "BUY" in sig else spot + rd_sl
+                                        strk_name = f"{'BANKNIFTY' if radar_asset == '^NSEBANK' else 'NIFTY'} {strike_val} {opt_type} ({exp_tag})"
+                                        base_prem = calculate_demat_premium(spot, strike_val, opt_type, radar_asset)
                                         tp_prem = int(base_prem + (rd_target * 0.55))
                                         sl_prem = int(base_prem - (rd_sl * 0.55))
-                                    else:
-                                        tp = spot * (1 + (rd_target / 100.0)) if "BUY" in sig else spot * (1 - (rd_target / 100.0))
-                                        sl = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
-                                        tp_prem = int(base_prem * (1 + (rd_target / 100.0)))
-                                        sl_prem = int(base_prem * (1 - (rd_sl / 100.0)))
+                                        tp_spot = spot + rd_target if "BUY" in sig else spot - rd_target
+                                        sl_spot = spot - rd_sl if "BUY" in sig else spot + rd_sl
 
-                                    log_id = f"{radar_asset}_{int(time.time())}"
+                                        tg_text = (
+                                            f"📊 <b>{strk_name}</b>\n\n"
+                                            f"📈 <b>BUY ABOVE {base_prem}</b>\n\n"
+                                            f"🎯 <b>TARGET {tp_prem} | {tp_prem + 30}</b>\n\n"
+                                            f"☠️ <b>SL - {sl_prem}</b>\n\n"
+                                            f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        )
 
-                                    tg_text = (
-                                        f"📊 <b>{strk_name}</b>\n\n"
-                                        f"📈 <b>BUY ABOVE {base_prem}</b>\n\n"
-                                        f"🎯 <b>TARGET {tp_prem} | {tp_prem + 30}</b>\n\n"
-                                        f"☠️ <b>SL - {sl_prem}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
-                                    )
+                                    elif market_cat == "MCX":
+                                        strk_name = f"{asset_dict[radar_asset]} ({exp_tag})"
+                                        base_prem = int(spot)
+                                        tp_spot = spot + rd_target if "BUY" in sig else spot - rd_target
+                                        sl_spot = spot - rd_sl if "BUY" in sig else spot + rd_sl
+                                        
+                                        tg_text = (
+                                            f"📊 <b>{strk_name}</b>\n\n"
+                                            f"📈 <b>BUY ABOVE ₹{base_prem:,.0f}</b>\n\n"
+                                            f"🎯 <b>TARGET: ₹{tp_spot:,.0f} (+{rd_target:.0f} Pts)</b>\n\n"
+                                            f"☠️ <b>SL: ₹{sl_spot:,.0f} (-{rd_sl:.0f} Pts)</b>\n\n"
+                                            f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        )
+
+                                    else:  # Crypto (Perpetual Swap)
+                                        strk_name = f"{asset_dict[radar_asset]} (PERPETUAL SWAP - NO EXPIRY)"
+                                        base_prem = spot
+                                        tp_spot = spot * (1 + (rd_target / 100.0)) if "BUY" in sig else spot * (1 - (rd_target / 100.0))
+                                        sl_spot = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
+                                        pos_type = "LONG 🟢" if "BUY" in sig else "SHORT 🔴"
+
+                                        tg_text = (
+                                            f"📊 <b>{asset_dict[radar_asset]} (PERPETUAL SWAP)</b>\n\n"
+                                            f"🚀 <b>POSITION: {pos_type}</b>\n\n"
+                                            f"💵 <b>ENTRY: ${spot:,.2f}</b>\n\n"
+                                            f"🎯 <b>TARGET: ${tp_spot:,.2f} (+{rd_target:.1f}%)</b>\n\n"
+                                            f"🛑 <b>STOP LOSS: ${sl_spot:,.2f} (-{rd_sl:.1f}%)</b>\n\n"
+                                            f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        )
+
                                     send_telegram_alert(tg_text)
                                     
                                     current_active[radar_asset] = {
                                         "asset_name": asset_dict[radar_asset], "strike_info": strk_name,
-                                        "action": sig, "entry": spot, "target": tp, "sl": sl,
+                                        "action": sig, "entry": spot, "target": tp_spot, "sl": sl_spot,
                                         "premium_entry": base_prem, "last_milestone": 0,
                                         "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
                                         "sym": curr_sym, "log_id": log_id
@@ -1469,7 +1503,7 @@ if is_admin:
                                     new_log_entry = {
                                         "id": log_id, "time": now_ist, "raw_time": now_raw,
                                         "instrument": strk_name, "action": sig, "entry_spot": spot,
-                                        "target": f"₹{tp_prem} ({curr_sym}{tp:,.1f})", "sl": f"₹{sl_prem} ({curr_sym}{sl:,.1f})",
+                                        "target": f"{curr_sym}{tp_spot:,.1f}", "sl": f"{curr_sym}{sl_spot:,.1f}",
                                         "confidence": f"{conf}%", "status": "LIVE IN POSITION",
                                         "exit_price": "-"
                                     }
@@ -1477,7 +1511,7 @@ if is_admin:
                                     logs.insert(0, new_log_entry)
                                     save_signals_log(logs)
                                     st.session_state.signals_history = logs
-                                    st.success(f"✅ AI Signal Triggered: {strk_name} @ ₹{base_prem}")
+                                    st.success(f"✅ AI Signal Triggered: {strk_name}")
                                 else:
                                     st.info(f"🔍 Market Audited ({now_ist}): Waiting for strict 4-confluence trigger >= {min_conf_single}%.")
                     except Exception as e:
@@ -1522,18 +1556,19 @@ if is_admin:
                     sel_opt_type = st.selectbox("Option Type", ["PUT (PE) 🔴", "CALL (CE) 🟢"], index=0)
 
                 clean_type = "PE" if "PUT" in sel_opt_type else "CE"
-                exp_tag = get_current_expiry_tag(radar_asset)
-                inst_name = f"{'BANKNIFTY' if radar_asset == '^NSEBANK' else 'NIFTY'} {sel_strike} {clean_type} (EXPIRY: {exp_tag})"
+                exp_tag, _ = get_dynamic_expiry_and_tag(radar_asset)
+                inst_name = f"{'BANKNIFTY' if radar_asset == '^NSEBANK' else 'NIFTY'} {sel_strike} {clean_type} ({exp_tag})"
                 auto_buy_price = calculate_demat_premium(curr_ref_spot, sel_strike, clean_type, radar_asset)
 
             else:
-                inst_name = f"{asset_dict[radar_asset]} SPOT"
+                exp_tag, _ = get_dynamic_expiry_and_tag(radar_asset)
+                inst_name = f"{asset_dict[radar_asset]} ({exp_tag})"
                 auto_buy_price = int(curr_ref_spot)
                 sel_opt_type = "BUY 🟢"
 
             col_ma1, col_ma2 = st.columns(2)
             with col_ma1:
-                man_buy_price = st.number_input("Buy Above Price (₹)", value=auto_buy_price)
+                man_buy_price = st.number_input("Buy Above Price (₹ / $)", value=auto_buy_price)
                 man_tp = st.text_input("Target", value=f"{man_buy_price + 35} | {man_buy_price + 65}", key="man_tp_txt")
             with col_ma2:
                 man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 25}", key="man_sl_txt")
@@ -1581,7 +1616,7 @@ if is_admin:
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
-        # Active Live Trades Table
+        # Active Live Trades Table (Real-time in Terminal)
         st.markdown("---")
         st.markdown("#### 🌐 Active Open Trades (Terminal Real-Time Monitor)")
         current_active = load_active_trades()
