@@ -13,10 +13,9 @@ import os
 import re
 import time
 import requests
-import threading
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT LIVE SUITE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Quant Engine",
@@ -93,6 +92,9 @@ if 'signals_history' not in st.session_state:
 
 if 'active_radar_trades' not in st.session_state:
     st.session_state.active_radar_trades = load_active_trades()
+
+if 'auto_pilot_running' not in st.session_state:
+    st.session_state.auto_pilot_running = False
 
 # ==============================================================================
 # 🎯 REALISTIC DEMAT OPTION PREMIUM ENGINE (GROOW / ZERODHA / DHAN ACCURATE)
@@ -195,6 +197,29 @@ st.markdown("""
         font-size: 11px;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ai-live-banner {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 78, 59, 0.4) 100%);
+        border: 2px solid #10b981;
+        border-radius: 14px;
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .ai-off-banner {
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%);
+        border: 2px solid #ef4444;
+        border-radius: 14px;
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
     }
 
     div[data-testid="stMetric"] {
@@ -454,7 +479,7 @@ if curr_tier == "Free Member":
 elif curr_tier == "VIP Algo Trader":
     allowed_asset_keys = ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "GC=F", "SI=F", "BTC-USD", "ETH-USD", "SOL-USD"]
     allowed_tf = ["15m", "5m", "1m", "30m", "1d"]
-else: # Institutional Pro & Admin
+else:
     allowed_asset_keys = list(FULL_ASSETS.keys())
     allowed_tf = ["15m", "5m", "1m", "2m", "30m", "60m", "1d"]
 
@@ -602,6 +627,7 @@ with tab_tv_chart:
             df_demat.dropna(inplace=True)
             df_demat = calc_indicators(df_demat, {})
 
+            # Exact IST Timestamp for Lightweight Charts
             ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
             candle_list = []
@@ -612,8 +638,8 @@ with tab_tv_chart:
 
             for i in range(len(df_demat)):
                 row = df_demat.iloc[i]
-                t_sec = int(df_demat.index[i].timestamp())
-                t_str = ist_time_demat[i].strftime('%d-%b-%Y %H:%M:%S IST')
+                t_sec = int(ist_time_demat[i].timestamp())
+                t_str = ist_time_demat[i].strftime('%d-%b-%Y %I:%M %p IST')
                 candle_list.append({
                     "time": t_sec, "time_str": t_str,
                     "open": round(float(row['Open']), 2), "high": round(float(row['High']), 2),
@@ -738,15 +764,6 @@ with tab_tv_chart:
                     height: 100%;
                     position: relative;
                 }}
-                #drawing_canvas {{
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    pointer-events: none;
-                    z-index: 50;
-                }}
                 #legend_box {{
                     position: absolute;
                     top: 10px;
@@ -792,22 +809,16 @@ with tab_tv_chart:
 
             <div id="main_wrapper">
                 <div id="left_toolbar">
-                    <button class="tool-btn active" id="btn_cursor" title="4-Way Cursor / Pan Mode">
+                    <button class="tool-btn active" id="btn_cursor" title="4-Way Navigation / Pan Mode">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
                     </button>
-                    <button class="tool-btn" id="btn_horiz" title="Straight Horizontal Support/Resistance Line">
+                    <button class="tool-btn" id="btn_horiz" title="Straight Horizontal Support/Resistance Level">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
                     </button>
-                    <button class="tool-btn" id="btn_fib" title="Fibonacci Retracement (0.236 - 0.786)">
+                    <button class="tool-btn" id="btn_fib" title="Auto Fibonacci Levels">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18M3 8h18M3 12h18M3 16h18M3 20h18"/></svg>
                     </button>
-                    <button class="tool-btn" id="btn_trend" title="Diagonal Trendline">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4M14 4h6v6"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_rect" title="Supply / Demand Rectangle Zone">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_clear" title="Clear All Drawings">
+                    <button class="tool-btn" id="btn_clear" title="Clear All S/R Lines">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
                 </div>
@@ -816,21 +827,11 @@ with tab_tv_chart:
                     <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | <span id="leg_time">-</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span>
                 </div>
 
-                <div id="chart_container">
-                    <canvas id="drawing_canvas"></canvas>
-                </div>
+                <div id="chart_container"></div>
             </div>
 
             <script>
                 const container = document.getElementById('chart_container');
-                const canvas = document.getElementById('drawing_canvas');
-                const ctx = canvas.getContext('2d');
-
-                function resizeCanvas() {{
-                    canvas.width = container.clientWidth;
-                    canvas.height = container.clientHeight;
-                    redrawDrawings();
-                }}
 
                 const chart = LightweightCharts.createChart(container, {{
                     width: container.clientWidth,
@@ -854,6 +855,12 @@ with tab_tv_chart:
                         borderColor: '#1e293b',
                         timeVisible: true,
                         secondsVisible: false,
+                    }},
+                    localization: {{
+                        timeFormatter: businessDayOrTimestamp => {{
+                            const date = new Date(businessDayOrTimestamp * 1000);
+                            return date.toLocaleTimeString('en-IN', {{ timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }});
+                        }},
                     }},
                 }});
 
@@ -904,7 +911,7 @@ with tab_tv_chart:
                         const data = param.seriesData.get(candleSeries);
                         if (data) {{
                             const d = new Date(param.time * 1000);
-                            document.getElementById('leg_time').innerText = d.toLocaleString('en-IN', {{timeZone: 'Asia/Kolkata', hour12: true}});
+                            document.getElementById('leg_time').innerText = d.toLocaleTimeString('en-IN', {{timeZone: 'Asia/Kolkata', hour12: true}});
                             document.getElementById('leg_o').innerText = data.open.toFixed(2);
                             document.getElementById('leg_h').innerText = data.high.toFixed(2);
                             document.getElementById('leg_l').innerText = data.low.toFixed(2);
@@ -913,122 +920,71 @@ with tab_tv_chart:
                     }}
                 }});
 
-                // --- DRAWINGS ENGINE (PERSISTENT & ZOOM SCALED) ---
+                // --- NATIVE PRICE LINE ENGINE (NEVER UNSTICKS DURING ZOOM OR PAN) ---
                 let currentTool = 'cursor';
-                let drawings = [];
-                let isDrawing = false;
-                let startPoint = null;
+                let priceLines = [];
 
                 const btns = {{
                     cursor: document.getElementById('btn_cursor'),
                     horiz: document.getElementById('btn_horiz'),
                     fib: document.getElementById('btn_fib'),
-                    trend: document.getElementById('btn_trend'),
-                    rect: document.getElementById('btn_rect'),
                 }};
 
                 function setTool(tool) {{
                     currentTool = tool;
                     Object.values(btns).forEach(b => b.classList.remove('active'));
                     if (btns[tool]) btns[tool].classList.add('active');
-
-                    if (tool === 'cursor') {{
-                        canvas.style.pointerEvents = 'none';
-                        chart.applyOptions({{ handleScroll: true, handleScale: true }});
-                    }} else {{
-                        canvas.style.pointerEvents = 'auto';
-                        chart.applyOptions({{ handleScroll: false, handleScale: false }});
-                    }}
                 }}
 
                 btns.cursor.onclick = () => setTool('cursor');
                 btns.horiz.onclick = () => setTool('horiz');
-                btns.fib.onclick = () => setTool('fib');
-                btns.trend.onclick = () => setTool('trend');
-                btns.rect.onclick = () => setTool('rect');
-                document.getElementById('btn_clear').onclick = () => {{
-                    drawings = [];
-                    redrawDrawings();
+                btns.fib.onclick = () => {{
+                    // Auto Fib Retracement
+                    const minPrice = {init_low};
+                    const maxPrice = {init_high};
+                    const diff = maxPrice - minPrice;
+                    const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+
+                    fibRatios.forEach(r => {{
+                        const p = minPrice + (diff * r);
+                        const pl = candleSeries.createPriceLine({{
+                            price: p,
+                            color: r === 0.5 || r === 0.618 ? '#10b981' : 'rgba(56, 189, 248, 0.8)',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: 'FIB ' + (r * 100).toFixed(1) + '%',
+                        }});
+                        priceLines.push(pl);
+                    }});
+                    setTool('cursor');
                 }};
 
-                canvas.addEventListener('mousedown', e => {{
-                    if (currentTool === 'cursor') return;
-                    isDrawing = true;
-                    const rect = canvas.getBoundingClientRect();
-                    startPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
-                }});
+                document.getElementById('btn_clear').onclick = () => {{
+                    priceLines.forEach(pl => candleSeries.removePriceLine(pl));
+                    priceLines = [];
+                }};
 
-                canvas.addEventListener('mousemove', e => {{
-                    if (!isDrawing) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const currentPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
-                    redrawDrawings();
-                    drawShape(currentTool, startPoint, currentPoint, true);
-                }});
-
-                canvas.addEventListener('mouseup', e => {{
-                    if (!isDrawing) return;
-                    isDrawing = false;
-                    const rect = canvas.getBoundingClientRect();
-                    const endPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
-                    drawings.push({{ tool: currentTool, start: startPoint, end: endPoint }});
-                    redrawDrawings();
-                }});
-
-                function drawShape(tool, start, end, isPreview) {{
-                    ctx.save();
-                    ctx.strokeStyle = '#38bdf8';
-                    ctx.lineWidth = 2;
-                    if (isPreview) ctx.setLineDash([4, 4]);
-
-                    if (tool === 'horiz') {{
-                        ctx.beginPath();
-                        ctx.moveTo(0, start.y);
-                        ctx.lineTo(canvas.width, start.y);
-                        ctx.stroke();
-
-                        ctx.fillStyle = '#38bdf8';
-                        ctx.fillRect(canvas.width - 64, start.y - 10, 62, 20);
-                        ctx.fillStyle = '#050811';
-                        ctx.font = 'bold 11px monospace';
-                        ctx.fillText('S/R LEVEL', canvas.width - 58, start.y + 4);
-                    }} else if (tool === 'fib') {{
-                        const fibs = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
-                        const dy = end.y - start.y;
-                        fibs.forEach(f => {{
-                            const curY = start.y + (dy * f);
-                            ctx.beginPath();
-                            ctx.strokeStyle = f === 0.5 || f === 0.618 ? '#10b981' : 'rgba(56, 189, 248, 0.7)';
-                            ctx.moveTo(0, curY);
-                            ctx.lineTo(canvas.width, curY);
-                            ctx.stroke();
-
-                            ctx.fillStyle = '#94a3b8';
-                            ctx.font = '10px monospace';
-                            ctx.fillText((f * 100).toFixed(1) + '%', 10, curY - 3);
-                        }});
-                    }} else if (tool === 'trend') {{
-                        ctx.beginPath();
-                        ctx.moveTo(start.x, start.y);
-                        ctx.lineTo(end.x, end.y);
-                        ctx.stroke();
-                    }} else if (tool === 'rect') {{
-                        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
-                        ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
-                        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+                // Click to create permanent straight horizontal Support / Resistance level
+                chart.subscribeClick(param => {{
+                    if (currentTool === 'horiz' && param.point) {{
+                        const price = candleSeries.coordinateToPrice(param.point.y);
+                        if (price) {{
+                            const pl = candleSeries.createPriceLine({{
+                                price: price,
+                                color: '#38bdf8',
+                                lineWidth: 2,
+                                lineStyle: LightweightCharts.LineStyle.Solid,
+                                axisLabelVisible: true,
+                                title: 'S/R LEVEL',
+                            }});
+                            priceLines.push(pl);
+                        }}
+                        setTool('cursor');
                     }}
-                    ctx.restore();
-                }}
+                }});
 
-                function redrawDrawings() {{
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    drawings.forEach(d => drawShape(d.tool, d.start, d.end, false));
-                }}
-
-                window.addEventListener('resize', resizeCanvas);
-                resizeCanvas();
-
-                // ⚡ 1-SECOND ISOLATED TICK STREAM (Zero Screen Reload Jump)
+                // ⚡ 1-SECOND CLIENT-SIDE SMOOTH LIVE TICK STREAM
                 let isMarketActive = {'true' if is_live_open else 'false'};
                 let lastClose = rawCandles[rawCandles.length - 1].close;
                 let sessionHigh = {init_high};
@@ -1303,19 +1259,41 @@ if is_admin:
         mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot Engine (Auto Scan & Trail)", "✍️ Mode 2: Manual Custom Dispatcher (Demat Strike Chain)"], horizontal=True)
 
         # ----------------------------------------------------
-        # 🤖 MODE 1: FULL AI AUTOPILOT (BACKGROUND ISOLATED EXECUTION)
+        # 🤖 MODE 1: FULL AI AUTOPILOT
         # ----------------------------------------------------
         if "Mode 1" in mode_select:
             st.markdown("##### 🤖 Mode 1: Autonomous AI Pilot Engine")
-            st.write("Turn ON in the morning. AI enforces strict 4-confluence checks, calculates real Demat option premiums, and logs execution instantly.")
             
-            col_ap1, col_ap2 = st.columns([1, 2])
-            with col_ap1:
-                scan_trigger = st.button("🚀 AUDIT & SCAN LIVE MARKET NOW", type="primary")
-            with col_ap2:
-                auto_audit_bg = st.checkbox("⚡ Enable Continuous Non-Blocking Background Scanner", value=True)
+            # Big Visual Status Banner
+            col_t1, col_t2 = st.columns([2, 1])
+            with col_t2:
+                toggle_btn = st.toggle("⚡ ACTIVATE AI AUTOPILOT ENGINE", value=st.session_state.auto_pilot_running, key="ai_auto_switch")
+                st.session_state.auto_pilot_running = toggle_btn
+            with col_t1:
+                if st.session_state.auto_pilot_running:
+                    st.markdown("""
+                    <div class="ai-live-banner">
+                        <div>
+                            <span style="color:#10b981; font-weight:800; font-size:16px; font-family:'JetBrains Mono';">🟢 AI AUTOPILOT ENGINE ACTIVE</span><br>
+                            <span style="color:#cbd5e1; font-size:12px;">Auditing multi-confluence breakouts & dispatching Telegram alerts in background.</span>
+                        </div>
+                        <span class="pulse-badge">● 24/7 SCANNING</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div class="ai-off-banner">
+                        <div>
+                            <span style="color:#ef4444; font-weight:800; font-size:16px; font-family:'JetBrains Mono';">🔴 AI AUTOPILOT ENGINE OFF / STANDBY</span><br>
+                            <span style="color:#94a3b8; font-size:12px;">Toggle switch on the right to start background execution.</span>
+                        </div>
+                        <span style="color:#ef4444; font-weight:700; font-size:12px;">PAUSED</span>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            if scan_trigger or auto_audit_bg:
+            scan_trigger = st.button("🚀 AUDIT & SCAN LIVE MARKET NOW", type="primary")
+
+            if st.session_state.auto_pilot_running or scan_trigger:
                 if not is_open:
                     st.info(f"Market Gatekeeper: {gate_info}. AI protects funds during closed hours.")
                 else:
@@ -1506,7 +1484,7 @@ if is_admin:
                         st.error(f"Scanner error: {str(e)}")
 
         # ----------------------------------------------------
-        # ✍️ MODE 2: MANUAL OPTION CHAIN DISPATCHER (DEMAT TABLE MATRIX)
+        # ✍️ MODE 2: MANUAL OPTION CHAIN DISPATCHER
         # ----------------------------------------------------
         else:
             st.markdown("##### ✍️ Mode 2: Demat-Style Option Chain Strike Selector")
@@ -1603,7 +1581,7 @@ if is_admin:
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
-        # Active Live Trades Table (Real-time in Terminal)
+        # Active Live Trades Table
         st.markdown("---")
         st.markdown("#### 🌐 Active Open Trades (Terminal Real-Time Monitor)")
         current_active = load_active_trades()
