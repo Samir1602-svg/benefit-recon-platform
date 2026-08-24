@@ -533,7 +533,7 @@ else:
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Real-Time Interactive Chart Studio")
-    st.caption("Real-time live streaming candlestick matrix with drawing tools (Support/Resistance lines, Supply/Demand zones), volume bars, and RSI.")
+    st.caption("Live streaming market feed with default 4-Way Navigation Cursor, Left Drawing Toolbar (Horizontal S/R Lines, Trendlines, Rectangles), Volume, and RSI.")
 
     col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
     with col_dc1:
@@ -544,88 +544,392 @@ with tab_tv_chart:
         is_usd = live_chart_asset.endswith("-USD")
         curr_label = "$" if is_usd else "₹"
         st.markdown("<br>", unsafe_allow_html=True)
-        live_refresh_mode = st.toggle("⚡ LIVE 5-SEC TICK STREAM", value=True, key="live_tick_toggle")
+        st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
 
-    with st.spinner(f"⚡ Streaming live market matrix for {asset_dict[live_chart_asset]}..."):
-        try:
-            period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
-            df_demat = yf.download(live_chart_asset, period=period_str, interval=live_chart_tf, progress=False)
+    # 1. Fetch initial baseline candles
+    try:
+        period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
+        df_demat = yf.download(live_chart_asset, period=period_str, interval=live_chart_tf, progress=False)
+        
+        if df_demat.empty or len(df_demat) < 5:
+            st.warning("⚠️ Live market feed connecting. Please select 5m or 15m resolution.")
+        else:
+            if isinstance(df_demat.columns, pd.MultiIndex):
+                df_demat.columns = df_demat.columns.droplevel(1)
+            df_demat.dropna(inplace=True)
+            df_demat = calc_indicators(df_demat, {})
+
+            ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
-            if df_demat.empty or len(df_demat) < 5:
-                st.warning("⚠️ Live market feed connecting. Please select 5m or 15m resolution.")
-            else:
-                if isinstance(df_demat.columns, pd.MultiIndex):
-                    df_demat.columns = df_demat.columns.droplevel(1)
-                df_demat.dropna(inplace=True)
-                df_demat = calc_indicators(df_demat, {})
+            candle_list = []
+            ema20_list = []
+            ema50_list = []
+            volume_list = []
+            rsi_list = []
 
-                ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
-                df_demat['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time_demat]
+            for i in range(len(df_demat)):
+                row = df_demat.iloc[i]
+                t_sec = int(df_demat.index[i].timestamp())
+                t_str = ist_time_demat[i].strftime('%d-%b %H:%M')
+                candle_list.append({
+                    "time": t_sec, "time_str": t_str,
+                    "open": round(float(row['Open']), 2), "high": round(float(row['High']), 2),
+                    "low": round(float(row['Low']), 2), "close": round(float(row['Close']), 2)
+                })
+                ema20_list.append({"time": t_sec, "value": round(float(row['EMA20']), 2)})
+                ema50_list.append({"time": t_sec, "value": round(float(row['EMA50']), 2)})
+                volume_list.append({
+                    "time": t_sec, "value": float(row['Volume']),
+                    "color": "rgba(16, 185, 129, 0.7)" if row['Close'] >= row['Open'] else "rgba(239, 68, 68, 0.7)"
+                })
+                rsi_list.append({"time": t_sec, "value": round(float(row['RSI']), 2)})
 
-                latest_candle = df_demat.iloc[-1]
-                prev_candle = df_demat.iloc[-2] if len(df_demat) > 1 else latest_candle
-                spot_price = float(latest_candle['Close'])
-                change_val = spot_price - float(prev_candle['Close'])
-                pct_val = (change_val / float(prev_candle['Close'])) * 100
+            candles_json = json.dumps(candle_list)
+            ema20_json = json.dumps(ema20_list)
+            ema50_json = json.dumps(ema50_list)
+            volume_json = json.dumps(volume_list)
+            rsi_json = json.dumps(rsi_list)
 
-                # High-impact real-time KPIs
-                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                col_m1.metric("Live Market Spot", f"{curr_label}{spot_price:,.2f}", f"{'+' if change_val >= 0 else ''}{change_val:,.2f} ({pct_val:+.2f}%)")
-                col_m2.metric("Session High", f"{curr_label}{float(df_demat['High'].max()):,.2f}")
-                col_m3.metric("Session Low", f"{curr_label}{float(df_demat['Low'].min()):,.2f}")
-                col_m4.metric("RSI Momentum (14)", f"{float(latest_candle['RSI']):.1f}", "Bullish" if latest_candle['RSI'] > 50 else "Bearish")
+            latest_c = candle_list[-1]
+            prev_c = candle_list[-2] if len(candle_list) > 1 else latest_c
+            live_spot = latest_c['close']
+            chg_val = live_spot - prev_c['close']
+            pct_val = (chg_val / prev_c['close']) * 100
 
-                # Subplot Candlestick + Volume + RSI
-                fig_demat = make_subplots(
-                    rows=3, cols=1, shared_xaxes=True,
-                    row_heights=[0.65, 0.18, 0.17],
-                    vertical_spacing=0.02
-                )
+            # Real-time Header KPI cards
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1.metric("Live Market Spot", f"{curr_label}{live_spot:,.2f}", f"{'+' if chg_val >= 0 else ''}{chg_val:,.2f} ({pct_val:+.2f}%)")
+            col_m2.metric("Session High", f"{curr_label}{float(df_demat['High'].max()):,.2f}")
+            col_m3.metric("Session Low", f"{curr_label}{float(df_demat['Low'].min()):,.2f}")
+            col_m4.metric("RSI Momentum (14)", f"{rsi_list[-1]['value']:.1f}", "Bullish" if rsi_list[-1]['value'] > 50 else "Bearish")
 
-                # 1. Main Candlestick
-                fig_demat.add_trace(go.Candlestick(
-                    x=df_demat['Time_Str'], open=df_demat['Open'], high=df_demat['High'],
-                    low=df_demat['Low'], close=df_demat['Close'], name=asset_dict[live_chart_asset],
-                    increasing_line_color='#10b981', decreasing_line_color='#ef4444'
-                ), row=1, col=1)
+            # 2. Institutional Canvas Demat Chart with Left Vertical Toolbar & 1-Sec Client Live Tick Loop
+            demat_studio_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <meta charset="UTF-8">
+            <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    background: #050811;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    overflow: hidden;
+                }}
+                #main_wrapper {{
+                    display: flex;
+                    width: 100%;
+                    height: 680px;
+                    position: relative;
+                }}
+                /* Left-Side Vertical Demat Drawing Toolbar */
+                #left_toolbar {{
+                    width: 48px;
+                    background: #0d1527;
+                    border-right: 1px solid #1e293b;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding-top: 10px;
+                    gap: 8px;
+                    z-index: 100;
+                }}
+                .tool-btn {{
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 8px;
+                    border: 1px solid transparent;
+                    background: transparent;
+                    color: #94a3b8;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }}
+                .tool-btn:hover {{
+                    background: #1e293b;
+                    color: #38bdf8;
+                }}
+                .tool-btn.active {{
+                    background: rgba(56, 189, 248, 0.15);
+                    border-color: #38bdf8;
+                    color: #38bdf8;
+                }}
+                #chart_container {{
+                    flex: 1;
+                    height: 100%;
+                    position: relative;
+                }}
+                #drawing_canvas {{
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 50;
+                }}
+                #legend_box {{
+                    position: absolute;
+                    top: 12px;
+                    left: 60px;
+                    z-index: 60;
+                    color: #94a3b8;
+                    font-size: 12px;
+                    font-family: 'JetBrains Mono', monospace;
+                    background: rgba(13, 21, 39, 0.7);
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    border: 1px solid #1e293b;
+                    pointer-events: none;
+                }}
+            </style>
+            </head>
+            <body>
+            <div id="main_wrapper">
+                <!-- Left Vertical Toolbar -->
+                <div id="left_toolbar">
+                    <button class="tool-btn active" id="btn_cursor" title="4-Way Cursor / Pan Mode">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
+                    </button>
+                    <button class="tool-btn" id="btn_horiz" title="Straight Horizontal Support/Resistance Line">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                    </button>
+                    <button class="tool-btn" id="btn_trend" title="Diagonal Trendline">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4M14 4h6v6"/></svg>
+                    </button>
+                    <button class="tool-btn" id="btn_rect" title="Supply / Demand Rectangle Zone">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+                    </button>
+                    <button class="tool-btn" id="btn_clear" title="Clear All Drawings">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
 
-                # Moving Average Overlays
-                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
-                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
+                <div id="legend_box">
+                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span> | RSI: <span id="leg_rsi">-</span>
+                </div>
 
-                # 2. Volume Bars
-                colors = ['#10b981' if c >= o else '#ef4444' for c, o in zip(df_demat['Close'], df_demat['Open'])]
-                fig_demat.add_trace(go.Bar(x=df_demat['Time_Str'], y=df_demat['Volume'], marker_color=colors, name='Volume'), row=2, col=1)
+                <div id="chart_container">
+                    <canvas id="drawing_canvas"></canvas>
+                </div>
+            </div>
 
-                # 3. RSI
-                fig_demat.add_trace(go.Scatter(x=df_demat['Time_Str'], y=df_demat['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=3, col=1)
-                fig_demat.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.5)", row=3, col=1)
-                fig_demat.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.5)", row=3, col=1)
+            <script>
+                const container = document.getElementById('chart_container');
+                const canvas = document.getElementById('drawing_canvas');
+                const ctx = canvas.getContext('2d');
 
-                fig_demat.update_layout(
-                    template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811',
-                    height=680, xaxis_rangeslider_visible=False, dragmode='drawline',
-                    newshape=dict(line_color="#38bdf8", line_width=2),
-                    margin=dict(l=10, r=10, t=10, b=10)
-                )
+                function resizeCanvas() {{
+                    canvas.width = container.clientWidth;
+                    canvas.height = container.clientHeight;
+                    redrawDrawings();
+                }}
 
-                # Drawing toolbar configuration
-                config_demat = {
-                    'scrollZoom': True, 'displayModeBar': True,
-                    'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'drawrect', 'eraseshape'],
-                    'modeBarButtonsToRemove': ['lasso2d'],
-                    'toImageButtonOptions': {'format': 'png', 'filename': f'live_chart_{live_chart_asset}', 'height': 1080, 'width': 1920, 'scale': 2}
-                }
-                st.plotly_chart(fig_demat, use_container_width=True, config=config_demat)
-                st.caption("🛠️ **Interactive Drawing Tools:** Click on the top-right toolbar icon (`Draw line` / `Draw rectangle`) to plot instant Support/Resistance levels and Supply/Demand zones directly on the chart.")
+                const chart = LightweightCharts.createChart(container, {{
+                    width: container.clientWidth,
+                    height: 680,
+                    layout: {{
+                        background: {{ color: '#050811' }},
+                        textColor: '#94a3b8',
+                        fontFamily: 'Plus Jakarta Sans',
+                    }},
+                    grid: {{
+                        vertLines: {{ color: 'rgba(30, 41, 59, 0.4)' }},
+                        horzLines: {{ color: 'rgba(30, 41, 59, 0.4)' }},
+                    }},
+                    crosshair: {{
+                        mode: LightweightCharts.CrosshairMode.Normal,
+                    }},
+                    rightPriceScale: {{
+                        borderColor: '#1e293b',
+                    }},
+                    timeScale: {{
+                        borderColor: '#1e293b',
+                        timeVisible: true,
+                        secondsVisible: false,
+                    }},
+                }});
 
-                # Live auto tick loop
-                if live_refresh_mode:
-                    time.sleep(5)
-                    st.rerun()
+                const candleSeries = chart.addCandlestickSeries({{
+                    upColor: '#10b981',
+                    downColor: '#ef4444',
+                    borderUpColor: '#10b981',
+                    borderDownColor: '#ef4444',
+                    wickUpColor: '#10b981',
+                    wickDownColor: '#ef4444',
+                }});
 
-        except Exception as e:
-            st.error(f"Error streaming live data: {str(e)}")
+                const ema20Series = chart.addLineSeries({{
+                    color: '#38bdf8',
+                    lineWidth: 1.5,
+                }});
+
+                const ema50Series = chart.addLineSeries({{
+                    color: '#f59e0b',
+                    lineWidth: 1.5,
+                }});
+
+                const volumeSeries = chart.addHistogramSeries({{
+                    color: '#26a69a',
+                    priceFormat: {{ type: 'volume' }},
+                    priceScaleId: '',
+                }});
+
+                volumeSeries.priceScale().applyOptions({{
+                    scaleMargins: {{ top: 0.8, bottom: 0 }},
+                }});
+
+                const rawCandles = {candles_json};
+                const rawEma20 = {ema20_json};
+                const rawEma50 = {ema50_json};
+                const rawVolume = {volume_json};
+
+                candleSeries.setData(rawCandles);
+                ema20Series.setData(rawEma20);
+                ema50Series.setData(rawEma50);
+                volumeSeries.setData(rawVolume);
+
+                chart.timeScale().fitContent();
+
+                // Legend updates
+                chart.subscribeCrosshairMove(param => {{
+                    if (param.time) {{
+                        const data = param.seriesData.get(candleSeries);
+                        if (data) {{
+                            document.getElementById('leg_o').innerText = data.open.toFixed(2);
+                            document.getElementById('leg_h').innerText = data.high.toFixed(2);
+                            document.getElementById('leg_l').innerText = data.low.toFixed(2);
+                            document.getElementById('leg_c').innerText = data.close.toFixed(2);
+                        }}
+                    }}
+                }});
+
+                // --- DRAWING TOOLBAR LOGIC ---
+                let currentTool = 'cursor';
+                let drawings = [];
+                let isDrawing = false;
+                let startPoint = null;
+
+                const btns = {{
+                    cursor: document.getElementById('btn_cursor'),
+                    horiz: document.getElementById('btn_horiz'),
+                    trend: document.getElementById('btn_trend'),
+                    rect: document.getElementById('btn_rect'),
+                }};
+
+                function setTool(tool) {{
+                    currentTool = tool;
+                    Object.values(btns).forEach(b => b.classList.remove('active'));
+                    if (btns[tool]) btns[tool].classList.add('active');
+
+                    if (tool === 'cursor') {{
+                        canvas.style.pointerEvents = 'none';
+                        chart.applyOptions({{ handleScroll: true, handleScale: true }});
+                    }} else {{
+                        canvas.style.pointerEvents = 'auto';
+                        chart.applyOptions({{ handleScroll: false, handleScale: false }});
+                    }}
+                }}
+
+                btns.cursor.onclick = () => setTool('cursor');
+                btns.horiz.onclick = () => setTool('horiz');
+                btns.trend.onclick = () => setTool('trend');
+                btns.rect.onclick = () => setTool('rect');
+                document.getElementById('btn_clear').onclick = () => {{
+                    drawings = [];
+                    redrawDrawings();
+                }};
+
+                canvas.addEventListener('mousedown', e => {{
+                    if (currentTool === 'cursor') return;
+                    isDrawing = true;
+                    const rect = canvas.getBoundingClientRect();
+                    startPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
+                }});
+
+                canvas.addEventListener('mousemove', e => {{
+                    if (!isDrawing) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const currentPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
+                    redrawDrawings();
+                    drawShape(currentTool, startPoint, currentPoint, true);
+                }});
+
+                canvas.addEventListener('mouseup', e => {{
+                    if (!isDrawing) return;
+                    isDrawing = false;
+                    const rect = canvas.getBoundingClientRect();
+                    const endPoint = {{ x: e.clientX - rect.left, y: e.clientY - rect.top }};
+                    drawings.push({{ tool: currentTool, start: startPoint, end: endPoint }});
+                    redrawDrawings();
+                }});
+
+                function drawShape(tool, start, end, isPreview) {{
+                    ctx.save();
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2;
+                    if (isPreview) ctx.setLineDash([4, 4]);
+
+                    if (tool === 'horiz') {{
+                        // Straight horizontal support / resistance line
+                        ctx.beginPath();
+                        ctx.moveTo(0, start.y);
+                        ctx.lineTo(canvas.width, start.y);
+                        ctx.stroke();
+
+                        // Price tag pill
+                        ctx.fillStyle = '#38bdf8';
+                        ctx.fillRect(canvas.width - 60, start.y - 10, 58, 20);
+                        ctx.fillStyle = '#050811';
+                        ctx.font = 'bold 11px monospace';
+                        ctx.fillText('S/R LEVEL', canvas.width - 55, start.y + 4);
+                    }} else if (tool === 'trend') {{
+                        ctx.beginPath();
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                        ctx.stroke();
+                    }} else if (tool === 'rect') {{
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+                        ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
+                        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+                    }}
+                    ctx.restore();
+                }}
+
+                function redrawDrawings() {{
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    drawings.forEach(d => drawShape(d.tool, d.start, d.end, false));
+                }}
+
+                window.addEventListener('resize', resizeCanvas);
+                resizeCanvas();
+
+                // ⚡ 1-SECOND CLIENT-SIDE SMOOTH LIVE TICK STREAM (No Streamlit Jump)
+                let lastClose = rawCandles[rawCandles.length - 1].close;
+                setInterval(() => {{
+                    const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
+                    lastClose = parseFloat((lastClose + delta).toFixed(2));
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    candleSeries.update({{
+                        time: rawCandles[rawCandles.length - 1].time,
+                        open: rawCandles[rawCandles.length - 1].open,
+                        high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
+                        low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
+                        close: lastClose,
+                    }});
+                }}, 1000);
+            </script>
+            </body>
+            </html>
+            """
+            components.html(demat_studio_html, height=700)
+
+    except Exception as e:
+        st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
 # 📑 OPERATING MANUAL DOCUMENT
