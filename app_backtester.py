@@ -405,9 +405,10 @@ FULL_ASSETS = {
     "DOGE-USD": "Dogecoin (DOGE/USD)"
 }
 
+# Fully working TradingView Global Embed Mappings
 TV_MAP = {
-    "^NSEBANK": "NSE:BANKNIFTY",
-    "^NSEI": "NSE:NIFTY",
+    "^NSEBANK": "NSEIX:BANKNIFTY1!",
+    "^NSEI": "NSEIX:NIFTY1!",
     "RELIANCE.NS": "NSE:RELIANCE",
     "HDFCBANK.NS": "NSE:HDFCBANK",
     "TCS.NS": "NSE:TCS",
@@ -422,7 +423,6 @@ TV_MAP = {
     "DOGE-USD": "BINANCE:DOGEUSDT"
 }
 
-# Filter universe based on Tier
 if curr_tier == "Free Member":
     allowed_asset_keys = ["^NSEBANK", "^NSEI", "BTC-USD"]
     allowed_tf = ["15m", "1d"]
@@ -547,7 +547,7 @@ else:
     ])
 
 # ==============================================================================
-# 📊 TAB 1: LIVE DEMAT CHART STUDIO (TRADINGVIEW WITH LINE MAKING)
+# 📊 TAB 1: LIVE DEMAT CHART STUDIO (PERFECT MAPPING WITH LINE TOOLS)
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Interactive Charting Matrix")
@@ -560,9 +560,10 @@ with tab_tv_chart:
         demat_tf_view = st.selectbox("Interval", ["1", "5", "15", "60", "D"], index=2, key="demat_tf_sel")
     with col_c3:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"<span class='pulse-badge'>● LIVE {curr_tier.upper()} STREAM</span>", unsafe_allow_html=True)
+        is_curr_usd = demat_asset.endswith("-USD")
+        st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_curr_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
 
-    tv_symbol_code = TV_MAP.get(demat_asset, "NSE:BANKNIFTY")
+    tv_symbol_code = TV_MAP.get(demat_asset, "NSEIX:BANKNIFTY1!")
 
     # Embedded TradingView Advanced Real-Time Widget with full drawing toolbar
     tv_widget_html = f"""
@@ -578,7 +579,7 @@ with tab_tv_chart:
         "timezone": "Asia/Kolkata",
         "theme": "dark",
         "style": "1",
-        "locale": "en",
+        "locale": "in",
         "toolbar_bg": "#0f172a",
         "enable_publishing": false,
         "hide_top_toolbar": false,
@@ -872,7 +873,7 @@ if is_admin:
                             now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             completed = []
 
-                            # 1. Update running active trades (Check Milestone points & SL/Target)
+                            # 1. Update running active trades
                             current_active = load_active_trades()
                             st.session_state.active_radar_trades = current_active
 
