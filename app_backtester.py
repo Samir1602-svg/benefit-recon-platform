@@ -14,7 +14,7 @@ import time
 import requests
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & DUAL RADAR
+# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & OPTION RADAR
 # ==============================================================================
 st.set_page_config(
     page_title="SAM QUANTUM AI | Institutional Quant Engine",
@@ -166,7 +166,7 @@ if not st.session_state.authenticated and "uid" in query_params:
         st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
 
 # ==============================================================================
-# 🔐 AUTHENTICATION PORTAL (NO DEFAULT TEXT)
+# 🔐 AUTHENTICATION PORTAL (CLEAN INPUTS)
 # ==============================================================================
 if not st.session_state.authenticated:
     col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
@@ -190,7 +190,7 @@ if not st.session_state.authenticated:
         if auth_mode == "🔑 Terminal Sign In":
             with st.form("login_form"):
                 st.markdown("##### 🔒 Secure Terminal Authentication")
-                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID (e.g. admin)")
+                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID")
                 password = st.text_input("Quantum Security Key", type="password", value="", placeholder="Enter Security Key")
                 if st.form_submit_button("⚡ UNLOCK QUANTUM TERMINAL"):
                     users = st.session_state.users_db
@@ -281,6 +281,26 @@ def send_telegram_alert(message):
         return resp.status_code == 200, resp.text
     except Exception as e:
         return False, str(e)
+
+# ==============================================================================
+# 🎯 OPTION STRIKE AUTO-RESOLVER
+# ==============================================================================
+def resolve_atm_strike(symbol_key, spot_price, action_type):
+    if symbol_key == "^NSEBANK":
+        step = 100
+        atm = int(round(spot_price / step) * step)
+        opt_type = "CE" if "BUY" in action_type else "PE"
+        return f"BANKNIFTY {atm} {opt_type}"
+    elif symbol_key == "^NSEI":
+        step = 50
+        atm = int(round(spot_price / step) * step)
+        opt_type = "CE" if "BUY" in action_type else "PE"
+        return f"NIFTY {atm} {opt_type}"
+    elif symbol_key in ["RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
+        opt_type = "CE" if "BUY" in action_type else "PE"
+        return f"{symbol_key.replace('.NS', '')} {int(spot_price)} {opt_type}"
+    else:
+        return f"{symbol_key} SPOT (Futures / Perpetual)"
 
 # ==============================================================================
 # 🧮 INDICATORS ENGINE
@@ -408,11 +428,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 🛠️ 2. Strategy Engine")
-    strategy_type = st.selectbox(
-        "Quantitative Archetype",
-        STRATEGY_OPTIONS
-    )
-
+    strategy_type = st.selectbox("Quantitative Archetype", STRATEGY_OPTIONS)
     rsi_filter = st.checkbox("Require RSI 50-Level Momentum Filter", value=True)
 
     st.markdown("---")
@@ -445,13 +461,13 @@ st.markdown(f"""
 <div class="brand-header">
     <div>
         <h3 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono';">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Dual Autonomous Radar</span>
+        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Option Chain Live Radar</span>
     </div>
     <div style="text-align: right;">
         <span class="{'admin-badge' if is_admin else 'pulse-badge'}">
             {'👑 MASTER FOUNDER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
         </span><br>
-        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | SECURE FEED</span>
+        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | LIVE DATA SYNC</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -481,7 +497,7 @@ else:
     ])
 
 # ==============================================================================
-# 📑 OPERATING MANUAL DOCUMENT
+# 📑 COMPREHENSIVE OPERATING MANUAL
 # ==============================================================================
 manual_html_doc = """<!DOCTYPE html>
 <html lang="en">
@@ -545,7 +561,7 @@ manual_html_doc = """<!DOCTYPE html>
 if execute_btn or 'backtest_executed' in st.session_state:
     st.session_state.backtest_executed = True
     
-    with st.spinner("⏳ Loading institutional price matrix..."):
+    with st.spinner("⏳ Loading institutional price matrix and calculating option executions..."):
         try:
             df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
             if df_raw.empty or len(df_raw) < 10:
@@ -577,20 +593,22 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
                     if opt_move >= target_val:
                         pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
-                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Instrument': position['contract'], 'Type': position['type'], 'Entry Spot': position['entry'], 'Exit Spot': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
                         position = None
                         last_bar = i
                     elif opt_move <= -sl_val:
                         pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
-                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
+                        trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Instrument': position['contract'], 'Type': position['type'], 'Entry Spot': position['entry'], 'Exit Spot': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
                         position = None
                         last_bar = i
                 elif last_bar != i:
                     if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
-                        position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
+                        contract = resolve_atm_strike(symbol, curr_spot, "BUY")
+                        position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl, 'contract': contract}
                         last_bar = i
                     elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
-                        position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
+                        contract = resolve_atm_strike(symbol, curr_spot, "SELL")
+                        position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl, 'contract': contract}
                         last_bar = i
 
             with tab_chart:
@@ -649,7 +667,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
             with tab_trades:
                 if trades:
-                    st.markdown("#### 📜 Trade Execution Audit Trail")
+                    st.markdown("#### 📜 Trade Execution Audit Trail (Option Strikes Resolved)")
                     st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
             with tab_reports:
@@ -702,10 +720,9 @@ else:
 # ==============================================================================
 if is_admin:
     with tab_dual_radar:
-        st.markdown("### ⚡ Live Opportunity Radar: AI Autopilot & Manual Control")
-        st.caption("Operate via full 60-second AI Autopilot or switch to Manual Custom Dispatcher at any time.")
+        st.markdown("### ⚡ Live Opportunity Radar: AI Autopilot & Option Chain Control")
+        st.caption("Operate via full AI Autopilot or dispatch custom CE/PE Option Chain setups directly to Telegram.")
 
-        # Real-time Asset & Market State
         col_mr1, col_mr2 = st.columns([1.5, 1])
         with col_mr1:
             radar_asset = st.selectbox("Target Market Stream", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="dual_rad_asset")
@@ -728,23 +745,21 @@ if is_admin:
             rd_sl = st.number_input("Hard SL (" + ("Pts" if is_rd_idx else "%") + ")", value=20.0 if is_rd_idx else 1.0, step=5.0 if is_rd_idx else 0.2, key="dual_sl")
 
         st.markdown("---")
-
-        # 🚀 TWO CONTROL MODES
-        mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot Engine (Auto Scan & Trail)", "✍️ Mode 2: Manual Custom Dispatcher (Founder Analysis)"], horizontal=True)
+        mode_select = st.radio("Select Operating Mode", ["🤖 Mode 1: Full AI Autopilot (Option Chain Resolved)", "✍️ Mode 2: Manual Option Chain Dispatcher (Founder Analysis)"], horizontal=True)
 
         # ----------------------------------------------------
         # 🤖 MODE 1: FULL AI AUTOPILOT
         # ----------------------------------------------------
         if "Mode 1" in mode_select:
-            st.markdown("##### 🤖 Mode 1: Autonomous AI Pilot Engine")
-            st.write("Turn ON in the morning (e.g. 09:15 AM). AI continuously audits live setups and manages running positions automatically.")
+            st.markdown("##### 🤖 Mode 1: Autonomous AI Option Pilot Engine")
+            st.write("AI continuously audits live momentum, selects exact **ATM CE / PE Option Strike**, and posts clean human-readable alerts.")
             
             auto_pilot_toggle = st.toggle("⚡ ACTIVATE LIVE AUTONOMOUS PILOT LOOP", value=False, key="auto_pilot_switch")
             
             if auto_pilot_toggle:
                 st.success("🟢 AI Autopilot is ACTIVE. Monitoring market ticks in real-time...")
                 if not is_open:
-                    st.info(f"Market Gatekeeper: {gate_info}. Waiting for market open.")
+                    st.info(f"Market Gatekeeper: {gate_info}. Waiting for live market session.")
                 else:
                     try:
                         df_live = yf.download(radar_asset, period="2d", interval=radar_tf, progress=False)
@@ -762,16 +777,17 @@ if is_admin:
                             st_n = int(c_bar['ST_DIR'])
                             st_p = int(p_bar['ST_DIR'])
 
-                            # 1. Update running active trades
                             now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
                             completed = []
 
+                            # 1. Active Trades Check
                             for r_sym, r_trade in list(st.session_state.active_radar_trades.items()):
                                 live_spot = spot
                                 entry_p = r_trade['entry']
                                 tp_p = r_trade['target']
                                 sl_p = r_trade['sl']
                                 action = r_trade['action']
+                                contract_name = r_trade.get('contract', r_trade['asset_name'])
 
                                 target_hit = (live_spot >= tp_p) if "BUY" in action else (live_spot <= tp_p)
                                 sl_hit = (live_spot <= sl_p) if "BUY" in action else (live_spot >= sl_p)
@@ -781,42 +797,42 @@ if is_admin:
 
                                 if target_hit:
                                     tg_done = (
-                                        f"🎯 <b>TARGET COMPLETED - BOOK FULL PROFIT</b> 🎯\n"
+                                        f"🎯 <b>TRADE COMPLETED — BOOK FULL PROFIT</b>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Asset:</b> {r_trade['asset_name']}\n"
-                                        f"✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n"
-                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
-                                        f"⏱ <b>Completed At:</b> {now_ist}\n"
+                                        f"📊 <b>Setup:</b> {contract_name}\n"
+                                        f"✅ <b>Status:</b> Full Target Achieved 🚀\n"
+                                        f"💵 <b>Spot Move:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
+                                        f"⏱ <b>Time:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"🤖 <i>Accountability Logged via Sam Quantum AI</i>"
+                                        f"💡 <i>Secure profits & close open lots.</i>"
                                     )
                                     send_telegram_alert(tg_done)
                                     completed.append(r_sym)
 
                                 elif sl_hit:
                                     tg_sl = (
-                                        f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n"
+                                        f"🛑 <b>STOP LOSS HIT — EXIT POSITION</b>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Asset:</b> {r_trade['asset_name']}\n"
-                                        f"🛑 <b>Status:</b> <code>SL TRIGGERED</code>\n"
-                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
-                                        f"⏱ <b>Closed At:</b> {now_ist}\n"
+                                        f"📊 <b>Setup:</b> {contract_name}\n"
+                                        f"🛑 <b>Status:</b> Hard SL Hit. Risk Controlled.\n"
+                                        f"💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f}\n"
+                                        f"⏱ <b>Time:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"🤖 <i>Risk Managed via Sam Quantum AI</i>"
+                                        f"💡 <i>Exited at defined risk. Onto next setup.</i>"
                                     )
                                     send_telegram_alert(tg_sl)
                                     completed.append(r_sym)
 
                                 elif can_trail and not r_trade['trailed']:
                                     tg_trail = (
-                                        f"⚡ <b>UPDATE: SHIFT SL TO BREAKEVEN</b> ⚡\n"
+                                        f"⚡ <b>UPDATE: TRAIL SL TO COST (ZERO RISK)</b>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Asset:</b> {r_trade['asset_name']}\n"
+                                        f"📊 <b>Setup:</b> {contract_name}\n"
                                         f"📈 <b>Price Moved:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
-                                        f"🛡️ <b>New Stop Loss:</b> {curr_sym}{entry_p:,.2f} <code>(COST / ZERO RISK)</code>\n"
+                                        f"🛡️ <b>New Stop Loss:</b> Cost Price <code>({curr_sym}{entry_p:,.2f})</code>\n"
                                         f"⏱ <b>Time:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"🤖 <i>Locking gains & eliminating risk.</i>"
+                                        f"💡 <i>Trade is now completely risk-free. Hold for Target!</i>"
                                     )
                                     send_telegram_alert(tg_trail)
                                     st.session_state.active_radar_trades[r_sym]['sl'] = entry_p
@@ -826,7 +842,7 @@ if is_admin:
                             for c_item in completed:
                                 del st.session_state.active_radar_trades[c_item]
 
-                            # 2. Check for New Setup Trigger
+                            # 2. Trigger New Setup
                             if radar_asset not in st.session_state.active_radar_trades:
                                 sig = "NEUTRAL"
                                 conf = 70
@@ -844,6 +860,7 @@ if is_admin:
                                     conf = 92
 
                                 if sig != "NEUTRAL" and conf >= min_conf_single:
+                                    resolved_contract = resolve_atm_strike(radar_asset, spot, sig)
                                     if is_rd_idx:
                                         tp = spot + rd_target if "BUY" in sig else spot - rd_target
                                         sl = spot - rd_sl if "BUY" in sig else spot + rd_sl
@@ -854,22 +871,22 @@ if is_admin:
                                         risk_desc = f"+{rd_target}% | SL: -{rd_sl}%"
 
                                     tg_text = (
-                                        f"⚡ <b>SAM QUANTUM AI - AUTONOMOUS ALERT</b> ⚡\n"
+                                        f"⚡ <b>NEW QUANT SIGNAL TRIGGERED</b>\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Asset:</b> {asset_dict[radar_asset]}\n"
-                                        f"🎯 <b>Action:</b> <code>{sig}</code>\n"
-                                        f"💵 <b>Entry Spot:</b> {curr_sym}{spot:,.2f}\n"
+                                        f"📊 <b>Instrument:</b> <code>{resolved_contract}</code>\n"
+                                        f"🎯 <b>Action:</b> {sig}\n"
+                                        f"💵 <b>Current Spot:</b> {curr_sym}{spot:,.2f}\n"
                                         f"🎯 <b>Target:</b> {curr_sym}{tp:,.2f} ({risk_desc.split('|')[0].strip()})\n"
                                         f"🛑 <b>Stop Loss:</b> {curr_sym}{sl:,.2f} ({risk_desc.split('|')[1].strip()})\n"
-                                        f"⏱ <b>Time:</b> {now_ist} | 🧠 <b>Edge:</b> {conf}%\n"
+                                        f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> {conf}%\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"🤖 <i>Dispatched via 24/7 Quantum AI Pilot</i>"
+                                        f"💡 <i>Trail SL to cost once 50% target velocity is achieved.</i>"
                                     )
                                     send_telegram_alert(tg_text)
                                     st.session_state.active_radar_trades[radar_asset] = {
-                                        "asset_name": asset_dict[radar_asset], "action": sig,
-                                        "entry": spot, "target": tp, "sl": sl, "status": "LIVE IN POSITION",
-                                        "trailed": False, "time": now_ist, "sym": curr_sym
+                                        "asset_name": asset_dict[radar_asset], "contract": resolved_contract,
+                                        "action": sig, "entry": spot, "target": tp, "sl": sl,
+                                        "status": "LIVE IN POSITION", "trailed": False, "time": now_ist, "sym": curr_sym
                                     }
                     except Exception:
                         pass
@@ -878,21 +895,29 @@ if is_admin:
                     st.rerun()
 
         # ----------------------------------------------------
-        # ✍️ MODE 2: MANUAL CUSTOM DISPATCHER (WITH DROPDOWN PRESETS)
+        # ✍️ MODE 2: MANUAL OPTION CHAIN DISPATCHER
         # ----------------------------------------------------
         else:
-            st.markdown("##### ✍️ Mode 2: Manual Founder Setup & Broadcast")
-            st.write("Post your personal trade setups, option strikes, and custom target/SL limits directly to Telegram.")
-            
+            st.markdown("##### ✍️ Mode 2: Manual Option Chain Setup & Dispatcher")
+            st.write("Select exact **CE / PE Option Chain Strike**, set premium entry price, and broadcast a clean trader-grade signal.")
+
             col_m1, col_m2 = st.columns(2)
             with col_m1:
-                man_action = st.selectbox("Action", ["BUY / CALL (CE) 🟢", "SELL / PUT (PE) 🔴"], key="man_act")
-                man_strike = st.text_input("Recommended Strike / Entry Price", placeholder="e.g. 52000 CE @ ₹280", key="man_strk")
+                man_opt_type = st.selectbox("Option Contract Type", ["CALL (CE) 🟢", "PUT (PE) 🔴"], key="man_opt_t")
+                if is_rd_idx:
+                    spot_ref = 57800 if radar_asset == "^NSEBANK" else 24250
+                    strike_step = 100 if radar_asset == "^NSEBANK" else 50
+                    generated_strikes = [f"{spot_ref + (i * strike_step)} {'CE' if 'CE' in man_opt_type else 'PE'}" for i in range(-5, 6)]
+                    custom_strike_choice = st.selectbox("Select Option Chain Strike", generated_strikes, index=5, key="man_strk_chain")
+                else:
+                    custom_strike_choice = st.text_input("Recommended Strike / Perpetual", value=f"{radar_asset} SPOT / PERP", key="man_strk_cust")
+                
+                man_entry_premium = st.text_input("Entry Premium Price (₹)", placeholder="e.g. Buy around ₹260 - ₹280", key="man_prem")
+
             with col_m2:
                 man_tp = st.text_input("Target Note", value=f"+{rd_target} Pts (1:2 R:R Trailing)", key="man_tp_txt")
                 man_sl = st.text_input("Hard Stop Loss Note", value=f"-{rd_sl} Pts Strict SL", key="man_sl_txt")
 
-            # 🎯 STRATEGY REASONING DROPDOWN (Matches Left Sidebar Engine + Custom Option)
             REASONING_PRESETS = [
                 "1. EMA Institutional Pullback (20/50 Trend Retest + RSI Momentum)",
                 "2. EMA Golden/Death Crossover (9/21 MA Acceleration + Volume)",
@@ -901,44 +926,44 @@ if is_admin:
                 "5. Volume Spike + Momentum Breakout (Institutional Buying)",
                 "6. VWAP Intraday Retest & Expansion Zone",
                 "7. Bollinger Band Dynamic Mean Reversion Bounce",
-                "8. ✍️ Custom Founder Strategy (Enter Manually)"
+                "8. ✍️ Custom Strategy (Enter Manually)"
             ]
             
             selected_preset = st.selectbox("Setup Reasoning / Strategy Engine", REASONING_PRESETS, index=0, key="man_preset_reason")
             
             if "Custom" in selected_preset:
-                man_note = st.text_input("Custom Reasoning Details", value="Key Support Bounce + Demand Zone Reversal", key="man_custom_note")
+                man_note = st.text_input("Custom Reasoning Details", value="Key Demand Zone Reversal + Volume Expansion", key="man_custom_note")
             else:
                 man_note = selected_preset.split(".")[1].strip()
 
             if st.button("🚀 BROADCAST FOUNDER SIGNAL TO TG", type="primary"):
                 now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
+                premium_line = f"\n💵 <b>Entry Price:</b> <code>{man_entry_premium}</code>" if man_entry_premium.strip() else ""
                 tg_manual = (
-                    f"⚡ <b>SAM QUANTUM AI - FOUNDER SETUP</b> ⚡\n"
+                    f"⚡ <b>FOUNDER TRADE SETUP ALERT</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Asset:</b> {asset_dict[radar_asset]}\n"
-                    f"🎯 <b>Action:</b> <code>{man_action}</code>\n"
-                    f"💵 <b>Price / Strike:</b> <code>{man_strike}</code>\n"
+                    f"📊 <b>Instrument:</b> <code>{asset_dict[radar_asset]} — {custom_strike_choice}</code>\n"
+                    f"🎯 <b>Action:</b> BUY {man_opt_type}{premium_line}\n"
                     f"🎯 <b>Target:</b> {man_tp}\n"
                     f"🛑 <b>Stop Loss:</b> {man_sl}\n"
-                    f"🔍 <b>Logic / Engine:</b> {man_note}\n"
-                    f"⏱ <b>Time:</b> {now_ist}\n"
+                    f"🔍 <b>Confluence:</b> {man_note}\n"
+                    f"⏱ <b>Trigger Time:</b> {now_ist}\n"
                     f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"👑 <i>Dispatched by Founder via Quantum Terminal</i>"
+                    f"💡 <i>Strict risk management. Shift SL to breakeven on momentum.</i>"
                 )
                 ok, resp = send_telegram_alert(tg_manual)
                 if ok:
-                    st.success("✅ Custom signal broadcasted instantly to @sam_quantum_signals!")
+                    st.success(f"✅ Trade setup for {custom_strike_choice} broadcasted to @sam_quantum_signals!")
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
         # Active accountability table
         st.markdown("---")
-        st.markdown("#### 🌐 Active Open Trades (Accountability Log)")
+        st.markdown("#### 🌐 Active Open Trades (Option Tracking Log)")
         if st.session_state.active_radar_trades:
             act_df = pd.DataFrame(list(st.session_state.active_radar_trades.values()))
             st.table(act_df[['asset_name', 'action', 'entry', 'target', 'sl', 'status', 'time']])
-            if st.button("🧹 Clear Completed Active Memory"):
+            if st.button("🧹 Clear Active Memory"):
                 st.session_state.active_radar_trades = {}
                 st.rerun()
         else:
