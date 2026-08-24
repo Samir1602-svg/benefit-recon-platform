@@ -25,6 +25,7 @@ st.set_page_config(
 
 DB_FILE = "users_db.json"
 SIGNALS_LOG_FILE = "ai_signals_history.json"
+ACTIVE_TRADES_FILE = "active_trades.json"
 
 DEFAULT_USERS = {
     "admin": {"pass": "sam@2026", "name": "Sam (Founder)", "phone": "9999999999", "tier": "Master Admin", "created_at": "2026-08-20"},
@@ -52,7 +53,6 @@ def load_signals_log():
     try:
         with open(SIGNALS_LOG_FILE, "r") as f:
             logs = json.load(f)
-        # 12-Hour Auto Purge
         now = datetime.now()
         valid_logs = []
         for l in logs:
@@ -70,6 +70,19 @@ def save_signals_log(logs):
     with open(SIGNALS_LOG_FILE, "w") as f:
         json.dump(logs, f, indent=4)
 
+def load_active_trades():
+    if not os.path.exists(ACTIVE_TRADES_FILE):
+        return {}
+    try:
+        with open(ACTIVE_TRADES_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_active_trades(trades):
+    with open(ACTIVE_TRADES_FILE, "w") as f:
+        json.dump(trades, f, indent=4)
+
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
 
@@ -77,7 +90,7 @@ if 'signals_history' not in st.session_state:
     st.session_state.signals_history = load_signals_log()
 
 if 'active_radar_trades' not in st.session_state:
-    st.session_state.active_radar_trades = {}
+    st.session_state.active_radar_trades = load_active_trades()
 
 st.markdown("""
 <style>
@@ -487,7 +500,7 @@ with col_run1:
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
 
-# Tabs
+# Tabs Setup
 if is_admin:
     tab_chart, tab_metrics, tab_trades, tab_reports, tab_dual_radar, tab_ai_logbook, tab_admin_access = st.tabs([
         "📈 Pro Touch Chart", 
@@ -506,9 +519,7 @@ else:
         "📥 Download Reports"
     ])
 
-# ==============================================================================
-# 📑 OPERATING MANUAL DOCUMENT
-# ==============================================================================
+# Operating Manual Document
 manual_html_doc = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -736,7 +747,7 @@ if is_admin:
         # ----------------------------------------------------
         if "Mode 1" in mode_select:
             st.markdown("##### 🤖 Mode 1: Autonomous AI Pilot Engine")
-            st.write("Turn ON in the morning. AI calculates dynamic confidence, selects ideal strikes with estimated premiums, and logs execution.")
+            st.write("Turn ON in the morning. AI dynamically calculates premiums, fires crisp clean alerts, posts +10/20 pt updates, and syncs logbook instantly.")
             
             auto_pilot_toggle = st.toggle("⚡ ACTIVATE LIVE AUTONOMOUS PILOT LOOP", value=False, key="auto_pilot_switch")
             
@@ -765,85 +776,89 @@ if is_admin:
                             now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             completed = []
 
-                            # 1. Update running active trades
-                            for r_sym, r_trade in list(st.session_state.active_radar_trades.items()):
+                            # 1. Update running active trades (Check Milestone points & SL/Target)
+                            current_active = load_active_trades()
+                            st.session_state.active_radar_trades = current_active
+
+                            for r_sym, r_trade in list(current_active.items()):
                                 live_spot = spot
                                 entry_p = r_trade['entry']
                                 tp_p = r_trade['target']
                                 sl_p = r_trade['sl']
                                 action = r_trade['action']
                                 strk_info = r_trade.get('strike_info', '')
+                                prem_entry = r_trade.get('premium_entry', int(entry_p * 0.007))
+                                last_milestone = r_trade.get('last_milestone', 0)
 
                                 target_hit = (live_spot >= tp_p) if "BUY" in action else (live_spot <= tp_p)
                                 sl_hit = (live_spot <= sl_p) if "BUY" in action else (live_spot >= sl_p)
 
-                                halfway = entry_p + ((tp_p - entry_p) * 0.5) if "BUY" in action else entry_p - ((entry_p - tp_p) * 0.5)
-                                can_trail = (live_spot >= halfway) if "BUY" in action else (live_spot <= halfway)
+                                spot_move = (live_spot - entry_p) if "BUY" in action else (entry_p - live_spot)
+                                cur_prem = int(prem_entry + (spot_move * 0.5))
+
+                                # Check 10-Point Milestones (+10, +20, +30...)
+                                if spot_move >= last_milestone + 10 and not target_hit and not sl_hit:
+                                    pts_up = int(last_milestone + 10)
+                                    cur_prem_disp = int(prem_entry + pts_up)
+                                    tg_update = f"<b>{cur_prem_disp} 🔥🔥</b>\n\n<b>++</b>\n\n<i>(+{pts_up} Points Gain on {strk_info})</i>"
+                                    send_telegram_alert(tg_update)
+                                    r_trade['last_milestone'] = pts_up
+                                    current_active[r_sym] = r_trade
+                                    save_active_trades(current_active)
 
                                 if target_hit:
                                     tg_done = (
                                         f"🎯 <b>TARGET COMPLETED - BOOK FULL PROFIT</b> 🎯\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Instrument:</b> {strk_info}\n"
+                                        f"📊 <b>{strk_info}</b>\n"
                                         f"✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n"
-                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
+                                        f"💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f} (~₹{cur_prem} Premium)\n"
                                         f"⏱ <b>Completed At:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
                                         f"🤖 <i>Accountability Logged via Sam Quantum AI</i>"
                                     )
                                     send_telegram_alert(tg_done)
-                                    # Update logbook
-                                    for item in st.session_state.signals_history:
+                                    logs = load_signals_log()
+                                    for item in logs:
                                         if item.get("id") == r_trade.get("log_id"):
                                             item["status"] = "TARGET HIT 🎯"
                                             item["exit_price"] = live_spot
-                                    save_signals_log(st.session_state.signals_history)
+                                    save_signals_log(logs)
+                                    st.session_state.signals_history = logs
                                     completed.append(r_sym)
 
                                 elif sl_hit:
                                     tg_sl = (
                                         f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Instrument:</b> {strk_info}\n"
+                                        f"📊 <b>{strk_info}</b>\n"
                                         f"🛑 <b>Status:</b> <code>SL TRIGGERED</code>\n"
-                                        f"💵 <b>Entry:</b> {curr_sym}{entry_p:,.2f} ➔ <b>Exit:</b> {curr_sym}{live_spot:,.2f}\n"
+                                        f"💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f}\n"
                                         f"⏱ <b>Closed At:</b> {now_ist}\n"
                                         f"━━━━━━━━━━━━━━━━━━━━━\n"
                                         f"🤖 <i>Risk Managed via Sam Quantum AI</i>"
                                     )
                                     send_telegram_alert(tg_sl)
-                                    for item in st.session_state.signals_history:
+                                    logs = load_signals_log()
+                                    for item in logs:
                                         if item.get("id") == r_trade.get("log_id"):
                                             item["status"] = "SL HIT 🛑"
                                             item["exit_price"] = live_spot
-                                    save_signals_log(st.session_state.signals_history)
+                                    save_signals_log(logs)
+                                    st.session_state.signals_history = logs
                                     completed.append(r_sym)
 
-                                elif can_trail and not r_trade['trailed']:
-                                    tg_trail = (
-                                        f"⚡ <b>UPDATE: SHIFT SL TO BREAKEVEN</b> ⚡\n"
-                                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Instrument:</b> {strk_info}\n"
-                                        f"📈 <b>Spot Moved:</b> {curr_sym}{entry_p:,.2f} ➔ {curr_sym}{live_spot:,.2f}\n"
-                                        f"🛡️ <b>New Stop Loss:</b> {curr_sym}{entry_p:,.2f} <code>(COST / ZERO RISK)</code>\n"
-                                        f"⏱ <b>Time:</b> {now_ist}\n"
-                                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"🤖 <i>Locking gains & eliminating risk.</i>"
-                                    )
-                                    send_telegram_alert(tg_trail)
-                                    st.session_state.active_radar_trades[r_sym]['sl'] = entry_p
-                                    st.session_state.active_radar_trades[r_sym]['trailed'] = True
-                                    st.session_state.active_radar_trades[r_sym]['status'] = "TRAILED TO BREAKEVEN"
-
                             for c_item in completed:
-                                del st.session_state.active_radar_trades[c_item]
+                                if c_item in current_active:
+                                    del current_active[c_item]
+                            save_active_trades(current_active)
+                            st.session_state.active_radar_trades = current_active
 
-                            # 2. Check for New Setup Trigger (Dynamic Score Calculation)
-                            if radar_asset not in st.session_state.active_radar_trades:
+                            # 2. Check for New Setup Trigger
+                            if radar_asset not in current_active:
                                 sig = "NEUTRAL"
                                 conf = 50
                                 
-                                # Dynamic Score Calculation
                                 if ema20_v > ema50_v and spot > ema20_v:
                                     conf_score = 80 + int(min(15, (rsi_v - 50) * 1.2)) if rsi_v > 50 else 65
                                     if rsi_v > 54:
@@ -861,68 +876,72 @@ if is_admin:
                                     sig = "SELL / PUT (PE) 🔴"
                                     conf = 92
 
-                                # Trigger only if meeting user's threshold
                                 if sig != "NEUTRAL" and conf >= min_conf_single:
-                                    # Calculate Strike & Estimated Premium
+                                    today = datetime.now()
+                                    thursday = today + timedelta((3 - today.weekday()) % 7)
+                                    exp_tag = thursday.strftime("%d %b").upper()
+
                                     if radar_asset == "^NSEBANK":
                                         atm_strike = int(round(spot / 100.0) * 100)
                                         opt_type = "CE" if "BUY" in sig else "PE"
-                                        strk_name = f"BANKNIFTY {atm_strike} {opt_type}"
-                                        est_premium = f"₹{int(spot * 0.007):,.0f}" # realistic est. ATM premium
+                                        strk_name = f"BANKNIFTY {atm_strike} {opt_type} ({exp_tag})"
+                                        base_prem = int(spot * 0.007)
                                     elif radar_asset == "^NSEI":
                                         atm_strike = int(round(spot / 50.0) * 50)
                                         opt_type = "CE" if "BUY" in sig else "PE"
-                                        strk_name = f"NIFTY {atm_strike} {opt_type}"
-                                        est_premium = f"₹{int(spot * 0.005):,.0f}"
+                                        strk_name = f"NIFTY {atm_strike} {opt_type} ({exp_tag})"
+                                        base_prem = int(spot * 0.005)
                                     else:
-                                        strk_name = asset_dict[radar_asset]
-                                        est_premium = f"{curr_sym}{spot:,.2f}"
+                                        strk_name = f"{asset_dict[radar_asset]} ({exp_tag})"
+                                        base_prem = int(spot)
 
                                     if is_rd_idx:
                                         tp = spot + rd_target if "BUY" in sig else spot - rd_target
                                         sl = spot - rd_sl if "BUY" in sig else spot + rd_sl
-                                        risk_desc = f"+{rd_target} Pts | SL: -{rd_sl} Pts"
+                                        tp_prem = int(base_prem + (rd_target * 0.5))
+                                        sl_prem = int(base_prem - (rd_sl * 0.5))
                                     else:
                                         tp = spot * (1 + (rd_target / 100.0)) if "BUY" in sig else spot * (1 - (rd_target / 100.0))
                                         sl = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
-                                        risk_desc = f"+{rd_target}% | SL: -{rd_sl}%"
+                                        tp_prem = int(base_prem * (1 + (rd_target / 100.0)))
+                                        sl_prem = int(base_prem * (1 - (rd_sl / 100.0)))
 
                                     log_id = f"{radar_asset}_{int(time.time())}"
 
                                     tg_text = (
-                                        f"⚡ <b>NEW QUANT SIGNAL TRIGGERED</b>\n"
-                                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"📊 <b>Instrument:</b> <code>{strk_name}</code> (Est. Prem: {est_premium})\n"
-                                        f"🎯 <b>Action:</b> <code>{sig}</code>\n"
-                                        f"💵 <b>Current Spot:</b> {curr_sym}{spot:,.2f}\n"
-                                        f"🎯 <b>Target:</b> {curr_sym}{tp:,.2f} ({risk_desc.split('|')[0].strip()})\n"
-                                        f"🛑 <b>Stop Loss:</b> {curr_sym}{sl:,.2f} ({risk_desc.split('|')[1].strip()})\n"
-                                        f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> <code>{conf}% Verified</code>\n"
-                                        f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                        f"💡 <i>Trail SL to cost once 50% target velocity is achieved.</i>"
+                                        f"📊 <b>{strk_name}</b>\n\n"
+                                        f"📈 <b>BUY ABOVE {base_prem}</b>\n\n"
+                                        f"🎯 <b>TARGET {tp_prem} | {tp_prem + 30}</b>\n\n"
+                                        f"☠️ <b>SL - {sl_prem}</b>\n\n"
+                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
                                     )
                                     send_telegram_alert(tg_text)
                                     
-                                    # Save to Active and History
-                                    st.session_state.active_radar_trades[radar_asset] = {
+                                    current_active[radar_asset] = {
                                         "asset_name": asset_dict[radar_asset], "strike_info": strk_name,
                                         "action": sig, "entry": spot, "target": tp, "sl": sl,
+                                        "premium_entry": base_prem, "last_milestone": 0,
                                         "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
                                         "sym": curr_sym, "log_id": log_id
                                     }
+                                    save_active_trades(current_active)
+                                    st.session_state.active_radar_trades = current_active
                                     
                                     new_log_entry = {
                                         "id": log_id, "time": now_ist, "raw_time": now_raw,
                                         "instrument": strk_name, "action": sig, "entry_spot": spot,
-                                        "target": tp, "sl": sl, "confidence": f"{conf}%", "status": "LIVE RUNNING",
+                                        "target": f"₹{tp_prem} ({curr_sym}{tp:,.1f})", "sl": f"₹{sl_prem} ({curr_sym}{sl:,.1f})",
+                                        "confidence": f"{conf}%", "status": "LIVE RUNNING",
                                         "exit_price": "-"
                                     }
-                                    st.session_state.signals_history.insert(0, new_log_entry)
-                                    save_signals_log(st.session_state.signals_history)
+                                    logs = load_signals_log()
+                                    logs.insert(0, new_log_entry)
+                                    save_signals_log(logs)
+                                    st.session_state.signals_history = logs
                     except Exception:
                         pass
                     
-                    time.sleep(5)
+                    time.sleep(4)
                     st.rerun()
 
         # ----------------------------------------------------
@@ -930,9 +949,8 @@ if is_admin:
         # ----------------------------------------------------
         else:
             st.markdown("##### ✍️ Mode 2: Demat-Style Option Chain Strike Selector")
-            st.write("Select verified strikes from the live option matrix or specify custom premium targets directly.")
+            st.write("Select verified strikes from the live option matrix and broadcast clean structured trade signals.")
 
-            # Live spot fetch for strike matrix
             try:
                 spot_df = yf.download(radar_asset, period="1d", interval="15m", progress=False)
                 curr_ref_spot = float(spot_df['Close'].iloc[-1]) if not spot_df.empty else 57700.0
@@ -944,12 +962,12 @@ if is_admin:
                 st.markdown("###### 🟢 CALL (CE) STRIKE MATRIX")
                 if radar_asset == "^NSEBANK":
                     base_s = int(round(curr_ref_spot / 100.0) * 100)
-                    ce_options = [f"BANKNIFTY {base_s - 200} CE (Deep ITM) @ ~₹420", f"BANKNIFTY {base_s - 100} CE (ITM) @ ~₹350", f"BANKNIFTY {base_s} CE (ATM) @ ~₹280", f"BANKNIFTY {base_s + 100} CE (OTM) @ ~₹210", f"BANKNIFTY {base_s + 200} CE (Far OTM) @ ~₹150"]
+                    ce_options = [f"BANKNIFTY {base_s - 200} CE @ 420", f"BANKNIFTY {base_s - 100} CE @ 350", f"BANKNIFTY {base_s} CE @ 280", f"BANKNIFTY {base_s + 100} CE @ 210", f"BANKNIFTY {base_s + 200} CE @ 150"]
                 elif radar_asset == "^NSEI":
                     base_s = int(round(curr_ref_spot / 50.0) * 50)
-                    ce_options = [f"NIFTY {base_s - 100} CE (ITM) @ ~₹180", f"NIFTY {base_s} CE (ATM) @ ~₹120", f"NIFTY {base_s + 100} CE (OTM) @ ~₹70"]
+                    ce_options = [f"NIFTY {base_s - 100} CE @ 180", f"NIFTY {base_s} CE @ 120", f"NIFTY {base_s + 100} CE @ 70"]
                 else:
-                    ce_options = [f"{asset_dict[radar_asset]} LONG SPOT @ {curr_sym}{curr_ref_spot:,.2f}"]
+                    ce_options = [f"{asset_dict[radar_asset]} LONG @ {int(curr_ref_spot)}"]
                 
                 sel_ce = st.selectbox("Select Call (CE) Strike", ce_options, key="sel_ce_strike")
 
@@ -957,12 +975,12 @@ if is_admin:
                 st.markdown("###### 🔴 PUT (PE) STRIKE MATRIX")
                 if radar_asset == "^NSEBANK":
                     base_s = int(round(curr_ref_spot / 100.0) * 100)
-                    pe_options = [f"BANKNIFTY {base_s + 200} PE (Deep ITM) @ ~₹420", f"BANKNIFTY {base_s + 100} PE (ITM) @ ~₹350", f"BANKNIFTY {base_s} PE (ATM) @ ~₹280", f"BANKNIFTY {base_s - 100} PE (OTM) @ ~₹210", f"BANKNIFTY {base_s - 200} PE (Far OTM) @ ~₹150"]
+                    pe_options = [f"BANKNIFTY {base_s + 200} PE @ 420", f"BANKNIFTY {base_s + 100} PE @ 350", f"BANKNIFTY {base_s} PE @ 280", f"BANKNIFTY {base_s - 100} PE @ 210", f"BANKNIFTY {base_s - 200} PE @ 150"]
                 elif radar_asset == "^NSEI":
                     base_s = int(round(curr_ref_spot / 50.0) * 50)
-                    pe_options = [f"NIFTY {base_s + 100} PE (ITM) @ ~₹180", f"NIFTY {base_s} PE (ATM) @ ~₹120", f"NIFTY {base_s - 100} PE (OTM) @ ~₹70"]
+                    pe_options = [f"NIFTY {base_s + 100} PE @ 180", f"NIFTY {base_s} PE @ 120", f"NIFTY {base_s - 100} PE @ 70"]
                 else:
-                    pe_options = [f"{asset_dict[radar_asset]} SHORT SPOT @ {curr_sym}{curr_ref_spot:,.2f}"]
+                    pe_options = [f"{asset_dict[radar_asset]} SHORT @ {int(curr_ref_spot)}"]
                 
                 sel_pe = st.selectbox("Select Put (PE) Strike", pe_options, key="sel_pe_strike")
 
@@ -972,8 +990,9 @@ if is_admin:
                 final_strike_chosen = sel_ce if "CALL" in man_action else sel_pe
                 st.info(f"Active Selected Instrument: **{final_strike_chosen}**")
             with col_ma2:
-                man_tp = st.text_input("Target Note", value=f"+{rd_target} Pts (1:2 R:R Trailing)", key="man_tp_txt")
-                man_sl = st.text_input("Hard Stop Loss Note", value=f"-{rd_sl} Pts Strict SL", key="man_sl_txt")
+                man_buy_price = st.number_input("Buy Above Price (₹)", value=int(final_strike_chosen.split('@')[-1].strip()) if '@' in final_strike_chosen else 380)
+                man_tp = st.text_input("Target", value=f"{man_buy_price + 40} | {man_buy_price + 70}", key="man_tp_txt")
+                man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 30}", key="man_sl_txt")
 
             REASONING_PRESETS = [
                 "1. EMA Institutional Pullback (20/50 Trend Retest + RSI Momentum)",
@@ -988,47 +1007,62 @@ if is_admin:
             selected_preset = st.selectbox("Setup Reasoning / Strategy Engine", REASONING_PRESETS, index=0, key="man_preset_reason")
             man_note = selected_preset.split(".")[1].strip() if "Custom" not in selected_preset else st.text_input("Custom Reasoning Details", value="Key Support Bounce", key="man_custom_note")
 
-            if st.button("🚀 BROADCAST DEMAT SIGNAL TO TG", type="primary"):
+            if st.button("🚀 BROADCAST CLEAN DEMAT SIGNAL TO TG", type="primary"):
                 now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
                 now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_id = f"manual_{int(time.time())}"
 
+                strk_clean = final_strike_chosen.split('@')[0].strip()
+                today = datetime.now()
+                thursday = today + timedelta((3 - today.weekday()) % 7)
+                exp_tag = thursday.strftime("%d %b").upper()
+
                 tg_manual = (
-                    f"⚡ <b>NEW QUANT SIGNAL TRIGGERED</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Instrument:</b> <code>{final_strike_chosen}</code>\n"
-                    f"🎯 <b>Action:</b> <code>{man_action}</code>\n"
-                    f"💵 <b>Current Spot:</b> {curr_sym}{curr_ref_spot:,.2f}\n"
-                    f"🎯 <b>Target:</b> {man_tp}\n"
-                    f"🛑 <b>Stop Loss:</b> {man_sl}\n"
-                    f"🔍 <b>Logic / Engine:</b> {man_note}\n"
-                    f"⏱ <b>Trigger Time:</b> {now_ist} | 🧠 <b>Edge:</b> <code>Founder High-Conviction</code>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"💡 <i>Trail SL to cost once 50% target velocity is achieved.</i>"
+                    f"📊 <b>{strk_clean} ({exp_tag})</b>\n\n"
+                    f"📈 <b>BUY ABOVE {man_buy_price}</b>\n\n"
+                    f"🎯 <b>TARGET {man_tp}</b>\n\n"
+                    f"☠️ <b>SL - {man_sl}</b>\n\n"
+                    f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: Founder High-Conviction</i>"
                 )
                 ok, resp = send_telegram_alert(tg_manual)
                 if ok:
                     new_entry = {
                         "id": log_id, "time": now_ist, "raw_time": now_raw,
-                        "instrument": final_strike_chosen, "action": man_action, "entry_spot": curr_ref_spot,
-                        "target": man_tp, "sl": man_sl, "confidence": "Founder Conviction", "status": "BROADCASTED (LIVE)",
+                        "instrument": f"{strk_clean} ({exp_tag})", "action": man_action, "entry_spot": curr_ref_spot,
+                        "target": f"₹{man_tp}", "sl": f"₹{man_sl}", "confidence": "Founder Conviction", "status": "BROADCASTED (LIVE)",
                         "exit_price": "-"
                     }
-                    st.session_state.signals_history.insert(0, new_entry)
-                    save_signals_log(st.session_state.signals_history)
-                    st.success("✅ Signal broadcasted instantly to @sam_quantum_signals and logged to terminal!")
+                    logs = load_signals_log()
+                    logs.insert(0, new_entry)
+                    save_signals_log(logs)
+                    st.session_state.signals_history = logs
+
+                    current_active = load_active_trades()
+                    current_active[radar_asset] = {
+                        "asset_name": asset_dict[radar_asset], "strike_info": f"{strk_clean} ({exp_tag})",
+                        "action": man_action, "entry": curr_ref_spot, "target": curr_ref_spot + 50, "sl": curr_ref_spot - 20,
+                        "premium_entry": man_buy_price, "last_milestone": 0,
+                        "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
+                        "sym": curr_sym, "log_id": log_id
+                    }
+                    save_active_trades(current_active)
+                    st.session_state.active_radar_trades = current_active
+
+                    st.success("✅ Clean Signal broadcasted instantly to @sam_quantum_signals & logged to Terminal!")
                     time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
-        # Active Live Trades Table (Real-time in Terminal)
+        # Active Live Trades Table
         st.markdown("---")
         st.markdown("#### 🌐 Active Open Trades (Terminal Real-Time Monitor)")
-        if st.session_state.active_radar_trades:
-            act_df = pd.DataFrame(list(st.session_state.active_radar_trades.values()))
+        current_active = load_active_trades()
+        if current_active:
+            act_df = pd.DataFrame(list(current_active.values()))
             st.dataframe(act_df[['strike_info', 'action', 'entry', 'target', 'sl', 'status', 'time']], use_container_width=True)
             if st.button("🧹 Clear Completed Active Memory"):
+                save_active_trades({})
                 st.session_state.active_radar_trades = {}
                 st.rerun()
         else:
@@ -1039,8 +1073,11 @@ if is_admin:
         st.markdown("### 📑 Official Daily AI Signal Logbook & Execution Audit")
         st.caption("Complete running log of all signals dispatched today. Automatically purges history after 12 hours.")
 
-        if st.session_state.signals_history:
-            log_df = pd.DataFrame(st.session_state.signals_history)
+        logs = load_signals_log()
+        st.session_state.signals_history = logs
+
+        if logs:
+            log_df = pd.DataFrame(logs)
             disp_df = log_df[['time', 'instrument', 'action', 'entry_spot', 'target', 'sl', 'confidence', 'status', 'exit_price']]
             st.dataframe(disp_df, use_container_width=True, height=400)
 
@@ -1051,8 +1088,8 @@ if is_admin:
                 st.download_button("📥 DOWNLOAD TODAY'S SIGNAL LOGBOOK (CSV)", data=csv_signals.getvalue(), file_name=f"ai_signals_{datetime.now().strftime('%Y_%m_%d')}.csv", mime="text/csv")
             with col_dl2:
                 if st.button("🗑️ Manually Reset Today's Signal Log"):
-                    st.session_state.signals_history = []
                     save_signals_log([])
+                    st.session_state.signals_history = []
                     st.success("Logbook cleared.")
                     st.rerun()
         else:
