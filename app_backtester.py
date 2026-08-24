@@ -529,7 +529,7 @@ else:
     ])
 
 # ==============================================================================
-# 📊 TAB 1: INSTITUTIONAL REAL-TIME DEMAT LIVE CHART (ZERO POPUPS + LIVE TICK AUTO-REFRESH)
+# 📊 TAB 1: INSTITUTIONAL REAL-TIME DEMAT LIVE CHART (LIVE TICKS + LIVE TOP METRICS)
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Real-Time Interactive Chart Studio")
@@ -546,7 +546,6 @@ with tab_tv_chart:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"<span class='pulse-badge'>● PRICING: {'DOLLAR ($) & %' if is_usd else 'RUPEES (₹) & PTS'}</span>", unsafe_allow_html=True)
 
-    # 1. Fetch initial baseline candles
     try:
         period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
         df_demat = yf.download(live_chart_asset, period=period_str, interval=live_chart_tf, progress=False)
@@ -592,18 +591,12 @@ with tab_tv_chart:
 
             latest_c = candle_list[-1]
             prev_c = candle_list[-2] if len(candle_list) > 1 else latest_c
-            live_spot = latest_c['close']
-            chg_val = live_spot - prev_c['close']
-            pct_val = (chg_val / prev_c['close']) * 100
+            init_spot = latest_c['close']
+            init_high = float(df_demat['High'].max())
+            init_low = float(df_demat['Low'].min())
+            init_rsi = rsi_list[-1]['value']
 
-            # Real-time Header KPI cards
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            col_m1.metric("Live Market Spot", f"{curr_label}{live_spot:,.2f}", f"{'+' if chg_val >= 0 else ''}{chg_val:,.2f} ({pct_val:+.2f}%)")
-            col_m2.metric("Session High", f"{curr_label}{float(df_demat['High'].max()):,.2f}")
-            col_m3.metric("Session Low", f"{curr_label}{float(df_demat['Low'].min()):,.2f}")
-            col_m4.metric("RSI Momentum (14)", f"{rsi_list[-1]['value']:.1f}", "Bullish" if rsi_list[-1]['value'] > 50 else "Bearish")
-
-            # 2. Institutional Canvas Demat Chart with Left Vertical Toolbar & 1-Sec Client Live Tick Loop
+            # Institutional Real-Time Demat Studio (WITH SYNCHRONIZED TOP METRICS IN JS)
             demat_studio_html = f"""
             <!DOCTYPE html>
             <html>
@@ -616,17 +609,58 @@ with tab_tv_chart:
                     padding: 0;
                     background: #050811;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    color: #f1f5f9;
                     overflow: hidden;
                 }}
+                /* Synchronized Live Top Metric Cards Grid */
+                #metrics_grid {{
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 12px;
+                    margin-bottom: 12px;
+                }}
+                .metric-card {{
+                    background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(11, 17, 32, 0.95) 100%);
+                    border: 1px solid rgba(51, 65, 85, 0.8);
+                    border-radius: 12px;
+                    padding: 12px 16px;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                }}
+                .metric-label {{
+                    font-size: 11px;
+                    color: #94a3b8;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    margin-bottom: 4px;
+                }}
+                .metric-val {{
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 22px;
+                    font-weight: 800;
+                    color: #38bdf8;
+                    display: flex;
+                    align-items: baseline;
+                    gap: 8px;
+                }}
+                .metric-sub {{
+                    font-size: 12px;
+                    font-weight: 700;
+                }}
+                .sub-up {{ color: #10b981; }}
+                .sub-down {{ color: #ef4444; }}
+
                 #main_wrapper {{
                     display: flex;
                     width: 100%;
-                    height: 680px;
+                    height: 580px;
                     position: relative;
+                    border: 1px solid #1e293b;
+                    border-radius: 12px;
+                    overflow: hidden;
                 }}
                 /* Left-Side Vertical Demat Drawing Toolbar */
                 #left_toolbar {{
-                    width: 48px;
+                    width: 46px;
                     background: #0d1527;
                     border-right: 1px solid #1e293b;
                     display: flex;
@@ -637,8 +671,8 @@ with tab_tv_chart:
                     z-index: 100;
                 }}
                 .tool-btn {{
-                    width: 36px;
-                    height: 36px;
+                    width: 34px;
+                    height: 34px;
                     border-radius: 8px;
                     border: 1px solid transparent;
                     background: transparent;
@@ -674,13 +708,13 @@ with tab_tv_chart:
                 }}
                 #legend_box {{
                     position: absolute;
-                    top: 12px;
-                    left: 60px;
+                    top: 10px;
+                    left: 56px;
                     z-index: 60;
                     color: #94a3b8;
-                    font-size: 12px;
+                    font-size: 11.5px;
                     font-family: 'JetBrains Mono', monospace;
-                    background: rgba(13, 21, 39, 0.7);
+                    background: rgba(13, 21, 39, 0.85);
                     padding: 4px 10px;
                     border-radius: 6px;
                     border: 1px solid #1e293b;
@@ -689,8 +723,35 @@ with tab_tv_chart:
             </style>
             </head>
             <body>
+            
+            <!-- ⚡ Top Live Metric Cards (Synchronized in Real-Time) -->
+            <div id="metrics_grid">
+                <div class="metric-card">
+                    <div class="metric-label">Live Market Spot</div>
+                    <div class="metric-val">
+                        <span id="card_spot">{curr_label}{init_spot:,.2f}</span>
+                        <span class="metric-sub" id="card_chg">0.00 (0.00%)</span>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Session High</div>
+                    <div class="metric-val" id="card_high">{curr_label}{init_high:,.2f}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Session Low</div>
+                    <div class="metric-val" id="card_low">{curr_label}{init_low:,.2f}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">RSI Momentum (14)</div>
+                    <div class="metric-val">
+                        <span id="card_rsi">{init_rsi:.1f}</span>
+                        <span class="metric-sub sub-up" id="card_rsi_bias">{'Bullish' if init_rsi > 50 else 'Bearish'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 Main Chart Matrix with Left Toolbar -->
             <div id="main_wrapper">
-                <!-- Left Vertical Toolbar -->
                 <div id="left_toolbar">
                     <button class="tool-btn active" id="btn_cursor" title="4-Way Cursor / Pan Mode">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
@@ -710,7 +771,7 @@ with tab_tv_chart:
                 </div>
 
                 <div id="legend_box">
-                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span> | RSI: <span id="leg_rsi">-</span>
+                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | O: <span id="leg_o">-</span> H: <span id="leg_h">-</span> L: <span id="leg_l">-</span> C: <span id="leg_c">-</span>
                 </div>
 
                 <div id="chart_container">
@@ -731,7 +792,7 @@ with tab_tv_chart:
 
                 const chart = LightweightCharts.createChart(container, {{
                     width: container.clientWidth,
-                    height: 680,
+                    height: 580,
                     layout: {{
                         background: {{ color: '#050811' }},
                         textColor: '#94a3b8',
@@ -875,18 +936,16 @@ with tab_tv_chart:
                     if (isPreview) ctx.setLineDash([4, 4]);
 
                     if (tool === 'horiz') {{
-                        // Straight horizontal support / resistance line
                         ctx.beginPath();
                         ctx.moveTo(0, start.y);
                         ctx.lineTo(canvas.width, start.y);
                         ctx.stroke();
 
-                        // Price tag pill
                         ctx.fillStyle = '#38bdf8';
-                        ctx.fillRect(canvas.width - 60, start.y - 10, 58, 20);
+                        ctx.fillRect(canvas.width - 64, start.y - 10, 62, 20);
                         ctx.fillStyle = '#050811';
                         ctx.font = 'bold 11px monospace';
-                        ctx.fillText('S/R LEVEL', canvas.width - 55, start.y + 4);
+                        ctx.fillText('S/R LEVEL', canvas.width - 58, start.y + 4);
                     }} else if (tool === 'trend') {{
                         ctx.beginPath();
                         ctx.moveTo(start.x, start.y);
@@ -908,12 +967,21 @@ with tab_tv_chart:
                 window.addEventListener('resize', resizeCanvas);
                 resizeCanvas();
 
-                // ⚡ 1-SECOND CLIENT-SIDE SMOOTH LIVE TICK STREAM (No Streamlit Jump)
+                // ⚡ 1-SECOND CLIENT-SIDE SMOOTH LIVE TICK STREAM & SYNCHRONIZED TOP METRICS
                 let lastClose = rawCandles[rawCandles.length - 1].close;
+                let sessionHigh = {init_high};
+                let sessionLow = {init_low};
+                const prevClose = rawCandles.length > 1 ? rawCandles[rawCandles.length - 2].close : lastClose;
+                const currSymbol = "{curr_label}";
+
                 setInterval(() => {{
                     const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
                     lastClose = parseFloat((lastClose + delta).toFixed(2));
-                    const nowSec = Math.floor(Date.now() / 1000);
+                    
+                    if (lastClose > sessionHigh) sessionHigh = lastClose;
+                    if (lastClose < sessionLow) sessionLow = lastClose;
+
+                    // Update Lightweight Chart Live Candle
                     candleSeries.update({{
                         time: rawCandles[rawCandles.length - 1].time,
                         open: rawCandles[rawCandles.length - 1].open,
@@ -921,12 +989,26 @@ with tab_tv_chart:
                         low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
                         close: lastClose,
                     }});
+
+                    // Update Top Metric Cards in Real-Time
+                    const diff = lastClose - prevClose;
+                    const diffPct = (diff / prevClose) * 100;
+                    const isUp = diff >= 0;
+
+                    document.getElementById('card_spot').innerText = currSymbol + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+                    
+                    const chgEl = document.getElementById('card_chg');
+                    chgEl.innerText = (isUp ? '+' : '') + diff.toFixed(2) + ' (' + (isUp ? '+' : '') + diffPct.toFixed(2) + '%)';
+                    chgEl.className = 'metric-sub ' + (isUp ? 'sub-up' : 'sub-down');
+
+                    document.getElementById('card_high').innerText = currSymbol + sessionHigh.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+                    document.getElementById('card_low').innerText = currSymbol + sessionLow.toLocaleString('en-IN', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
                 }}, 1000);
             </script>
             </body>
             </html>
             """
-            components.html(demat_studio_html, height=700)
+            components.html(demat_studio_html, height=720)
 
     except Exception as e:
         st.error(f"Error initializing chart: {str(e)}")
