@@ -105,11 +105,9 @@ def get_dynamic_expiry_and_tag(asset_symbol):
     now_ist = datetime.now(ist)
     current_time = now_ist.time()
     
-    # 1. Crypto - Perpetual Contracts
     if asset_symbol.endswith("-USD"):
         return "PERPETUAL / NO EXPIRY", "CRYPTO"
     
-    # 2. MCX Commodities (Monthly Delivery)
     if asset_symbol in ["GC=F", "SI=F", "CL=F"]:
         cur_month = now_ist.month
         cur_year = now_ist.year
@@ -121,11 +119,9 @@ def get_dynamic_expiry_and_tag(asset_symbol):
         exp_date = datetime(cur_year, cur_month, 5)
         return f"FUTURES: {exp_date.strftime('%d %b %Y').upper()}", "MCX"
     
-    # 3. Indian Index & Equities (Weekly / Monthly Derivative Cycle)
-    target_weekday = 1 if asset_symbol in ["^NSEBANK", "^NSEI"] else 3  # Tuesday standard for NSE indices
+    target_weekday = 1 if asset_symbol in ["^NSEBANK", "^NSEI"] else 3
     days_ahead = (target_weekday - now_ist.weekday()) % 7
     
-    # If today is expiry day and session is over (past 15:30 IST), roll over to next week
     if days_ahead == 0 and current_time > dtime(15, 30):
         days_ahead = 7
         
@@ -1336,6 +1332,7 @@ if is_admin:
 
                             now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
                             now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            log_id = f"{radar_asset}_{int(time.time())}"
                             completed = []
 
                             current_active = load_active_trades()
@@ -1616,7 +1613,7 @@ if is_admin:
                 else:
                     st.error(f"❌ Telegram Error: {resp}")
 
-        # Active Live Trades Table (Real-time in Terminal)
+        # Active Live Trades Table
         st.markdown("---")
         st.markdown("#### 🌐 Active Open Trades (Terminal Real-Time Monitor)")
         current_active = load_active_trades()
