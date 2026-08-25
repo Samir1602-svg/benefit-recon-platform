@@ -108,6 +108,15 @@ if 'signals_history' not in st.session_state:
 if 'active_radar_trades' not in st.session_state:
     st.session_state.active_radar_trades = load_active_trades()
 
+if 'auto_pilot_running' not in st.session_state:
+    st.session_state.auto_pilot_running = False
+
+# Session persistence safe initialization
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'user_info' not in st.session_state:
+    st.session_state.user_info = None
+
 # ==============================================================================
 # 📡 TELEGRAM DISPATCHER
 # ==============================================================================
@@ -124,7 +133,7 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 GREEK OPTION CHAIN & DEMAT PREMIUM ENGINE
+# 🎯 GREEK OPTION CHAIN & DEMAT PREMIUM ENGINE
 # ==============================================================================
 def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
     diff = (strike_price - spot_price) if opt_type == "PE" else (spot_price - strike_price)
@@ -458,19 +467,101 @@ def background_scanner_loop():
                                 save_signals_log(logs)
         except Exception:
             pass
-        time.sleep(30) # Scans every 30 seconds smoothly in background
+        time.sleep(30)
 
-# Launch background thread once
 if 'bg_thread_started' not in st.session_state:
     st.session_state.bg_thread_started = True
     t = threading.Thread(target=background_scanner_loop, daemon=True)
     t.start()
 
+# Query parameters handling
+query_params = st.query_params
+if not st.session_state.authenticated and "uid" in query_params:
+    saved_uid = query_params["uid"]
+    users = st.session_state.users_db
+    if saved_uid in users:
+        st.session_state.authenticated = True
+        st.session_state.user_info = {**users[saved_uid], "id": saved_uid}
+
 # ==============================================================================
-# 🎛️ SIDEBAR CONTROLS
+# 🔐 AUTHENTICATION PORTAL
 # ==============================================================================
-curr_tier = st.session_state.user_info.get("tier", "Free Member")
-is_admin = curr_tier == "Master Admin" or st.session_state.user_info.get("id") == "admin"
+if not st.session_state.authenticated:
+    col_l1, col_l2, col_l3 = st.columns([1, 1.8, 1])
+    with col_l2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="glass-card" style="text-align: center;">
+            <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
+            <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px;">SAM QUANTUM AI</h2>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Automated Radar</p>
+            <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
+                <span class="pulse-badge">● LIVE QUANT FEED</span>
+                <span style="background: rgba(56, 189, 248, 0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; font-family:'JetBrains Mono';">256-BIT SECURE</span>
+            </div>
+            <hr style="border-color: rgba(30, 41, 59, 0.8); margin-top: 10px;">
+        </div>
+        """, unsafe_allow_html=True)
+        
+        auth_mode = st.radio("Mode", ["🔑 Terminal Sign In", "✨ Register Verified Account"], horizontal=True, label_visibility="collapsed")
+        
+        if auth_mode == "🔑 Terminal Sign In":
+            with st.form("login_form"):
+                st.markdown("##### 🔒 Secure Terminal Authentication")
+                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID (e.g. admin)")
+                password = st.text_input("Quantum Security Key", type="password", value="", placeholder="Enter Security Key")
+                if st.form_submit_button("⚡ UNLOCK QUANTUM TERMINAL"):
+                    users = st.session_state.users_db
+                    if username in users and users[username]["pass"] == password:
+                        st.session_state.authenticated = True
+                        st.session_state.user_info = {**users[username], "id": username}
+                        st.query_params["uid"] = username
+                        st.rerun()
+                    else:
+                        st.error("⛔ Authentication Denied: Invalid Security Key or User ID.")
+        else:
+            with st.form("signup_form"):
+                st.markdown("##### 🚀 Mandatory Quantitative Trader Profile")
+                new_name = st.text_input("Full Name *", placeholder="e.g. Samir Khan")
+                new_phone = st.text_input("10-Digit Mobile / WhatsApp Number *", placeholder="e.g. 9876543210")
+                new_user = st.text_input("Create Operator User ID *", placeholder="e.g. samir_quant")
+                new_pass = st.text_input("Create Access Password (Min 4 chars) *", type="password")
+                
+                if st.form_submit_button("🎉 VERIFY IDENTITY & UNLOCK ACCESS"):
+                    clean_phone = re.sub(r'[^0-9]', '', new_phone)
+                    if len(new_name.strip()) < 3:
+                        st.error("❌ Full Name is mandatory (Min 3 characters).")
+                    elif len(clean_phone) != 10:
+                        st.error("❌ Valid 10-digit Indian Mobile number is mandatory.")
+                    elif len(new_user.strip()) < 3:
+                        st.error("❌ Unique User ID is mandatory.")
+                    elif len(new_pass.strip()) < 4:
+                        st.error("❌ Access password must be at least 4 characters.")
+                    elif new_user in st.session_state.users_db:
+                        st.error("❌ User ID already registered. Please choose another.")
+                    else:
+                        st.session_state.users_db[new_user] = {
+                            "pass": new_pass,
+                            "name": new_name.strip(),
+                            "phone": clean_phone,
+                            "tier": "Free Member",
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        }
+                        save_users(st.session_state.users_db)
+                        st.session_state.authenticated = True
+                        st.session_state.user_info = {**st.session_state.users_db[new_user], "id": new_user}
+                        st.query_params["uid"] = new_user
+                        st.rerun()
+    st.stop()
+
+# ==============================================================================
+# 🎛️ SIDEBAR & ASSET ALLOCATION (SAFE INITIALIZATION - NO ATTRIBUTE ERRORS)
+# ==============================================================================
+user_info_dict = st.session_state.get("user_info") or {}
+curr_tier = user_info_dict.get("tier", "Free Member")
+curr_uid = user_info_dict.get("id", "")
+user_name = user_info_dict.get("name", "Authorized Operator")
+is_admin = curr_tier == "Master Admin" or curr_uid == "admin"
 
 FULL_ASSETS = {
     "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
@@ -505,7 +596,7 @@ with st.sidebar:
     st.markdown(f"""
     <div style="background:{'rgba(30, 27, 75, 0.8)' if is_admin else 'rgba(15, 23, 42, 0.8)'}; border:1px solid {'#818cf8' if is_admin else '#334155'}; border-radius:12px; padding:14px; margin-bottom:14px; backdrop-filter:blur(8px);">
         <span style="color:#38bdf8; font-weight:800; font-size:14px; font-family:'JetBrains Mono';">⚡ SAM QUANTUM OS</span><br>
-        <span style="color:#f8fafc; font-size:12px;">Operator: <b>{st.session_state.user_info['name']}</b></span><br>
+        <span style="color:#f8fafc; font-size:12px;">Operator: <b>{user_name}</b></span><br>
         <span class="{'admin-badge' if is_admin else 'pulse-badge'}" style="margin-top:6px;">
             {'👑 MASTER FOUNDER' if is_admin else f'● {curr_tier.upper()}'}
         </span>
@@ -525,7 +616,7 @@ with st.sidebar:
     timeframe = st.selectbox("Resolution Stream", allowed_tf, index=0)
 
 # ==============================================================================
-# 🚀 MAIN DASHBOARD & TAB ARCHITECTURE
+# 🚀 MAIN DASHBOARD & TABS
 # ==============================================================================
 st.markdown(f"""
 <div class="brand-header">
@@ -563,7 +654,7 @@ else:
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Interactive Chart Studio")
-    st.caption("Switch between Groww-style Mountain Glow and Pro Candlestick. Click to place Support/Resistance lines with individual select & drag capabilities.")
+    st.caption("Switch between Groww-style Mountain Glow and Pro Candlestick. Support & Resistance price levels stick permanently during zoom/pan.")
 
     col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
     with col_dc1:
@@ -613,7 +704,6 @@ with tab_tv_chart:
             init_low = float(df_demat['Low'].min())
             init_rsi = float(df_demat['RSI'].iloc[-1])
 
-            # Interactive Chart Studio with Groww Mountain Glow vs. Candlestick
             demat_studio_html = f"""
             <!DOCTYPE html>
             <html>
@@ -731,7 +821,6 @@ with tab_tv_chart:
                     }},
                 }});
 
-                // 1. Groww-Style Mountain Glow Area Series
                 const areaSeries = chart.addAreaSeries({{
                     topColor: 'rgba(56, 189, 248, 0.4)',
                     bottomColor: 'rgba(56, 189, 248, 0.0)',
@@ -739,7 +828,6 @@ with tab_tv_chart:
                     lineWidth: 2.5,
                 }});
 
-                // 2. Pro Candlestick Series
                 const candleSeries = chart.addCandlestickSeries({{
                     upColor: '#10b981', downColor: '#ef4444',
                     borderUpColor: '#10b981', borderDownColor: '#ef4444',
@@ -761,7 +849,6 @@ with tab_tv_chart:
                     candleSeries.applyOptions({{ visible: isCandleView }});
                 }};
 
-                // Crosshair Legend updates
                 chart.subscribeCrosshairMove(param => {{
                     if (param.time) {{
                         const d = new Date(param.time * 1000);
@@ -773,7 +860,6 @@ with tab_tv_chart:
                     }}
                 }});
 
-                // --- NATIVE PRICE LINES (NEVER DETACH DURING ZOOM / PAN) ---
                 let currentTool = 'cursor';
                 let priceLines = [];
 
@@ -820,7 +906,6 @@ with tab_tv_chart:
                     }}
                 }});
 
-                // 1-Sec Live Tick Stream
                 let lastClose = rawCandles[rawCandles.length - 1].close;
                 setInterval(() => {{
                     const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
@@ -940,7 +1025,6 @@ with tab_manual_terminal:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"###### 📊 Live Spot: `{curr_sym}{curr_ref_spot:,.2f}`")
 
-    # 1. Indian Markets (True 3-Column Demat Option Chain)
     if man_asset in ["^NSEBANK", "^NSEI"]:
         step = 100 if man_asset == "^NSEBANK" else 50
         atm_s = int(round(curr_ref_spot / float(step)) * step)
@@ -969,7 +1053,6 @@ with tab_manual_terminal:
         inst_name = f"{'BANKNIFTY' if man_asset == '^NSEBANK' else 'NIFTY'} {sel_strike} {clean_type} ({exp_tag})"
         auto_buy_price = calculate_demat_premium(curr_ref_spot, sel_strike, clean_type, man_asset)
 
-    # 2. Crypto & Commodities
     else:
         exp_tag, cat = get_dynamic_expiry_and_tag(man_asset)
         inst_name = f"{asset_dict[man_asset]} ({exp_tag})"
