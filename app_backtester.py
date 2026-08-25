@@ -295,7 +295,7 @@ def calc_indicators(df, params):
     return d
 
 # ==============================================================================
-# 🤖 24/7 INDEPENDENT BACKGROUND WORKER THREAD
+# 🤖 24/7 BACKGROUND WORKER (ACCURATE SHORT & LONG MILESTONE CALCULATION)
 # ==============================================================================
 def background_scanner_loop():
     while True:
@@ -333,6 +333,7 @@ def background_scanner_loop():
                         current_active = load_active_trades()
                         completed = []
                         
+                        # 1. Update running trades with Accurate Short/Long Trailing Logic
                         for r_sym, r_trade in list(current_active.items()):
                             live_spot = spot
                             entry_p = r_trade['entry']
@@ -343,20 +344,48 @@ def background_scanner_loop():
                             prem_entry = r_trade.get('premium_entry', 188)
                             last_milestone = r_trade.get('last_milestone', 0)
 
-                            target_hit = (live_spot >= tp_p) if "BUY" in action else (live_spot <= tp_p)
-                            sl_hit = (live_spot <= sl_p) if "BUY" in action else (live_spot >= sl_p)
+                            is_short = ("SHORT" in action) or ("SELL" in action) or ("PE" in action and not asset.endswith("-USD") and "FUT" not in strk_info)
+                            is_crypto = asset.endswith("-USD")
+                            is_mcx = asset in ["GC=F", "SI=F", "CL=F"]
 
-                            spot_move = (live_spot - entry_p) if "BUY" in action else (entry_p - live_spot)
-                            cur_prem = int(prem_entry + (spot_move * 0.55))
+                            # Profit move calculation: In SHORT, profit = entry - current spot
+                            if is_short and (is_crypto or is_mcx or "SHORT" in action):
+                                spot_move = entry_p - live_spot
+                                target_hit = live_spot <= tp_p
+                                sl_hit = live_spot >= sl_p
+                            else:
+                                spot_move = live_spot - entry_p if not ("PE" in strk_info and not is_crypto) else (entry_p - live_spot)
+                                target_hit = (live_spot >= tp_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot <= tp_p)
+                                sl_hit = (live_spot <= sl_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot >= sl_p)
 
-                            if spot_move >= last_milestone + 10 and not target_hit and not sl_hit:
-                                pts_up = int(last_milestone + 10)
-                                cur_prem_disp = int(prem_entry + (pts_up * 0.55))
-                                tg_update = f"<b>{cur_prem_disp} 🔥🔥</b>\n\n<b>++</b>"
-                                send_telegram_alert(tg_update)
-                                r_trade['last_milestone'] = pts_up
-                                current_active[r_sym] = r_trade
-                                save_active_trades(current_active)
+                            # Dynamic Milestone Update (Checks actual profit expansion)
+                            if is_crypto:
+                                profit_pct = (spot_move / entry_p) * 100.0
+                                if profit_pct >= (last_milestone + 0.8) and not target_hit and not sl_hit:
+                                    last_milestone_up = round(last_milestone + 0.8, 1)
+                                    tg_update = f"<b>{strk_info}</b>\n\n<b>+{profit_pct:.1f}% Profit Milestone 🔥🔥</b>\n\n<b>++ (Current: ${live_spot:,.2f})</b>"
+                                    send_telegram_alert(tg_update)
+                                    r_trade['last_milestone'] = last_milestone_up
+                                    current_active[r_sym] = r_trade
+                                    save_active_trades(current_active)
+                            elif is_mcx:
+                                if spot_move >= last_milestone + 150 and not target_hit and not sl_hit:
+                                    last_milestone_up = int(last_milestone + 150)
+                                    tg_update = f"<b>{strk_info}</b>\n\n<b>+{last_milestone_up} Points Gain 🔥🔥</b>\n\n<b>++</b>"
+                                    send_telegram_alert(tg_update)
+                                    r_trade['last_milestone'] = last_milestone_up
+                                    current_active[r_sym] = r_trade
+                                    save_active_trades(current_active)
+                            else:
+                                cur_prem = int(prem_entry + (spot_move * 0.55))
+                                if spot_move >= last_milestone + 10 and not target_hit and not sl_hit:
+                                    pts_up = int(last_milestone + 10)
+                                    cur_prem_disp = int(prem_entry + (pts_up * 0.55))
+                                    tg_update = f"<b>{cur_prem_disp} 🔥🔥</b>\n\n<b>++</b>"
+                                    send_telegram_alert(tg_update)
+                                    r_trade['last_milestone'] = pts_up
+                                    current_active[r_sym] = r_trade
+                                    save_active_trades(current_active)
 
                             if target_hit:
                                 tg_done = (
@@ -364,7 +393,7 @@ def background_scanner_loop():
                                     f"━━━━━━━━━━━━━━━━━━━━━\n"
                                     f"📊 <b>{strk_info}</b>\n"
                                     f"✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n"
-                                    f"💵 <b>Exit Premium:</b> ~₹{cur_prem} (Spot: {curr_sym}{live_spot:,.2f})\n"
+                                    f"💵 <b>Exit Price:</b> {curr_sym}{live_spot:,.2f}\n"
                                     f"⏱ <b>Completed At:</b> {now_ist}\n"
                                     f"━━━━━━━━━━━━━━━━━━━━━\n"
                                     f"🤖 <i>Accountability Logged via Sam Quantum AI</i>"
@@ -374,7 +403,7 @@ def background_scanner_loop():
                                 for item in logs:
                                     if item.get("id") == r_trade.get("log_id"):
                                         item["status"] = "TARGET HIT 🎯"
-                                        item["exit_price"] = f"₹{cur_prem} ({curr_sym}{live_spot:,.1f})"
+                                        item["exit_price"] = f"{curr_sym}{live_spot:,.2f}"
                                 save_signals_log(logs)
                                 completed.append(r_sym)
 
@@ -394,7 +423,7 @@ def background_scanner_loop():
                                 for item in logs:
                                     if item.get("id") == r_trade.get("log_id"):
                                         item["status"] = "SL HIT 🛑"
-                                        item["exit_price"] = f"{curr_sym}{live_spot:,.1f}"
+                                        item["exit_price"] = f"{curr_sym}{live_spot:,.2f}"
                                 save_signals_log(logs)
                                 completed.append(r_sym)
 
@@ -403,6 +432,7 @@ def background_scanner_loop():
                                 del current_active[c_item]
                         save_active_trades(current_active)
 
+                        # 2. Check for New Setup Trigger
                         if asset not in current_active:
                             sig = "NEUTRAL"
                             conf = 50
@@ -446,27 +476,28 @@ def background_scanner_loop():
                                     base_prem = int(spot)
                                     tp_spot = spot + rd_target if "BUY" in sig else spot - rd_target
                                     sl_spot = spot - rd_sl if "BUY" in sig else spot + rd_sl
+                                    pos_label = "BUY ABOVE" if "BUY" in sig else "SELL BELOW"
                                     
                                     tg_text = (
                                         f"📊 <b>{strk_name}</b>\n\n"
-                                        f"📈 <b>BUY ABOVE ₹{base_prem:,.0f}</b>\n\n"
-                                        f"🎯 <b>TARGET: ₹{tp_spot:,.0f} (+{rd_target:.0f} Pts)</b>\n\n"
-                                        f"☠️ <b>SL: ₹{sl_spot:,.0f} (-{rd_sl:.0f} Pts)</b>\n\n"
+                                        f"📈 <b>{pos_label} ₹{base_prem:,.0f}</b>\n\n"
+                                        f"🎯 <b>TARGET: ₹{tp_spot:,.0f} ({'+' if 'BUY' in sig else '-'}{rd_target:.0f} Pts)</b>\n\n"
+                                        f"☠️ <b>SL: ₹{sl_spot:,.0f}</b>\n\n"
                                         f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
                                     )
-                                else:
+                                else: # Crypto Perpetual
                                     strk_name = f"{asset} (PERPETUAL SWAP)"
                                     base_prem = spot
-                                    tp_spot = spot * (1 + (rd_target / 100.0)) if "BUY" in sig else spot * (1 - (rd_target / 100.0))
-                                    sl_spot = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig else spot * (1 + (rd_sl / 100.0))
-                                    pos_type = "LONG 🟢" if "BUY" in sig else "SHORT 🔴"
+                                    tp_spot = spot * (1 + (rd_target / 100.0)) if "BUY" in sig or "LONG" in sig else spot * (1 - (rd_target / 100.0))
+                                    sl_spot = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig or "LONG" in sig else spot * (1 + (rd_sl / 100.0))
+                                    pos_type = "LONG 🟢" if "BUY" in sig or "LONG" in sig else "SHORT 🔴"
 
                                     tg_text = (
                                         f"📊 <b>{asset} (PERPETUAL SWAP)</b>\n\n"
                                         f"🚀 <b>POSITION: {pos_type}</b>\n\n"
                                         f"💵 <b>ENTRY: ${spot:,.2f}</b>\n\n"
-                                        f"🎯 <b>TARGET: ${tp_spot:,.2f} (+{rd_target:.1f}%)</b>\n\n"
-                                        f"🛑 <b>STOP LOSS: ${sl_spot:,.2f} (-{rd_sl:.1f}%)</b>\n\n"
+                                        f"🎯 <b>TARGET: ${tp_spot:,.2f} ({'+' if 'LONG' in pos_type else '-'}{rd_target:.1f}%)</b>\n\n"
+                                        f"🛑 <b>STOP LOSS: ${sl_spot:,.2f}</b>\n\n"
                                         f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
                                     )
 
@@ -496,6 +527,130 @@ if 'bg_thread_started' not in st.session_state:
     st.session_state.bg_thread_started = True
     t = threading.Thread(target=background_scanner_loop, daemon=True)
     t.start()
+
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
+        overscroll-behavior: none !important;
+        background: radial-gradient(circle at 50% 0%, #0d1527 0%, #050811 75%, #020408 100%) !important;
+        color: #f1f5f9;
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    }
+
+    .brand-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        border-radius: 16px;
+        padding: 16px 24px;
+        margin-bottom: 18px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.8);
+    }
+    
+    .glass-card {
+        background: rgba(13, 20, 36, 0.75);
+        border: 1px solid rgba(30, 41, 59, 0.8);
+        border-radius: 16px;
+        padding: 24px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+    }
+
+    .pulse-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(16, 185, 129, 0.12);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.4);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .admin-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(168, 85, 247, 0.15);
+        color: #c084fc;
+        border: 1px solid rgba(168, 85, 247, 0.4);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ai-live-banner {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 78, 59, 0.4) 100%);
+        border: 2px solid #10b981;
+        border-radius: 14px;
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .ai-off-banner {
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%);
+        border: 2px solid #ef4444;
+        border-radius: 14px;
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(11, 17, 32, 0.9) 100%) !important;
+        border: 1px solid rgba(51, 65, 85, 0.7) !important;
+        border-radius: 14px !important;
+        padding: 14px 18px !important;
+    }
+
+    div[data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 800 !important;
+        color: #38bdf8 !important;
+    }
+
+    .stButton>button {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 10px !important;
+        padding: 12px 24px !important;
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: rgba(13, 20, 36, 0.85);
+        border-radius: 14px;
+        padding: 6px;
+        border: 1px solid rgba(30, 41, 59, 0.8);
+        gap: 6px;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 10px;
+        font-weight: 700;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Query parameters handling
 query_params = st.query_params
@@ -1046,7 +1201,6 @@ with tab_reports:
         use_container_width=True
     )
 
-# Backtest Runner if Execute Button Clicked
 if execute_btn or 'backtest_executed' in st.session_state:
     st.session_state.backtest_executed = True
     with st.spinner("⏳ Running institutional strategy backtest..."):
@@ -1134,6 +1288,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
                 with tab_reports:
+                    st.markdown("### 📥 Instant Mobile Audit Reports")
                     if trades:
                         csv_buf = io.StringIO()
                         pd.DataFrame(trades).to_csv(csv_buf, index=False)
@@ -1231,7 +1386,6 @@ with tab_manual_terminal:
         man_asset = st.selectbox("Select Underlying Market", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="man_chain_asset_pro")
     with col_man2:
         curr_sym = "$" if man_asset.endswith("-USD") else "₹"
-        # Strict Individual Real-Time Spot Calculation
         curr_ref_spot = get_live_asset_price(man_asset, 57380.0 if man_asset == "^NSEBANK" else (24250.0 if man_asset == "^NSEI" else 1380.0))
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"###### 📊 Live Selected Spot: `{curr_sym}{curr_ref_spot:,.2f}`")
@@ -1280,7 +1434,6 @@ with tab_manual_terminal:
     with col_mb2:
         man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 25}", key="man_sl_txt_pro")
         
-        # Strategy / Confluence Reasoning Dropdown
         REASONING_PRESETS = [
             "EMA 20 Pullback + Volume Confirmation",
             "EMA Golden/Death Crossover (9/21 Acceleration)",
