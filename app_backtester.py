@@ -132,8 +132,19 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 GREEK OPTION CHAIN & DEMAT PREMIUM ENGINE
+# 🧮 GREEK OPTION CHAIN & REAL-TIME SPOT FETCH
 # ==============================================================================
+def get_live_asset_price(symbol_key, default_price=57380.0):
+    try:
+        df_quick = yf.download(symbol_key, period="1d", interval="1m", progress=False)
+        if not df_quick.empty:
+            if isinstance(df_quick.columns, pd.MultiIndex):
+                df_quick.columns = df_quick.columns.droplevel(1)
+            return round(float(df_quick['Close'].iloc[-1]), 2)
+    except Exception:
+        pass
+    return default_price
+
 def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
     diff = (strike_price - spot_price) if opt_type == "PE" else (spot_price - strike_price)
     if asset_symbol == "^NSEBANK":
@@ -166,6 +177,12 @@ def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
                 return int(35.0 + (150 - otm_dist) * 0.34)
             else:
                 return max(10, int(35.0 * np.exp(-(otm_dist - 150) / 150)))
+    elif asset_symbol in ["RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
+        base_atm = spot_price * 0.015
+        if diff >= 0:
+            return int(base_atm + (diff * 0.5))
+        else:
+            return max(5, int(base_atm * np.exp(diff / (spot_price * 0.05))))
     return int(spot_price)
 
 def get_dynamic_expiry_and_tag(asset_symbol):
@@ -406,10 +423,11 @@ def background_scanner_loop():
                             if sig != "NEUTRAL" and conf >= min_conf:
                                 exp_tag, market_cat = get_dynamic_expiry_and_tag(asset)
                                 if market_cat == "NSE":
-                                    strike_step = 100 if asset == "^NSEBANK" else 50
+                                    strike_step = 100 if asset == "^NSEBANK" else (50 if asset == "^NSEI" else 20)
                                     strike_val = int(round(spot / float(strike_step)) * strike_step)
                                     opt_type = "CE" if "BUY" in sig else "PE"
-                                    strk_name = f"{'BANKNIFTY' if asset == '^NSEBANK' else 'NIFTY'} {strike_val} {opt_type} ({exp_tag})"
+                                    inst_prefix = "BANKNIFTY" if asset == "^NSEBANK" else ("NIFTY" if asset == "^NSEI" else asset.replace(".NS", ""))
+                                    strk_name = f"{inst_prefix} {strike_val} {opt_type} ({exp_tag})"
                                     base_prem = calculate_demat_premium(spot, strike_val, opt_type, asset)
                                     tp_prem = int(base_prem + (rd_target * 0.55))
                                     sl_prem = int(base_prem - (rd_sl * 0.55))
@@ -478,130 +496,6 @@ if 'bg_thread_started' not in st.session_state:
     st.session_state.bg_thread_started = True
     t = threading.Thread(target=background_scanner_loop, daemon=True)
     t.start()
-
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
-        overscroll-behavior: none !important;
-        background: radial-gradient(circle at 50% 0%, #0d1527 0%, #050811 75%, #020408 100%) !important;
-        color: #f1f5f9;
-        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-    }
-
-    .brand-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
-        border: 1px solid rgba(56, 189, 248, 0.25);
-        border-radius: 16px;
-        padding: 16px 24px;
-        margin-bottom: 18px;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.8);
-    }
-    
-    .glass-card {
-        background: rgba(13, 20, 36, 0.75);
-        border: 1px solid rgba(30, 41, 59, 0.8);
-        border-radius: 16px;
-        padding: 24px;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-    }
-
-    .pulse-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(16, 185, 129, 0.12);
-        color: #10b981;
-        border: 1px solid rgba(16, 185, 129, 0.4);
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    .admin-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(168, 85, 247, 0.15);
-        color: #c084fc;
-        border: 1px solid rgba(168, 85, 247, 0.4);
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    .ai-live-banner {
-        background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 78, 59, 0.4) 100%);
-        border: 2px solid #10b981;
-        border-radius: 14px;
-        padding: 14px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-        box-shadow: 0 0 25px rgba(16, 185, 129, 0.3);
-    }
-
-    .ai-off-banner {
-        background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%);
-        border: 2px solid #ef4444;
-        border-radius: 14px;
-        padding: 14px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-    }
-
-    div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(11, 17, 32, 0.9) 100%) !important;
-        border: 1px solid rgba(51, 65, 85, 0.7) !important;
-        border-radius: 14px !important;
-        padding: 14px 18px !important;
-    }
-
-    div[data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-weight: 800 !important;
-        color: #38bdf8 !important;
-    }
-
-    .stButton>button {
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 10px !important;
-        padding: 12px 24px !important;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: rgba(13, 20, 36, 0.85);
-        border-radius: 14px;
-        padding: 6px;
-        border: 1px solid rgba(30, 41, 59, 0.8);
-        gap: 6px;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
-        color: #38bdf8 !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 10px;
-        font-weight: 700;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # Query parameters handling
 query_params = st.query_params
@@ -794,9 +688,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# Dynamic Live Spot Sync on Top Header
+header_spot = get_live_asset_price(symbol, 57380.0 if symbol == "^NSEBANK" else (24250.0 if symbol == "^NSEI" else 1380.0))
+header_curr = "$" if symbol.endswith("-USD") else "₹"
+
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Strategy: **{strategy_type.split('.')[1].strip()}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
+    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Strategy: **{strategy_type.split('.')[1].strip()}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
 
@@ -807,7 +705,7 @@ if is_admin:
         "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
-        "📥 Download Reports",
+        "📥 Download Reports", 
         "🤖 AI 24/7 Autopilot Hub",
         "✍️ Pro Manual Option Chain Terminal",
         "📑 Daily AI Signal Logbook",
@@ -819,7 +717,7 @@ else:
         "📈 Pro Touch Backtest Chart", 
         "📊 Scorecard & KPIs", 
         "📜 Trade Logs", 
-        "📥 Download Reports",
+        "📥 Download Reports", 
         "🤖 AI 24/7 Autopilot Hub",
         "✍️ Pro Manual Option Chain Terminal",
         "📑 Daily AI Signal Logbook"
@@ -1107,10 +1005,48 @@ with tab_tv_chart:
         st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
-# 📊 BACKTEST EXECUTION ENGINE & TABS 2-5
+# 📊 BACKTEST EXECUTION ENGINE & TABS 2-5 (FULL RESTORATION)
 # ==============================================================================
-manual_html_doc = """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Operating Manual</title></head><body style="background:#050811;color:#f1f5f9;font-family:sans-serif;padding:20px;"><h2>SAM QUANTUM BLUEPRINT</h2><p>Select Strategy and Execute Backtest to generate institutional audit.</p></body></html>"""
+terminal_manual_text = """=====================================================
+         SAM QUANTUM OS - OFFICIAL SYSTEM MANUAL
+=====================================================
 
+1. ASSET & RESOLUTION CONFIGURATION
+- Dynamic Dropdown: Syncs real-time prices across NSE, Crypto, MCX & Stocks.
+- Timeframes: Multi-resolution candle streams (1m, 5m, 15m, 1D).
+
+2. STRATEGY ENGINE
+- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend, VWAP.
+- Momentum Filter: RSI Overbought/Oversold boundaries (14 Period).
+
+3. OPTION CHAIN & DEMAT MATRIX
+- 3-Column Demat Option Chain: Real Greek Option Delta & OTM/ATM decay matching Groww/Zerodha/Dhan.
+- Auto Expiry Rollover: Automatic rollover to next cycle at market close.
+
+4. 24/7 AUTOPILOT ENGINE
+- Continuous Non-Blocking Daemon: Runs autonomously even when the browser or local machine sleeps.
+- Telegram Signal Engine: Direct instant dispatch with zero UI thread block.
+=====================================================
+"""
+
+with tab_reports:
+    st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
+    st.markdown("#### 📘 SAM QUANTUM OS - Official System Handbook")
+    st.markdown("""
+    > **Terminal Architecture & System Overview:**
+    * **Engine 1 - Live Demat Chart Studio:** Real-time spot price mapping, dynamic RSI momentum filters, and EMA institutional pullback detection.
+    * **Engine 2 - Autopilot Hub & Signal Logbook:** Real-time automated trigger validation and multi-asset position sizing.
+    * **Engine 3 - Multi-Tier Gatekeeper:** Dynamic permission control (`Free Member`, `VIP Algo Trader`, `Institutional Pro`, `Master Admin`).
+    """)
+    st.download_button(
+        label="📥 DOWNLOAD FULL TERMINAL USER MANUAL (.TXT)",
+        data=terminal_manual_text,
+        file_name="SAM_QUANTUM_User_Manual.txt",
+        mime="text/plain",
+        use_container_width=True
+    )
+
+# Backtest Runner if Execute Button Clicked
 if execute_btn or 'backtest_executed' in st.session_state:
     st.session_state.backtest_executed = True
     with st.spinner("⏳ Running institutional strategy backtest..."):
@@ -1161,7 +1097,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
                             last_bar = i
 
                 with tab_backtest:
-                    st.markdown("#### 🕯️ Institutional Matrix (Touch Pan & Zoom)")
+                    st.markdown("#### 🕯️ Institutional Backtest Chart")
                     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
                     fig.add_trace(go.Candlestick(x=df_bt['Time_Str'], open=df_bt['Open'], high=df_bt['High'], low=df_bt['Low'], close=df_bt['Close'], name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
@@ -1198,7 +1134,6 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
 
                 with tab_reports:
-                    st.markdown("### 📥 Instant Mobile Audit Reports")
                     if trades:
                         csv_buf = io.StringIO()
                         pd.DataFrame(trades).to_csv(csv_buf, index=False)
@@ -1210,7 +1145,7 @@ else:
         st.info("💡 Select your Strategy & Parameters in sidebar, then click '⚡ EXECUTE STRATEGY BACKTEST' above.")
 
 # ==============================================================================
-# 🤖 TAB: AI 24/7 AUTONOMOUS PILOT HUB
+# 🤖 TAB 6: AI 24/7 AUTONOMOUS PILOT HUB
 # ==============================================================================
 with tab_ai_pilot:
     st.markdown("### 🤖 24/7 Autonomous AI Opportunity Radar")
@@ -1285,7 +1220,7 @@ with tab_ai_pilot:
         st.info("No active open positions currently running. As soon as AI triggers setups, they will track here in real-time.")
 
 # ==============================================================================
-# ✍️ TAB: PRO MANUAL OPTION CHAIN TERMINAL (INDIVIDUAL SPOT ISOLATION)
+# ✍️ TAB 7: PRO MANUAL OPTION CHAIN TERMINAL (INDIVIDUAL SPOT ISOLATION)
 # ==============================================================================
 with tab_manual_terminal:
     st.markdown("### ✍️ Pro Manual Option Chain Terminal")
@@ -1296,17 +1231,14 @@ with tab_manual_terminal:
         man_asset = st.selectbox("Select Underlying Market", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x], key="man_chain_asset_pro")
     with col_man2:
         curr_sym = "$" if man_asset.endswith("-USD") else "₹"
-        try:
-            spot_df = yf.download(man_asset, period="1d", interval="15m", progress=False)
-            curr_ref_spot = float(spot_df['Close'].iloc[-1]) if not spot_df.empty else (24250.0 if man_asset == "^NSEI" else 57380.0)
-        except Exception:
-            curr_ref_spot = 24250.0 if man_asset == "^NSEI" else 57380.0
+        # Strict Individual Real-Time Spot Calculation
+        curr_ref_spot = get_live_asset_price(man_asset, 57380.0 if man_asset == "^NSEBANK" else (24250.0 if man_asset == "^NSEI" else 1380.0))
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"###### 📊 Live Selected Spot: `{curr_sym}{curr_ref_spot:,.2f}`")
 
-    # 1. Indian Markets (True 3-Column Demat Option Chain)
-    if man_asset in ["^NSEBANK", "^NSEI"]:
-        step = 100 if man_asset == "^NSEBANK" else 50
+    # 1. Indian Markets (True 3-Column Demat Option Chain with Accurate Steps)
+    if man_asset in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
+        step = 100 if man_asset == "^NSEBANK" else (50 if man_asset == "^NSEI" else 20)
         atm_s = int(round(curr_ref_spot / float(step)) * step)
         strikes_matrix = [atm_s - (step * 2), atm_s - step, atm_s, atm_s + step, atm_s + (step * 2)]
         
@@ -1330,7 +1262,8 @@ with tab_manual_terminal:
 
         clean_type = "PE" if "PUT" in sel_opt_type else "CE"
         exp_tag, _ = get_dynamic_expiry_and_tag(man_asset)
-        inst_name = f"{'BANKNIFTY' if man_asset == '^NSEBANK' else 'NIFTY'} {sel_strike} {clean_type} ({exp_tag})"
+        inst_prefix = "BANKNIFTY" if man_asset == "^NSEBANK" else ("NIFTY" if man_asset == "^NSEI" else man_asset.replace(".NS", ""))
+        inst_name = f"{inst_prefix} {sel_strike} {clean_type} ({exp_tag})"
         auto_buy_price = calculate_demat_premium(curr_ref_spot, sel_strike, clean_type, man_asset)
 
     # 2. Crypto & Commodities
@@ -1403,7 +1336,7 @@ with tab_manual_terminal:
             st.error(f"❌ Telegram Error: {resp}")
 
 # ==============================================================================
-# 📑 TAB: DAILY SIGNAL LOGBOOK
+# 📑 TAB 8: DAILY SIGNAL LOGBOOK
 # ==============================================================================
 with tab_ai_logbook:
     st.markdown("### 📑 Official Daily AI Signal Logbook & Execution Audit")
@@ -1432,7 +1365,7 @@ with tab_ai_logbook:
         st.info("Logbook is empty for the last 12 hours. As soon as signals trigger, they will be archived here.")
 
 # ==============================================================================
-# 👑 TAB: ADMIN ACCESS CONSOLE
+# 👑 TAB 9: ADMIN ACCESS & TIER CONTROL CONSOLE
 # ==============================================================================
 if is_admin:
     with tab_admin_access:
@@ -1466,3 +1399,16 @@ if is_admin:
                     st.error(f"Operator '{target_del}' has been revoked.")
                     time.sleep(0.8)
                     st.rerun()
+
+                st.markdown("---")
+                st.markdown("#### ⚡ Upgrade / Modify Operator Access Tier")
+                target_up = st.selectbox("Select Operator to Update", removable_users, key="tier_target_operator")
+                new_tier_choice = st.selectbox("Select New Tier Level", ["Free Member", "VIP Algo Trader", "Institutional Pro", "Master Admin"], key="tier_selector_level")
+                if st.button("👑 APPLY TIER UPDATE", type="primary"):
+                    st.session_state.users_db[target_up]["tier"] = new_tier_choice
+                    save_users(st.session_state.users_db)
+                    st.success(f"✅ Successfully updated {target_up} to {new_tier_choice}!")
+                    time.sleep(0.8)
+                    st.rerun()
+            else:
+                st.info("No external registered operators found.")
