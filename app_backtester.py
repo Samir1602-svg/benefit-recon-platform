@@ -16,7 +16,6 @@ import requests
 import threading
 import math
 import sqlite3
-from scipy.stats import norm
 
 # ==============================================================================
 # 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
@@ -181,8 +180,16 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 BLACK-SCHOLES GREEKS ENGINE & DYNAMIC DEMAT PRICING
+# 🧮 PURE MATH BLACK-SCHOLES GREEKS ENGINE (NO SCIPY DEPENDENCY)
 # ==============================================================================
+def std_norm_cdf(x):
+    """Cumulative distribution function for standard normal distribution using math.erf."""
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+def std_norm_pdf(x):
+    """Probability density function for standard normal distribution."""
+    return math.exp(-0.5 * x ** 2) / math.sqrt(2.0 * math.pi)
+
 class BlackScholesEngine:
     @staticmethod
     def calculate_greeks(spot, strike, dte_days=2, iv=14.5, risk_free_rate=0.07, option_type="CE"):
@@ -193,11 +200,11 @@ class BlackScholesEngine:
         d1 = (math.log(spot / strike) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
         
-        pdf_d1 = norm.pdf(d1)
-        cdf_d1 = norm.cdf(d1)
-        cdf_d2 = norm.cdf(d2)
-        cdf_neg_d1 = norm.cdf(-d1)
-        cdf_neg_d2 = norm.cdf(-d2)
+        pdf_d1 = std_norm_pdf(d1)
+        cdf_d1 = std_norm_cdf(d1)
+        cdf_d2 = std_norm_cdf(d2)
+        cdf_neg_d1 = std_norm_cdf(-d1)
+        cdf_neg_d2 = std_norm_cdf(-d2)
         
         if option_type.upper() == "CE":
             premium = spot * cdf_d1 - strike * math.exp(-r * T) * cdf_d2
@@ -720,7 +727,6 @@ with st.sidebar:
     st.markdown("### 🛡️ 3. Risk & Capital")
     capital = st.number_input("Capital Pool (₹)", value=100000.0, step=10000.0)
     
-    # Dynamic Lot Size Assignment
     lot_size_val = INDEX_SPECS.get(symbol, {}).get("lot_size", 1)
     num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1)
     total_qty = num_lots * lot_size_val
