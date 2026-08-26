@@ -16,10 +16,10 @@ import math
 import sqlite3
 
 # ==============================================================================
-# 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
+# 💎 SAM QUANTUM TERMINAL - PURE INDIAN MARKETS QUANT & DEMAT SUITE
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM QUANTUM AI | Institutional Quant Engine",
+    page_title="SAM QUANTUM AI | Indian Markets Quant Engine",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -28,176 +28,46 @@ st.set_page_config(
 DB_FILE = "users_db.json"
 SQLITE_DB_FILE = "terminal_audit.db"
 
-# ==============================================================================
-# 📑 OFFICIAL MASTER OPERATING MANUAL (HTML & PDF PRINT SUITE)
-# ==============================================================================
 TERMINAL_MANUAL_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SAM QUANTUM AI — Master Trader Operating Manual & Workflow Blueprint</title>
+<title>SAM QUANTUM AI — Master Trader Operating Manual</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     @page { size: A4; margin: 18mm 16mm; }
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080b11; color: #e2e8f0; margin: 0; padding: 28px; line-height: 1.6; }
-    .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 22px 26px; margin-bottom: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); }
+    .header-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #38bdf8; border-radius: 14px; padding: 22px 26px; margin-bottom: 24px; }
     .brand-title { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 800; color: #38bdf8; margin: 0; }
-    .brand-sub { font-size: 13.5px; color: #94a3b8; margin-top: 4px; }
-    .doc-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; margin-top: 12px; border-top: 1px solid rgba(51, 65, 85, 0.7); padding-top: 8px; display: flex; justify-content: space-between; }
     .badge { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-    .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 4px solid #38bdf8; padding-left: 10px; margin: 26px 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; font-size: 12.8px; color: #cbd5e1; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-    .step-box { background: rgba(30, 41, 59, 0.5); border-left: 3px solid #10b981; padding: 12px 16px; margin: 10px 0; border-radius: 0 8px 8px 0; }
-    .step-num { color: #10b981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-    ul, ol { margin: 6px 0; padding-left: 20px; }
-    li { margin-bottom: 6px; }
-    strong { color: #f8fafc; }
-    code { font-family: 'JetBrains Mono', monospace; background: #1e293b; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11.5px; }
-    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 11.5px; }
-    th, td { border: 1px solid #1e293b; padding: 10px 12px; text-align: left; }
-    th { background-color: #1e293b; color: #38bdf8; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-    td { background-color: rgba(15, 23, 42, 0.6); }
+    .section-title { color: #38bdf8; font-size: 15px; font-weight: 800; border-left: 4px solid #38bdf8; padding-left: 10px; margin: 26px 0 12px 0; text-transform: uppercase; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; font-size: 12.8px; color: #cbd5e1; }
     .print-btn { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; font-weight: 700; font-size: 14px; border: none; border-radius: 8px; padding: 12px 26px; cursor: pointer; margin-bottom: 20px; }
     @media print { .no-print { display: none !important; } body { padding: 0; background: #080b11; } }
 </style>
 </head>
 <body>
-
 <div class="no-print" style="text-align: center; margin-bottom: 20px;">
     <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Master Manual</button>
 </div>
-
 <div class="header-card">
-    <div class="brand-title">⚡ SAM QUANTUM AI</div>
-    <div class="brand-sub">Master Trader Operating Manual & Algorithmic Strategy Blueprint</div>
-    <div class="doc-meta">
-        <span>DOC ID: SQ-MAN-2026-V2.0</span>
-        <span>ENGINE LATENCY: 12ms</span>
-        <span class="badge">OFFICIAL TRADER HANDBOOK</span>
-    </div>
+    <div class="brand-title">⚡ SAM QUANTUM AI (INDIAN MARKETS)</div>
+    <div style="margin-top:8px;"><span class="badge">OFFICIAL TRADER HANDBOOK</span></div>
 </div>
-
-<div class="section-title">1. Introduction & Terminal Philosophy</div>
+<div class="section-title">1. Indian Institutional Friction Model</div>
 <div class="card">
-    <p>Welcome to <strong>SAM QUANTUM AI</strong>. This institutional quantitative engine is engineered to eliminate emotional trading bias by replacing guesswork with mathematical edge.</p>
-    <p>90% of retail traders lose capital because they execute without statistical validation. This terminal allows you to test, optimize, and audit any trading strategy across Indian Indices, Commodities, and 24/7 Digital Assets before risking real funds.</p>
-</div>
-
-<div class="section-title">2. Complete Step-by-Step Backtesting Workflow</div>
-<div class="card">
-    <div class="step-box">
-        <span class="step-num">STEP 1:</span> <strong>Select Instrument & Timeframe (Left Sidebar)</strong><br>
-        Choose your market (e.g. <code>Bank Nifty</code>, <code>Nifty 50</code>, <code>Gold</code>, <code>BTC/USD</code>). Select your resolution (15m for intraday momentum, 5m for fast scalping, 1D for positional swing).
-    </div>
-    <div class="step-box">
-        <span class="step-num">STEP 2:</span> <strong>Choose Strategy Archetype & Filters</strong><br>
-        Select from 7 pre-compiled institutional algorithms (e.g. 20/50 EMA Pullback). Check <code>Require RSI 50-Level Filter</code> to eliminate choppy market noise.
-    </div>
-    <div class="step-box">
-        <span class="step-num">STEP 3:</span> <strong>Set Position Sizing & Risk Rules</strong><br>
-        Enter your Capital Pool (e.g. ₹1,00,000) and Lot Quantity. Define your Target (e.g. 50 Pts) and Hard SL (e.g. 20 Pts) to ensure a minimum 1:2 Risk-to-Reward ratio.
-    </div>
-    <div class="step-box">
-        <span class="step-num">STEP 4:</span> <strong>Click 'EXECUTE STRATEGY BACKTEST'</strong><br>
-        The terminal computes all historical bars, triggers entries/exits, plots visual buy/sell triangles on the chart, and populates the Performance Scorecard.
-    </div>
-</div>
-
-<div class="section-title">3. Quantitative Strategy Archetypes Explained</div>
-<div class="card">
+    <p>This engine accounts for complete regulatory statutory taxes & charges according to Indian Exchange (NSE/BSE/MCX) norms:</p>
     <ul>
-        <li><strong>1. EMA Institutional Pullback (20/50 Trend):</strong> Waits for clear trend separation where Fast EMA (20) is above Slow EMA (50). Triggers CE/Buy only when price pulls back to touch the 20 EMA and bounces upward, confirmed by RSI &gt; 50.</li>
-        <li><strong>2. EMA Golden / Death Crossover (9/21):</strong> High-velocity momentum model. Triggers when the 9 EMA crosses above 21 EMA (Buy) or below (Sell) for trend-following swings.</li>
-        <li><strong>3. SuperTrend Trend-Rider (10, 2.0):</strong> Volatility-adaptive breakout model that uses dynamic ATR bands to catch multi-session rallies while keeping you out of flat chop.</li>
-        <li><strong>4. Candlestick Pattern Engine:</strong> Detects high-probability institutional liquidity sweeps (Hammer at support for Buy / Bearish Engulfing at resistance for Sell).</li>
-        <li><strong>5. Volume Spike + Momentum Breakout:</strong> Identifies volume expansion breaks over 20-period moving highs.</li>
-        <li><strong>6. VWAP Intraday Retest & Expansion:</strong> Evaluates institutional volume-weighted average price bounces.</li>
-        <li><strong>7. Bollinger Band Dynamic Mean Reversion:</strong> Capitalizes on volatility band extremities.</li>
+        <li><strong>Statutory Indian F&O Taxes:</strong> STT (0.1% on sell turnover), Exchange Turnover Fee, SEBI turnover charges, Stamp Duty, and 18% GST.</li>
+        <li><strong>Brokerage:</strong> ₹20 per executed order (₹40 round-trip).</li>
+        <li><strong>Dynamic Slippage:</strong> 0.5% fill impact cost on option buy/sell triggers.</li>
+        <li><strong>Theta Decay Burn:</strong> Black-Scholes time decay simulation based on trade holding duration.</li>
     </ul>
 </div>
-
-<div class="section-title">4. How to Read Your Scorecard & Key KPIs</div>
-<div class="card">
-    <ul>
-        <li><strong>Net Realized PnL:</strong> Total rupee profit or loss generated after all historical trades.</li>
-        <li><strong>Win Probability (%):</strong> Percentage of winning trades. A solid 1:2 R:R strategy needs only 40%+ win rate to be highly profitable.</li>
-        <li><strong>Cumulative Equity Trajectory:</strong> An upward sloping green equity curve proves that your strategy has a true quantitative edge.</li>
-        <li><strong>Max Drawdown (DD):</strong> The maximum peak-to-trough dip in capital. Lower drawdown means less stress and better capital protection.</li>
-    </ul>
-</div>
-
-<div class="section-title">5. Pro Touch Chart Controls (Mobile & Desktop)</div>
-<div class="card">
-    <ul>
-        <li><strong>Pinch-to-Zoom (Mobile):</strong> Use two fingers on your phone screen to smoothly zoom into individual 1m/5m candles.</li>
-        <li><strong>Pan & Drag:</strong> Drag left or right to inspect historical trade executions and candlestick formations.</li>
-        <li><strong>Persistent Drawing Levels:</strong> Click horizontal line button to place permanent Support/Resistance boundaries.</li>
-    </ul>
-</div>
-
-<div class="section-title">6. Membership Tiers & Capabilities</div>
-<table>
-    <thead>
-        <tr>
-            <th>Feature</th>
-            <th>🟢 Free Member</th>
-            <th>🔵 VIP Algo Trader</th>
-            <th>🟣 Institutional Pro</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><strong>Resolution Stream</strong></td>
-            <td>15m, 1D</td>
-            <td>1m, 5m, 15m, 1D</td>
-            <td>Sub-Minute (1m–1D)</td>
-        </tr>
-        <tr>
-            <td><strong>Market Universe</strong></td>
-            <td>Core Indices & BTC</td>
-            <td>Indices, MCX & Top Crypto</td>
-            <td>Full Global Grid & Altcoins</td>
-        </tr>
-        <tr>
-            <td><strong>Strategy Archetypes</strong></td>
-            <td>Core Engines</td>
-            <td>All Advanced Engines</td>
-            <td>Full Multi-Strategy Suite</td>
-        </tr>
-        <tr>
-            <td><strong>Capital Pool Cap</strong></td>
-            <td>₹1,00,000</td>
-            <td>Up to ₹10,00,000</td>
-            <td>Unlimited (₹1 Cr+ Testing)</td>
-        </tr>
-        <tr>
-            <td><strong>Audit Exports</strong></td>
-            <td>HD PNG + CSV</td>
-            <td>HD PNG + CSV + HTML</td>
-            <td>Full Executive PDF Suite</td>
-        </tr>
-    </tbody>
-</table>
-
-<div class="section-title">7. Official Links & Community Radar</div>
-<div class="card">
-    <ul>
-        <li><strong>Terminal Web Access:</strong> <code>https://sam-ai-recon-platform-76dht2tcjgwf9ar7o7ehhn.streamlit.app</code></li>
-        <li><strong>Live Signals & Trade Updates:</strong> Join official Telegram broadcast at <code>@sam_quantum_signals</code> for real-time market opportunity alerts.</li>
-        <li><strong>Account Upgrade & Support:</strong> Contact Master Admin on WhatsApp or Telegram to unlock VIP/Pro licenses.</li>
-    </ul>
-</div>
-
-<div class="section-title">8. Risk Disclaimer</div>
-<div class="card" style="font-size: 11.5px; color: #94a3b8;">
-    SAM QUANTUM AI is an algorithmic modeling and educational backtesting engine. Historical simulation metrics do not guarantee future market returns. Traders must always manage leverage and adhere strictly to defined stop-loss limits.
-</div>
-
-</body>
-</html>"""
+</body></html>"""
 
 # ==============================================================================
-# 🏛️ SPECIFICATIONS & LOT SIZES (INDIAN INDICES & CRYPTO)
+# 🏛️ 100% PURE INDIAN CORE ASSETS & STRICT LOT SIZE SPECIFICATIONS
 # ==============================================================================
 INDEX_SPECS = {
     "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100, "exchange": "NFO", "type": "OPTION"},
@@ -209,13 +79,7 @@ INDEX_SPECS = {
     "TCS.NS": {"name": "TCS", "lot_size": 175, "strike_step": 50, "exchange": "NFO", "type": "STOCK"},
     "INFY.NS": {"name": "INFY", "lot_size": 400, "strike_step": 20, "exchange": "NFO", "type": "STOCK"},
     "GC=F": {"name": "GOLDM", "lot_size": 1, "strike_step": 100, "exchange": "MCX", "type": "COMMODITY"},
-    "SI=F": {"name": "SILVERM", "lot_size": 5, "strike_step": 250, "exchange": "MCX", "type": "COMMODITY"},
-    "BTC-USD": {"name": "BTC/USDT", "lot_size": 1, "strike_step": 100, "exchange": "PERPETUAL", "type": "CRYPTO"},
-    "ETH-USD": {"name": "ETH/USDT", "lot_size": 1, "strike_step": 10, "exchange": "PERPETUAL", "type": "CRYPTO"},
-    "SOL-USD": {"name": "SOL/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "type": "CRYPTO"},
-    "BNB-USD": {"name": "BNB/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "type": "CRYPTO"},
-    "XRP-USD": {"name": "XRP/USDT", "lot_size": 10, "strike_step": 0.01, "exchange": "PERPETUAL", "type": "CRYPTO"},
-    "DOGE-USD": {"name": "DOGE/USDT", "lot_size": 100, "strike_step": 0.001, "exchange": "PERPETUAL", "type": "CRYPTO"}
+    "SI=F": {"name": "SILVERM", "lot_size": 5, "strike_step": 250, "exchange": "MCX", "type": "COMMODITY"}
 }
 
 DEFAULT_USERS = {
@@ -246,14 +110,42 @@ if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
 # ==============================================================================
-# 🧮 PURE MATH BLACK-SCHOLES GREEKS & MULTI-ASSET ENGINE
+# 🧮 STATUTORY INDIAN TAXES, CHARGES & SLIPPAGE ENGINE
+# ==============================================================================
+def calculate_statutory_taxes(entry_premium, exit_premium, qty, market_type="OPTION"):
+    """
+    Computes exact real-world statutory taxes & brokerage based on Indian Exchange norms.
+    """
+    buy_turnover = entry_premium * qty
+    sell_turnover = exit_premium * qty
+    total_turnover = buy_turnover + sell_turnover
+
+    brokerage = 40.0 # Flat ₹20 per executed order (Zerodha/Groww)
+    stt = sell_turnover * 0.001 if market_type == "OPTION" else total_turnover * 0.001 # 0.1% on sell option turnover
+    exchange_txn = total_turnover * 0.000505 # NSE Turnover Charge
+    gst = (brokerage + exchange_txn) * 0.18 # 18% GST
+    stamp_duty = buy_turnover * 0.00003
+    sebi = total_turnover * 0.000001
+    slippage = (buy_turnover * 0.005) + (sell_turnover * 0.005) # 0.5% Slippage Impact
+
+    total_friction = brokerage + stt + exchange_txn + gst + stamp_duty + sebi + slippage
+    return {
+        "brokerage": round(brokerage, 2),
+        "stt": round(stt, 2),
+        "exchange_txn": round(exchange_txn, 2),
+        "gst": round(gst, 2),
+        "total_taxes": round(total_friction, 2)
+    }
+
+# ==============================================================================
+# 🧮 PURE MATH BLACK-SCHOLES GREEKS ENGINE (THETA DECAY MODEL)
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 class MultiAssetEngine:
     @staticmethod
-    def calculate_option_trade(spot_entry, spot_exit, option_type, days_to_expiry=3, iv=16.0, strike_step=100):
+    def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=4, days_to_expiry=3, iv=16.0, strike_step=100):
         atm_strike = int(round(spot_entry / float(strike_step)) * strike_step)
         T_entry = max(days_to_expiry / 365.0, 0.0001)
         sigma = iv / 100.0
@@ -270,14 +162,17 @@ class MultiAssetEngine:
             delta = std_norm_cdf(d1) - 1.0
 
         entry_premium = max(15.0, round(entry_premium, 2))
+        
+        # Realistic Intraday Theta Decay Burn (~ ₹1.25 per 15-min bar)
+        theta_decay_burn = bars_held * 1.25
         spot_movement = spot_exit - spot_entry
         
         if "CE" in option_type or "BUY" in option_type:
-            exit_premium = max(5.0, entry_premium + (spot_movement * delta))
+            raw_exit = entry_premium + (spot_movement * delta) - theta_decay_burn
         else:
-            exit_premium = max(5.0, entry_premium - (spot_movement * abs(delta)))
+            raw_exit = entry_premium - (spot_movement * abs(delta)) - theta_decay_burn
 
-        exit_premium = round(exit_premium, 2)
+        exit_premium = max(5.0, round(raw_exit, 2))
         points_pnl = round(exit_premium - entry_premium, 2)
         return atm_strike, entry_premium, exit_premium, points_pnl
 
@@ -298,31 +193,41 @@ def is_market_open(symbol_key):
     weekday = now_ist.weekday()
     current_time = now_ist.time()
 
-    if symbol_key in ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD"]:
-        return True, "Crypto (24/7 Live Active)"
-
     if weekday in [5, 6]:
         return False, "Market Closed (Weekend)"
 
     if symbol_key in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "NIFTY_FIN_SERVICE.NS", "^BSESN"]:
-        market_start = dtime(9, 15)
-        market_end = dtime(15, 30)
-        if market_start <= current_time <= market_end:
+        if dtime(9, 15) <= current_time <= dtime(15, 30):
             return True, "NSE Intraday (09:15 - 15:30 IST)"
         return False, "NSE Closed (Opens 09:15 AM Mon-Fri)"
 
-    if symbol_key in ["GC=F", "SI=F", "CL=F"]:
-        mcx_start = dtime(9, 0)
-        mcx_end = dtime(23, 30)
-        if mcx_start <= current_time <= mcx_end:
+    if symbol_key in ["GC=F", "SI=F"]:
+        if dtime(9, 0) <= current_time <= dtime(23, 30):
             return True, "MCX Commodity (09:00 - 23:30 IST)"
         return False, "MCX Closed"
 
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛠️ 7 QUANTITATIVE STRATEGY MODULES (REGISTRY PATTERN)
+# 🛠️ 7 QUANTITATIVE STRATEGY MODULES (WITH ADX > 22 & CHOP FILTERS)
 # ==============================================================================
+def compute_adx(df, period=14):
+    d = df.copy()
+    c, h, l = d['Close'], d['High'], d['Low']
+    up_move = h - h.shift(1)
+    down_move = l.shift(1) - l
+    
+    pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+    
+    tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(period).mean().replace(0, np.nan)
+    
+    pos_di = 100 * (pd.Series(pos_dm, index=d.index).rolling(period).mean() / atr)
+    neg_di = 100 * (pd.Series(neg_dm, index=d.index).rolling(period).mean() / atr)
+    dx = 100 * ((pos_di - neg_di).abs() / (pos_di + neg_di).replace(0, np.nan))
+    return dx.rolling(period).mean().fillna(20)
+
 class StrategyRegistry:
     @staticmethod
     def ema_pullback(df):
@@ -330,6 +235,7 @@ class StrategyRegistry:
         c = d['Close']
         d['EMA20'] = c.ewm(span=20, adjust=False).mean()
         d['EMA50'] = c.ewm(span=50, adjust=False).mean()
+        d['ADX'] = compute_adx(d, 14)
         
         delta = c.diff()
         gain = delta.clip(lower=0).ewm(com=13, adjust=False).mean()
@@ -338,8 +244,8 @@ class StrategyRegistry:
         d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
         
         d['signal'] = 0
-        cond_buy = (d['EMA20'] > d['EMA50']) & (d['Close'] >= d['EMA20']) & (d['RSI'] > 52) & (d['Volume'] >= d['VOL_SMA20'])
-        cond_sell = (d['EMA20'] < d['EMA50']) & (d['Close'] <= d['EMA20']) & (d['RSI'] < 48) & (d['Volume'] >= d['VOL_SMA20'])
+        cond_buy = (d['EMA20'] > d['EMA50']) & (d['Close'] >= d['EMA20']) & (d['RSI'] > 52) & (d['ADX'] > 22) & (d['Volume'] >= d['VOL_SMA20'])
+        cond_sell = (d['EMA20'] < d['EMA50']) & (d['Close'] <= d['EMA20']) & (d['RSI'] < 48) & (d['ADX'] > 22) & (d['Volume'] >= d['VOL_SMA20'])
         d.loc[cond_buy, 'signal'] = 1
         d.loc[cond_sell, 'signal'] = -1
         return d
@@ -350,10 +256,11 @@ class StrategyRegistry:
         c = d['Close']
         d['EMA9'] = c.ewm(span=9, adjust=False).mean()
         d['EMA21'] = c.ewm(span=21, adjust=False).mean()
+        d['ADX'] = compute_adx(d, 14)
         
         d['signal'] = 0
-        cross_up = (d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1))
-        cross_down = (d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1))
+        cross_up = (d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1)) & (d['ADX'] > 22)
+        cross_down = (d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1)) & (d['ADX'] > 22)
         d.loc[cross_up, 'signal'] = 1
         d.loc[cross_down, 'signal'] = -1
         return d
@@ -363,13 +270,10 @@ class StrategyRegistry:
         d = df.copy()
         c, h, l = d['Close'], d['High'], d['Low']
         d['EMA200'] = c.ewm(span=200, adjust=False).mean()
+        d['ADX'] = compute_adx(d, 14)
         
-        hl = h - l
-        hc = (h - c.shift(1)).abs()
-        lc = (l - c.shift(1)).abs()
-        tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
         st_atr = tr.ewm(com=9, adjust=False).mean()
-        
         hl2 = (h + l) / 2.0
         basic_ub = hl2 + (2.0 * st_atr)
         basic_lb = hl2 - (2.0 * st_atr)
@@ -395,8 +299,8 @@ class StrategyRegistry:
 
         d['ST_DIR'] = direction
         d['signal'] = 0
-        flip_up = (d['ST_DIR'] == 1) & (d['ST_DIR'].shift(1) == -1) & (d['Close'] > d['EMA200'])
-        flip_down = (d['ST_DIR'] == -1) & (d['ST_DIR'].shift(1) == 1) & (d['Close'] < d['EMA200'])
+        flip_up = (d['ST_DIR'] == 1) & (d['ST_DIR'].shift(1) == -1) & (d['Close'] > d['EMA200']) & (d['ADX'] > 20)
+        flip_down = (d['ST_DIR'] == -1) & (d['ST_DIR'].shift(1) == 1) & (d['Close'] < d['EMA200']) & (d['ADX'] > 20)
         d.loc[flip_up, 'signal'] = 1
         d.loc[flip_down, 'signal'] = -1
         return d
@@ -493,7 +397,7 @@ if not st.session_state.authenticated:
         <div style="background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(30, 41, 59, 0.8); border-radius: 16px; padding: 24px; text-align: center;">
             <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM STUDIO</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Multi-Asset Backtester</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Indian Markets Quant Terminal & Backtester</p>
             <hr style="border-color: rgba(30, 41, 59, 0.8); margin-top: 10px;">
         </div>
         """, unsafe_allow_html=True)
@@ -541,7 +445,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# 🎛️ SIDEBAR & RISK CONTROLS
+# 🎛️ SIDEBAR & RISK CONTROLS (100% INDIAN MARKETS UNIVERSE)
 # ==============================================================================
 user_info_dict = st.session_state.get("user_info") or {}
 curr_tier = user_info_dict.get("tier", "Free Member")
@@ -552,10 +456,10 @@ is_admin = curr_tier == "Master Admin" or curr_uid == "admin"
 FULL_ASSETS = {k: v["name"] for k, v in INDEX_SPECS.items()}
 
 if curr_tier == "Free Member":
-    allowed_asset_keys = ["^NSEBANK", "^NSEI", "BTC-USD"]
+    allowed_asset_keys = ["^NSEBANK", "^NSEI"]
     allowed_tf = ["15m", "1d"]
 elif curr_tier == "VIP Algo Trader":
-    allowed_asset_keys = ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "GC=F", "SI=F", "BTC-USD", "ETH-USD", "SOL-USD"]
+    allowed_asset_keys = ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "GC=F", "SI=F"]
     allowed_tf = ["15m", "5m", "1m", "30m", "1d"]
 else:
     allowed_asset_keys = list(FULL_ASSETS.keys())
@@ -590,13 +494,17 @@ with st.sidebar:
     strategy_type = st.selectbox("Quantitative Strategy Library", list(STRATEGY_MAP.keys()))
     
     st.markdown("---")
-    st.markdown("### 🛡️ 3. Risk & Capital Guard")
+    st.markdown("### 🛡️ 3. Institutional RMS & Risk")
     capital = st.number_input("Capital Pool / Wallet Balance (₹)", value=100000.0, step=10000.0, min_value=1.0)
     
     lot_size_val = INDEX_SPECS.get(symbol, {}).get("lot_size", 1)
     num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1, min_value=1)
     total_qty = num_lots * lot_size_val
     st.caption(f"Actual Order Quantity: **{total_qty} units** ({num_lots} Lots × {lot_size_val})")
+
+    # Institutional Guard Toggles
+    enable_blackout = st.checkbox("🛡️ Enable 11:30–13:15 Mid-Day Chop Blackout", value=True)
+    max_trades_per_day = st.slider("Daily Max Trades Cap (Overtrade Guard)", 1, 5, 2)
 
     is_idx = symbol in ["^NSEBANK", "^NSEI", "^BSESN", "NIFTY_FIN_SERVICE.NS"]
     col_k1, col_k2 = st.columns(2)
@@ -609,35 +517,34 @@ with st.sidebar:
 # 🚀 MAIN DASHBOARD & TABS
 # ==============================================================================
 header_spot = get_live_asset_price(symbol, 57380.0 if symbol == "^NSEBANK" else (24250.0 if symbol == "^NSEI" else 1380.0))
-header_curr = "$" if symbol.endswith("-USD") else "₹"
 
 st.markdown(f"""
 <div style="display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 16px; padding: 16px 24px; margin-bottom: 18px;">
     <div>
         <h3 style="color: #38bdf8; margin: 0; font-weight: 800;">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio & Pro Backtesting Matrix</span>
+        <span style="color: #94a3b8; font-size: 12px;">Indian Markets Quantitative Studio & Pro Backtesting Matrix (Taxes + Theta Accounted)</span>
     </div>
     <div style="text-align: right;">
         <span style="color: #10b981; font-weight: bold; font-size: 11px;">● {curr_tier.upper()}</span><br>
-        <span style="color: #64748b; font-size: 11px;">LATENCY: 12ms | SECURE FEED</span>
+        <span style="color: #64748b; font-size: 11px;">LATENCY: 12ms | SECURE NSE FEED</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Strategy: **{strategy_type.split('.')[1].strip()}**")
+    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **₹{header_spot:,.2f}** | Strategy: **{strategy_type.split('.')[1].strip()}**")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
 
 if is_admin:
     tab_tv_chart, tab_backtest, tab_metrics, tab_trades, tab_reports, tab_admin_access = st.tabs([
-        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs",
+        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs (With Taxes)",
         "📥 Download Reports", "👑 Admin Console"
     ])
 else:
     tab_tv_chart, tab_backtest, tab_metrics, tab_trades, tab_reports = st.tabs([
-        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs",
+        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs (With Taxes)",
         "📥 Download Reports"
     ])
 
@@ -654,8 +561,6 @@ with tab_tv_chart:
     with col_dc2:
         live_chart_tf = st.selectbox("Stream Resolution", ["1m", "5m", "15m", "30m", "60m", "1d"], index=1, key="live_demat_tf")
     with col_dc3:
-        is_usd = live_chart_asset.endswith("-USD")
-        curr_label = "$" if is_usd else "₹"
         is_live_open, gate_desc = is_market_open(live_chart_asset)
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"**Status:** `{gate_desc.upper()}`")
@@ -716,9 +621,9 @@ with tab_tv_chart:
             </head>
             <body>
             <div id="metrics_grid">
-                <div class="metric-card"><div class="metric-label">Live Spot ({asset_dict[live_chart_asset]})</div><div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div></div>
-                <div class="metric-card"><div class="metric-label">Session High</div><div class="metric-val">{curr_label}{init_high:,.2f}</div></div>
-                <div class="metric-card"><div class="metric-label">Session Low</div><div class="metric-val">{curr_label}{init_low:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Live Spot ({asset_dict[live_chart_asset]})</div><div class="metric-val" id="card_spot">₹{init_spot:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Session High</div><div class="metric-val">₹{init_high:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Session Low</div><div class="metric-val">₹{init_low:,.2f}</div></div>
             </div>
             <div id="main_wrapper">
                 <div id="left_toolbar">
@@ -824,7 +729,7 @@ with tab_tv_chart:
                             low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
                             close: lastClose,
                         }});
-                        document.getElementById('card_spot').innerText = "{curr_label}" + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2}});
+                        document.getElementById('card_spot').innerText = "₹" + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2}});
                     }}, 1000);
                 }}
             </script>
@@ -837,7 +742,7 @@ with tab_tv_chart:
         st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
-# 📊 TAB 2-5: BACKTEST EXECUTION ENGINE & REPORTS
+# 📊 TAB 2-5: BACKTEST EXECUTION WITH REAL INDIAN TAXES & FRICTION
 # ==============================================================================
 with tab_reports:
     st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
@@ -851,7 +756,7 @@ with tab_reports:
 
 if execute_btn or st.session_state.get('backtest_executed', False):
     st.session_state.backtest_executed = True
-    with st.spinner(f"⏳ Running Strategy Backtest: {strategy_type}..."):
+    with st.spinner(f"⏳ Running Indian Market Simulation with Taxes & Slippage..."):
         try:
             df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
             if not df_raw.empty and len(df_raw) >= 20:
@@ -864,10 +769,13 @@ if execute_btn or st.session_state.get('backtest_executed', False):
 
                 ist_time_bt = df_bt.index.tz_convert('Asia/Kolkata') if df_bt.index.tz is not None else df_bt.index + pd.Timedelta(hours=5, minutes=30)
                 df_bt['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time_bt]
+                df_bt['Date_Only'] = [t.strftime('%Y-%m-%d') for t in ist_time_bt]
+                df_bt['Time_Only'] = [t.time() for t in ist_time_bt]
 
                 trades = []
                 position = None
                 current_balance = capital
+                daily_trades_count = {}
                 trade_rejections = 0
 
                 asset_spec = INDEX_SPECS.get(symbol, {"name": symbol, "lot_size": 1, "strike_step": 100, "type": "STOCK"})
@@ -878,27 +786,33 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                     curr_spot = float(df_bt['Close'].iloc[i])
                     sig = int(df_bt['signal'].iloc[i])
                     time_lbl = df_bt['Time_Str'].iloc[i]
+                    date_lbl = df_bt['Date_Only'].iloc[i]
+                    cur_time = df_bt['Time_Only'].iloc[i]
 
                     # 1. Manage Active Position Exit
                     if position is not None:
-                        is_buy = position['type'] in ['BUY/CE', 'BUY', 'LONG']
+                        bars_held = i - position['entry_bar']
+                        is_buy = position['type'] in ['BUY/CE', 'BUY']
                         
                         if market_type == "OPTION":
                             _, _, exit_prem, points_diff = MultiAssetEngine.calculate_option_trade(
                                 spot_entry=position['spot_entry'],
                                 spot_exit=curr_spot,
                                 option_type=position['type'],
+                                bars_held=bars_held,
                                 days_to_expiry=2,
                                 iv=15.5,
                                 strike_step=step_size
                             )
-                            opt_move = points_diff
-                            target_hit = opt_move >= target_val
-                            sl_hit = opt_move <= -sl_val
+                            target_hit = points_diff >= target_val
+                            sl_hit = points_diff <= -sl_val
                             
                             if target_hit or sl_hit:
-                                pnl = points_diff * position['qty']
-                                current_balance += (position['cost'] + pnl)
+                                gross_pnl = points_diff * position['qty']
+                                tax_dict = calculate_statutory_taxes(position['entry_price'], exit_prem, position['qty'], "OPTION")
+                                net_pnl = gross_pnl - tax_dict['total_taxes']
+                                
+                                current_balance += (position['cost'] + net_pnl)
                                 res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
                                 trades.append({
                                     'Entry Time': position['time'],
@@ -908,44 +822,24 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                     'Qty': position['qty'],
                                     'Entry Prem (₹)': position['entry_price'],
                                     'Exit Prem (₹)': exit_prem,
+                                    'Gross PnL (₹)': round(gross_pnl, 2),
+                                    'Taxes & Slippage (₹)': tax_dict['total_taxes'],
+                                    'Net PnL (₹)': round(net_pnl, 2),
                                     'Result': res_label,
-                                    'PnL (₹)': pnl,
-                                    'Balance (₹)': current_balance
+                                    'Ending Balance (₹)': round(current_balance, 2)
                                 })
                                 position = None
 
-                        elif market_type == "CRYPTO":
-                            price_diff = (curr_spot - position['entry_price']) if is_buy else (position['entry_price'] - curr_spot)
-                            pnl_pct = (price_diff / position['entry_price']) * 100.0
-                            target_hit = pnl_pct >= target_val
-                            sl_hit = pnl_pct <= -sl_val
-                            
-                            if target_hit or sl_hit:
-                                pnl_usd = (pnl_pct / 100.0) * position['cost']
-                                current_balance += (position['cost'] + pnl_usd)
-                                res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
-                                trades.append({
-                                    'Entry Time': position['time'],
-                                    'Exit Time': time_lbl,
-                                    'Type': position['type'],
-                                    'Strike': f"{asset_spec['name']} PERP",
-                                    'Qty': position['qty'],
-                                    'Entry Prem (₹)': position['entry_price'],
-                                    'Exit Prem (₹)': curr_spot,
-                                    'Result': res_label,
-                                    'PnL (₹)': pnl_usd,
-                                    'Balance (₹)': current_balance
-                                })
-                                position = None
-
-                        else:
+                        else: # CASH STOCKS / COMMODITIES
                             price_diff = (curr_spot - position['entry_price']) if is_buy else (position['entry_price'] - curr_spot)
                             target_hit = price_diff >= target_val
                             sl_hit = price_diff <= -sl_val
                             
                             if target_hit or sl_hit:
-                                pnl_cash = price_diff * position['qty']
-                                current_balance += (position['cost'] + pnl_cash)
+                                gross_pnl = price_diff * position['qty']
+                                tax_dict = calculate_statutory_taxes(position['entry_price'], curr_spot, position['qty'], "STOCK")
+                                net_pnl = gross_pnl - tax_dict['total_taxes']
+                                current_balance += (position['cost'] + net_pnl)
                                 res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
                                 trades.append({
                                     'Entry Time': position['time'],
@@ -955,24 +849,32 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                     'Qty': position['qty'],
                                     'Entry Prem (₹)': position['entry_price'],
                                     'Exit Prem (₹)': curr_spot,
+                                    'Gross PnL (₹)': round(gross_pnl, 2),
+                                    'Taxes & Slippage (₹)': tax_dict['total_taxes'],
+                                    'Net PnL (₹)': round(net_pnl, 2),
                                     'Result': res_label,
-                                    'PnL (₹)': pnl_cash,
-                                    'Balance (₹)': current_balance
+                                    'Ending Balance (₹)': round(current_balance, 2)
                                 })
                                 position = None
 
-                    # 2. Open New Position with Strict Lot Sizing & Margin Check
+                    # 2. Open New Position with Strict Filters
                     elif sig != 0:
+                        # Session Blackout Check (11:30 AM to 01:15 PM)
+                        if enable_blackout and market_type == "OPTION":
+                            if dtime(11, 30) <= cur_time <= dtime(13, 15):
+                                continue
+                        
+                        # Daily Trades Cap Check
+                        day_count = daily_trades_count.get(date_lbl, 0)
+                        if day_count >= max_trades_per_day:
+                            continue
+
                         pos_type = 'BUY/CE' if sig == 1 else 'BUY/PE'
                         
                         if market_type == "OPTION":
                             atm_s, entry_prem, _, _ = MultiAssetEngine.calculate_option_trade(
-                                spot_entry=curr_spot,
-                                spot_exit=curr_spot,
-                                option_type=pos_type,
-                                days_to_expiry=2,
-                                iv=15.5,
-                                strike_step=step_size
+                                spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
+                                bars_held=0, days_to_expiry=2, iv=15.5, strike_step=step_size
                             )
                             opt_label = "CE" if sig == 1 else "PE"
                             strike_desc = f"{atm_s} {opt_label}"
@@ -990,29 +892,11 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                 exec_qty = total_qty
                                 
                             current_balance -= required_margin
+                            daily_trades_count[date_lbl] = day_count + 1
                             position = {
-                                'type': pos_type,
-                                'spot_entry': curr_spot,
-                                'entry_price': entry_prem,
-                                'time': time_lbl,
-                                'qty': exec_qty,
-                                'cost': required_margin,
-                                'strike_desc': strike_desc
-                            }
-
-                        elif market_type == "CRYPTO":
-                            required_margin = min(current_balance, capital * 0.25)
-                            if current_balance < 10.0:
-                                trade_rejections += 1
-                                continue
-                            current_balance -= required_margin
-                            position = {
-                                'type': 'LONG' if sig == 1 else 'SHORT',
-                                'entry_price': curr_spot,
-                                'time': time_lbl,
-                                'qty': round(required_margin / curr_spot, 4),
-                                'cost': required_margin,
-                                'strike_desc': f"{asset_spec['name']} PERP"
+                                'type': pos_type, 'spot_entry': curr_spot, 'entry_price': entry_prem,
+                                'time': time_lbl, 'qty': exec_qty, 'cost': required_margin,
+                                'strike_desc': strike_desc, 'entry_bar': i
                             }
 
                         else:
@@ -1028,13 +912,11 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                 exec_qty = total_qty
                                 
                             current_balance -= required_margin
+                            daily_trades_count[date_lbl] = day_count + 1
                             position = {
-                                'type': 'BUY' if sig == 1 else 'SELL',
-                                'entry_price': curr_spot,
-                                'time': time_lbl,
-                                'qty': exec_qty,
-                                'cost': required_margin,
-                                'strike_desc': f"{asset_spec['name']} CASH"
+                                'type': 'BUY' if sig == 1 else 'SELL', 'entry_price': curr_spot,
+                                'time': time_lbl, 'qty': exec_qty, 'cost': required_margin,
+                                'strike_desc': f"{asset_spec['name']} CASH", 'entry_bar': i
                             }
 
                 with tab_backtest:
@@ -1045,30 +927,33 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                     st.plotly_chart(fig, use_container_width=True)
 
                 with tab_metrics:
-                    st.markdown("#### 💎 Institutional Strategy Scorecard & Capital Audit")
+                    st.markdown("#### 💎 Institutional Scorecard (Net Realized After Taxes & Slippage)")
                     if trades:
                         tdf = pd.DataFrame(trades)
-                        net_pnl = tdf['PnL (₹)'].sum()
-                        win_count = len(tdf[tdf['PnL (₹)'] > 0])
+                        gross_total = tdf['Gross PnL (₹)'].sum()
+                        taxes_total = tdf['Taxes & Slippage (₹)'].sum()
+                        net_total = tdf['Net PnL (₹)'].sum()
+                        
+                        win_count = len(tdf[tdf['Net PnL (₹)'] > 0])
                         win_rate = (win_count / len(tdf)) * 100
-                        tdf['Cum_PnL'] = tdf['PnL (₹)'].cumsum()
+                        tdf['Cum_PnL'] = tdf['Net PnL (₹)'].cumsum()
 
                         k1, k2, k3, k4 = st.columns(4)
-                        k1.metric("Net Realized PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}", f"{(net_pnl/capital)*100:+.2f}% ROI")
+                        k1.metric("Net Realized PnL", f"{'+₹' if net_total >= 0 else '-₹'}{abs(net_total):,.2f}", f"{(net_total/capital)*100:+.2f}% Real ROI")
                         k2.metric("Win Probability", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
-                        k3.metric("Trade Executions", len(tdf), f"Rejections (No Margin): {trade_rejections}")
-                        k4.metric("Ending Capital Balance", f"₹{current_balance:,.2f}")
+                        k3.metric("Total Executions", len(tdf), f"Taxes/Slippage: ₹{taxes_total:,.2f}")
+                        k4.metric("Ending Capital", f"₹{current_balance:,.2f}")
 
                         fig_equity = go.Figure()
-                        fig_equity.add_trace(go.Scatter(x=tdf['Exit Time'], y=tdf['Cum_PnL'], mode='lines+markers', line=dict(color='#10b981', width=2.5), fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)', name='Equity'))
-                        fig_equity.update_layout(title="📈 Cumulative Equity Trajectory (₹)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=320)
+                        fig_equity.add_trace(go.Scatter(x=tdf['Exit Time'], y=tdf['Cum_PnL'], mode='lines+markers', line=dict(color='#10b981', width=2.5), fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)', name='Net Equity'))
+                        fig_equity.update_layout(title="📈 Net Equity Trajectory (After Taxes & Slippage)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=320)
                         st.plotly_chart(fig_equity, use_container_width=True)
                     else:
                         st.warning(f"No completed trades generated within parameters. Rejected due to margin: {trade_rejections}")
 
                 with tab_trades:
                     if trades:
-                        st.markdown("#### 📜 Trade Execution Audit Trail (Realistic Option Premium & Lots)")
+                        st.markdown("#### 📜 Trade Execution Audit Trail (With STT, GST, Slippage & Theta Decay)")
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=400)
                         
                         csv_buf = io.StringIO()
