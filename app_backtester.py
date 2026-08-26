@@ -42,13 +42,22 @@ TERMINAL_MANUAL_TEXT = """=====================================================
 - Crypto (Perpetual): Dollar-margined contracts with long/short directional profit tracking.
 - Cash Equities: Discrete integer share allocation based on available capital.
 
-2. STRICT LOT SIZE SPECIFICATIONS
+2. 7 INSTITUTIONAL STRATEGY MODULES
+- 1. EMA Institutional Pullback (20/50 Trend)
+- 2. EMA Golden/Death Crossover (9/21 Acceleration)
+- 3. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)
+- 4. Candlestick Pattern Engine (Hammer / Engulfing Reversal)
+- 5. Volume Spike + Momentum Breakout
+- 6. VWAP Intraday Retest & Expansion
+- 7. Bollinger Band Dynamic Mean Reversion
+
+3. STRICT LOT SIZE SPECIFICATIONS
 - NIFTY 50: 75 Units per Lot | Strike Interval: 50 Pts
 - BANK NIFTY: 30 Units per Lot | Strike Interval: 100 Pts
 - FINNIFTY: 65 Units per Lot | Strike Interval: 50 Pts
 - SENSEX: 20 Units per Lot | Strike Interval: 100 Pts
 
-3. RISK & CAPITAL GUARD (RMS)
+4. RISK & CAPITAL GUARD (RMS)
 - Pre-Trade Margin Check: required_margin = entry_premium * total_qty
 - Rejection of trades exceeding available wallet balance.
 =====================================================
@@ -81,6 +90,9 @@ DEFAULT_USERS = {
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
+# ==============================================================================
+# 📦 DATABASE & STATE PERSISTENCE
+# ==============================================================================
 def init_sqlite_db():
     with sqlite3.connect(SQLITE_DB_FILE) as conn:
         cursor = conn.cursor()
@@ -160,12 +172,12 @@ def save_active_trades(trades):
 
 def load_autopilot_state():
     if not os.path.exists(AUTOPILOT_STATE_FILE):
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50)"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50 Trend)"}
     try:
         with open(AUTOPILOT_STATE_FILE, "r") as f:
             return json.load(f)
     except Exception:
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50)"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50 Trend)"}
 
 def save_autopilot_state(state):
     with open(AUTOPILOT_STATE_FILE, "w") as f:
@@ -198,7 +210,7 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE
+# 🧮 GREEKS & MULTI-ASSET ENGINE
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -339,7 +351,7 @@ def is_market_open(symbol_key):
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛠️ STRATEGY REGISTRY PATTERN
+# 🛠️ COMPLETE 7 INSTITUTIONAL STRATEGY MODULES (REGISTRY PATTERN)
 # ==============================================================================
 class StrategyRegistry:
     @staticmethod
@@ -365,6 +377,25 @@ class StrategyRegistry:
         d.loc[cond_buy, 'confidence'] = 88
         d.loc[cond_sell, 'signal'] = -1
         d.loc[cond_sell, 'confidence'] = 88
+        return d
+
+    @staticmethod
+    def ema_crossover(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA9'] = c.ewm(span=9, adjust=False).mean()
+        d['EMA21'] = c.ewm(span=21, adjust=False).mean()
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        cross_up = (d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1))
+        cross_down = (d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1))
+        
+        d.loc[cross_up, 'signal'] = 1
+        d.loc[cross_up, 'confidence'] = 90
+        d.loc[cross_down, 'signal'] = -1
+        d.loc[cross_down, 'confidence'] = 90
         return d
 
     @staticmethod
@@ -415,13 +446,103 @@ class StrategyRegistry:
         d.loc[flip_down, 'confidence'] = 92
         return d
 
+    @staticmethod
+    def candlestick_pattern(df):
+        d = df.copy()
+        o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
+        body = (c - o).abs()
+        range_hl = h - l
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        # Hammer (Bullish Reversal): Long lower shadow + Small upper body
+        is_hammer = (l < o.combine(c, min) - 2 * body) & (h <= o.combine(c, max) + body * 0.5) & (range_hl > body * 2.5)
+        # Bearish Shooting Star / Inverted Hammer
+        is_star = (h > o.combine(c, max) + 2 * body) & (l >= o.combine(c, min) - body * 0.5) & (range_hl > body * 2.5)
+        
+        d.loc[is_hammer, 'signal'] = 1
+        d.loc[is_hammer, 'confidence'] = 86
+        d.loc[is_star, 'signal'] = -1
+        d.loc[is_star, 'confidence'] = 86
+        return d
+
+    @staticmethod
+    def volume_breakout(df):
+        d = df.copy()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        d['HIGH_20'] = d['High'].rolling(20).max().shift(1)
+        d['LOW_20'] = d['Low'].rolling(20).min().shift(1)
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Close'] > d['HIGH_20']) & (d['Volume'] > d['VOL_SMA20'] * 1.5)
+        sell_cond = (d['Close'] < d['LOW_20']) & (d['Volume'] > d['VOL_SMA20'] * 1.5)
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 91
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 91
+        return d
+
+    @staticmethod
+    def vwap_expansion(df):
+        d = df.copy()
+        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
+        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Close'] > d['VWAP']) & (d['Close'].shift(1) <= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        sell_cond = (d['Close'] < d['VWAP']) & (d['Close'].shift(1) >= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 87
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 87
+        return d
+
+    @staticmethod
+    def bollinger_rsi_reversion(df):
+        d = df.copy()
+        c = d['Close']
+        d['SMA20'] = c.rolling(20).mean()
+        std20 = c.rolling(20).std()
+        d['BB_UPPER'] = d['SMA20'] + (2.0 * std20)
+        d['BB_LOWER'] = d['SMA20'] - (2.0 * std20)
+        
+        delta = c.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30)
+        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70)
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 89
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 89
+        return d
+
 STRATEGY_MAP = {
-    "1. EMA Institutional Pullback (20/50)": StrategyRegistry.ema_pullback,
-    "2. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider
+    "1. EMA Institutional Pullback (20/50 Trend)": StrategyRegistry.ema_pullback,
+    "2. EMA Golden/Death Crossover (9/21 Acceleration)": StrategyRegistry.ema_crossover,
+    "3. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
+    "4. Candlestick Pattern Engine (Hammer / Engulfing Reversal)": StrategyRegistry.candlestick_pattern,
+    "5. Volume Spike + Momentum Breakout": StrategyRegistry.volume_breakout,
+    "6. VWAP Intraday Retest & Expansion": StrategyRegistry.vwap_expansion,
+    "7. Bollinger Band Dynamic Mean Reversion": StrategyRegistry.bollinger_rsi_reversion
 }
 
 # ==============================================================================
-# 🤖 24/7 BACKGROUND WORKER
+# 🤖 24/7 BACKGROUND WORKER (AUTONOMOUS THREAD)
 # ==============================================================================
 def background_scanner_loop():
     while True:
@@ -433,7 +554,7 @@ def background_scanner_loop():
                 min_conf = state.get("conf", 80)
                 rd_target = state.get("target", 50.0)
                 rd_sl = state.get("sl", 20.0)
-                strat_name = state.get("strategy", "1. EMA Institutional Pullback (20/50)")
+                strat_name = state.get("strategy", "1. EMA Institutional Pullback (20/50 Trend)")
                 
                 open_flag, _ = is_market_open(asset)
                 if open_flag:
@@ -636,7 +757,6 @@ with st.sidebar:
 # ==============================================================================
 # 🚀 MAIN DASHBOARD & TABS
 # ==============================================================================
-# DYNAMIC SPOT FETCH FOR SELECTED MARKET FEED
 header_spot = get_live_asset_price(symbol, 57380.0 if symbol == "^NSEBANK" else (24250.0 if symbol == "^NSEI" else 1380.0))
 header_curr = "$" if symbol.endswith("-USD") else "₹"
 
@@ -687,7 +807,6 @@ with tab_tv_chart:
                 df_demat.columns = df_demat.columns.droplevel(1)
             df_demat.dropna(inplace=True)
 
-            # Localized IST conversion
             ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
             candle_list, area_list = [], []
@@ -1113,7 +1232,7 @@ with tab_ai_pilot:
     col_ap1, col_ap2 = st.columns([1.8, 1])
     with col_ap1:
         if auto_state.get("running", False):
-            st.success(f"🟢 **AI AUTOPILOT IS ACTIVE** | Target: `{asset_dict.get(auto_state.get('asset', '^NSEBANK'), '')}` | Strategy: `{auto_state.get('strategy', 'EMA Pullback')}`")
+            st.success(f"🟢 **AI AUTOPILOT IS ACTIVE** | Target: `{asset_dict.get(auto_state.get('asset', '^NSEBANK'), '')}` | Strategy: `{auto_state.get('strategy', '1. EMA Institutional Pullback (20/50 Trend)')}`")
         else:
             st.warning("🔴 **AI AUTOPILOT ENGINE IS OFF (STANDBY)**")
 
@@ -1132,7 +1251,6 @@ with tab_ai_pilot:
     with col_p3:
         target_strat = st.selectbox("Execution Strategy", list(STRATEGY_MAP.keys()), index=0, key="pilot_strat_sel")
 
-    # Real-time spot detection for Autopilot Hub
     pilot_spot = get_live_asset_price(target_asset, 57380.0 if target_asset == "^NSEBANK" else (24250.0 if target_asset == "^NSEI" else 1380.0))
     pilot_curr = "$" if target_asset.endswith("-USD") else "₹"
     st.markdown(f"###### 📊 Real-Time Underlying Spot: `{pilot_curr}{pilot_spot:,.2f}`")
