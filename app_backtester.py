@@ -81,9 +81,6 @@ DEFAULT_USERS = {
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
-# ==============================================================================
-# 📦 DATABASE & STATE PERSISTENCE
-# ==============================================================================
 def init_sqlite_db():
     with sqlite3.connect(SQLITE_DB_FILE) as conn:
         cursor = conn.cursor()
@@ -201,7 +198,7 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 PURE MATH BLACK-SCHOLES & MULTI-ASSET ENGINE (NO SCIPY DEPENDENCY)
+# 🧮 GREEKS & PRICING ENGINE
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -212,9 +209,6 @@ def std_norm_pdf(x):
 class MultiAssetEngine:
     @staticmethod
     def calculate_option_trade(spot_entry, spot_exit, option_type, days_to_expiry=3, iv=16.0, strike_step=100):
-        """
-        Converts spot movements into accurate Option Premium P&L using Black-Scholes Greeks.
-        """
         atm_strike = int(round(spot_entry / float(strike_step)) * strike_step)
         T_entry = max(days_to_expiry / 365.0, 0.0001)
         sigma = iv / 100.0
@@ -226,7 +220,7 @@ class MultiAssetEngine:
         if "CE" in option_type or "BUY" in option_type:
             entry_premium = spot_entry * std_norm_cdf(d1) - atm_strike * math.exp(-r * T_entry) * std_norm_cdf(d2)
             delta = std_norm_cdf(d1)
-        else: # PE / SHORT
+        else:
             entry_premium = atm_strike * math.exp(-r * T_entry) * std_norm_cdf(-d2) - spot_entry * std_norm_cdf(-d1)
             delta = std_norm_cdf(d1) - 1.0
 
@@ -241,21 +235,6 @@ class MultiAssetEngine:
         exit_premium = round(exit_premium, 2)
         points_pnl = round(exit_premium - entry_premium, 2)
         return atm_strike, entry_premium, exit_premium, points_pnl
-
-    @staticmethod
-    def calculate_crypto_trade(entry_price, exit_price, position_size_usd, leverage=5.0, is_long=True):
-        contracts = (position_size_usd * leverage) / entry_price
-        price_diff = (exit_price - entry_price) if is_long else (entry_price - exit_price)
-        pnl_usd = price_diff * contracts
-        return round(pnl_usd, 2)
-
-    @staticmethod
-    def calculate_stock_trade(entry_price, exit_price, allocated_capital):
-        shares = int(allocated_capital // entry_price)
-        if shares == 0:
-            return 0, 0.0
-        pnl = (exit_price - entry_price) * shares
-        return shares, round(pnl, 2)
 
 class BlackScholesEngine:
     @staticmethod
@@ -277,7 +256,7 @@ class BlackScholesEngine:
             premium = spot * cdf_d1 - strike * math.exp(-r * T) * cdf_d2
             delta = cdf_d1
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * strike * math.exp(-r * T) * cdf_d2) / 365.0
-        else: # PE
+        else:
             premium = strike * math.exp(-r * T) * cdf_neg_d2 - spot * cdf_neg_d1
             delta = cdf_d1 - 1.0
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * strike * math.exp(-r * T) * cdf_neg_d2) / 365.0
@@ -343,7 +322,7 @@ def is_market_open(symbol_key):
     if weekday in [5, 6]:
         return False, "Market Closed (Weekend)"
 
-    if symbol_key in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
+    if symbol_key in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "NIFTY_FIN_SERVICE.NS", "^BSESN"]:
         market_start = dtime(9, 15)
         market_end = dtime(15, 30)
         if market_start <= current_time <= market_end:
@@ -360,7 +339,7 @@ def is_market_open(symbol_key):
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛠️ STRATEGY REGISTRY PATTERN (ISOLATED EXECUTION)
+# 🛠️ STRATEGY REGISTRY PATTERN
 # ==============================================================================
 class StrategyRegistry:
     @staticmethod
@@ -436,120 +415,13 @@ class StrategyRegistry:
         d.loc[flip_down, 'confidence'] = 92
         return d
 
-    @staticmethod
-    def macd_momentum(df):
-        d = df.copy()
-        c = d['Close']
-        ema12 = c.ewm(span=12, adjust=False).mean()
-        ema26 = c.ewm(span=26, adjust=False).mean()
-        d['MACD'] = ema12 - ema26
-        d['SIGNAL_LINE'] = d['MACD'].ewm(span=9, adjust=False).mean()
-        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
-        
-        d['signal'] = 0
-        d['confidence'] = 0
-        
-        buy_cond = (d['MACD'] > d['SIGNAL_LINE']) & (d['MACD'].shift(1) <= d['SIGNAL_LINE'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        sell_cond = (d['MACD'] < d['SIGNAL_LINE']) & (d['MACD'].shift(1) >= d['SIGNAL_LINE'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[buy_cond, 'confidence'] = 86
-        d.loc[sell_cond, 'signal'] = -1
-        d.loc[sell_cond, 'confidence'] = 86
-        return d
-
-    @staticmethod
-    def bollinger_rsi_reversion(df):
-        d = df.copy()
-        c = d['Close']
-        d['SMA20'] = c.rolling(20).mean()
-        std20 = c.rolling(20).std()
-        d['BB_UPPER'] = d['SMA20'] + (2.0 * std20)
-        d['BB_LOWER'] = d['SMA20'] - (2.0 * std20)
-        
-        delta = c.diff()
-        gain = delta.clip(lower=0).rolling(14).mean()
-        loss = (-delta.clip(upper=0)).rolling(14).mean()
-        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
-        
-        d['signal'] = 0
-        d['confidence'] = 0
-        
-        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30)
-        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70)
-        
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[buy_cond, 'confidence'] = 89
-        d.loc[sell_cond, 'signal'] = -1
-        d.loc[sell_cond, 'confidence'] = 89
-        return d
-
-    @staticmethod
-    def orb_breakout(df):
-        d = df.copy()
-        d['signal'] = 0
-        d['confidence'] = 0
-        d['HIGH_15'] = d['High'].rolling(3).max().shift(1)
-        d['LOW_15'] = d['Low'].rolling(3).min().shift(1)
-        
-        buy_cond = (d['Close'] > d['HIGH_15'])
-        sell_cond = (d['Close'] < d['LOW_15'])
-        
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[buy_cond, 'confidence'] = 84
-        d.loc[sell_cond, 'signal'] = -1
-        d.loc[sell_cond, 'confidence'] = 84
-        return d
-
-    @staticmethod
-    def donchian_breakout(df):
-        d = df.copy()
-        d['DC_HIGH'] = d['High'].rolling(20).max().shift(1)
-        d['DC_LOW'] = d['Low'].rolling(20).min().shift(1)
-        
-        d['signal'] = 0
-        d['confidence'] = 0
-        
-        buy_cond = (d['Close'] > d['DC_HIGH'])
-        sell_cond = (d['Close'] < d['DC_LOW'])
-        
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[buy_cond, 'confidence'] = 91
-        d.loc[sell_cond, 'signal'] = -1
-        d.loc[sell_cond, 'confidence'] = 91
-        return d
-
-    @staticmethod
-    def vwap_expansion(df):
-        d = df.copy()
-        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
-        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
-        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
-        
-        d['signal'] = 0
-        d['confidence'] = 0
-        
-        buy_cond = (d['Close'] > d['VWAP']) & (d['Close'].shift(1) <= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        sell_cond = (d['Close'] < d['VWAP']) & (d['Close'].shift(1) >= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[buy_cond, 'confidence'] = 87
-        d.loc[sell_cond, 'signal'] = -1
-        d.loc[sell_cond, 'confidence'] = 87
-        return d
-
 STRATEGY_MAP = {
     "1. EMA Institutional Pullback (20/50)": StrategyRegistry.ema_pullback,
-    "2. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
-    "3. MACD + Volume Spike Momentum": StrategyRegistry.macd_momentum,
-    "4. Bollinger Bands + RSI Mean Reversion": StrategyRegistry.bollinger_rsi_reversion,
-    "5. Opening Range Breakout (ORB 15-Min)": StrategyRegistry.orb_breakout,
-    "6. Donchian Channel Volatility Breakout (20-Period)": StrategyRegistry.donchian_breakout,
-    "7. VWAP Intraday Retest & Expansion": StrategyRegistry.vwap_expansion
+    "2. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider
 }
 
 # ==============================================================================
-# 🤖 24/7 BACKGROUND WORKER (AUTONOMOUS THREAD)
+# 🤖 24/7 BACKGROUND WORKER
 # ==============================================================================
 def background_scanner_loop():
     while True:
@@ -592,7 +464,7 @@ def background_scanner_loop():
                             prem_entry = r_trade.get('premium_entry', 188)
                             last_milestone = r_trade.get('last_milestone', 0)
 
-                            is_short = ("SHORT" in action) or ("SELL" in action) or ("PE" in action and not asset.endswith("-USD") and "FUT" not in strk_info)
+                            is_short = ("SHORT" in action) or ("SELL" in action) or ("PE" in action and not asset.endswith("-USD"))
                             is_crypto = asset.endswith("-USD")
                             is_mcx = asset in ["GC=F", "SI=F", "CL=F"]
 
@@ -605,155 +477,19 @@ def background_scanner_loop():
                                 target_hit = (live_spot >= tp_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot <= tp_p)
                                 sl_hit = (live_spot <= sl_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot >= sl_p)
 
-                            if is_crypto:
-                                profit_pct = (spot_move / entry_p) * 100.0
-                                if profit_pct >= (last_milestone + 0.8) and not target_hit and not sl_hit:
-                                    last_milestone_up = round(last_milestone + 0.8, 1)
-                                    tg_update = f"<b>{strk_info}</b>\n\n<b>+{profit_pct:.1f}% Profit Milestone 🔥🔥</b>\n\n<b>++ (Current: ${live_spot:,.2f})</b>"
-                                    send_telegram_alert(tg_update)
-                                    r_trade['last_milestone'] = last_milestone_up
-                                    current_active[r_sym] = r_trade
-                                    save_active_trades(current_active)
-                            elif is_mcx:
-                                if spot_move >= last_milestone + 150 and not target_hit and not sl_hit:
-                                    last_milestone_up = int(last_milestone + 150)
-                                    tg_update = f"<b>{strk_info}</b>\n\n<b>+{last_milestone_up} Points Gain 🔥🔥</b>\n\n<b>++</b>"
-                                    send_telegram_alert(tg_update)
-                                    r_trade['last_milestone'] = last_milestone_up
-                                    current_active[r_sym] = r_trade
-                                    save_active_trades(current_active)
-                            else:
-                                cur_prem = int(prem_entry + (spot_move * 0.55))
-                                if spot_move >= last_milestone + 10 and not target_hit and not sl_hit:
-                                    pts_up = int(last_milestone + 10)
-                                    cur_prem_disp = int(prem_entry + (pts_up * 0.55))
-                                    tg_update = f"<b>{cur_prem_disp} 🔥🔥</b>\n\n<b>++</b>"
-                                    send_telegram_alert(tg_update)
-                                    r_trade['last_milestone'] = pts_up
-                                    current_active[r_sym] = r_trade
-                                    save_active_trades(current_active)
-
                             if target_hit:
-                                tg_done = (
-                                    f"🎯 <b>TARGET COMPLETED - BOOK FULL PROFIT</b> 🎯\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"📊 <b>{strk_info}</b>\n"
-                                    f"✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n"
-                                    f"💵 <b>Exit Price:</b> {curr_sym}{live_spot:,.2f}\n"
-                                    f"⏱ <b>Completed At:</b> {now_ist}\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🤖 <i>Accountability Logged via Sam Quantum AI</i>"
-                                )
+                                tg_done = f"🎯 <b>TARGET COMPLETED - BOOK FULL PROFIT</b> 🎯\n━━━━━━━━━━━━━━━━━━━━━\n📊 <b>{strk_info}</b>\n✅ <b>Status:</b> <code>FULL TARGET HIT 🚀</code>\n💵 <b>Exit Price:</b> {curr_sym}{live_spot:,.2f}\n⏱ <b>Completed At:</b> {now_ist}"
                                 send_telegram_alert(tg_done)
-                                logs = load_signals_log()
-                                for item in logs:
-                                    if item.get("id") == r_trade.get("log_id"):
-                                        item["status"] = "TARGET HIT 🎯"
-                                        item["exit_price"] = f"{curr_sym}{live_spot:,.2f}"
-                                save_signals_log(logs)
                                 completed.append(r_sym)
-
                             elif sl_hit:
-                                tg_sl = (
-                                    f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"📊 <b>{strk_info}</b>\n"
-                                    f"🛑 <b>Status:</b> <code>SL TRIGGERED</code>\n"
-                                    f"💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f}\n"
-                                    f"⏱ <b>Closed At:</b> {now_ist}\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🤖 <i>Risk Managed via Sam Quantum AI</i>"
-                                )
+                                tg_sl = f"🛑 <b>STOP LOSS HIT - POSITION CLOSED</b> 🛑\n━━━━━━━━━━━━━━━━━━━━━\n📊 <b>{strk_info}</b>\n🛑 <b>Status:</b> <code>SL TRIGGERED</code>\n💵 <b>Exit Spot:</b> {curr_sym}{live_spot:,.2f}\n⏱ <b>Closed At:</b> {now_ist}"
                                 send_telegram_alert(tg_sl)
-                                logs = load_signals_log()
-                                for item in logs:
-                                    if item.get("id") == r_trade.get("log_id"):
-                                        item["status"] = "SL HIT 🛑"
-                                        item["exit_price"] = f"{curr_sym}{live_spot:,.2f}"
-                                save_signals_log(logs)
                                 completed.append(r_sym)
 
                         for c_item in completed:
                             if c_item in current_active:
                                 del current_active[c_item]
                         save_active_trades(current_active)
-
-                        if asset not in current_active:
-                            last_sig = int(df['signal'].iloc[-1])
-                            last_conf = int(df['confidence'].iloc[-1])
-                            
-                            if last_sig != 0 and last_conf >= min_conf:
-                                sig_raw = "BUY" if last_sig == 1 else "SELL"
-                                exp_tag, market_cat = get_dynamic_expiry_and_tag(asset)
-                                specs = INDEX_SPECS.get(asset, {"name": asset, "strike_step": 100})
-                                strike_step = specs.get("strike_step", 100)
-                                strike_val = int(round(spot / float(strike_step)) * strike_step)
-                                
-                                if market_cat == "NSE":
-                                    opt_type = "CE" if sig_raw == "BUY" else "PE"
-                                    inst_name = f"{specs['name']} {strike_val} {opt_type} ({exp_tag})"
-                                    greeks = BlackScholesEngine.calculate_greeks(spot, strike_val, 2, 14.5, 0.07, opt_type)
-                                    base_prem = greeks["premium"]
-                                    tp_prem = int(base_prem + (rd_target * 0.55))
-                                    sl_prem = int(base_prem - (rd_sl * 0.55))
-                                    tp_spot = spot + rd_target if sig_raw == "BUY" else spot - rd_target
-                                    sl_spot = spot - rd_sl if sig_raw == "BUY" else spot + rd_sl
-
-                                    tg_text = (
-                                        f"📊 <b>{inst_name}</b>\n\n"
-                                        f"📈 <b>BUY ABOVE ₹{base_prem}</b>\n\n"
-                                        f"🎯 <b>TARGET: ₹{tp_prem} | ₹{tp_prem + 30}</b>\n\n"
-                                        f"☠️ <b>SL: ₹{sl_prem}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified ({strat_name})</i>"
-                                    )
-                                elif market_cat == "MCX":
-                                    strk_name = f"{specs['name']} ({exp_tag})"
-                                    base_prem = int(spot)
-                                    tp_spot = spot + rd_target if sig_raw == "BUY" else spot - rd_target
-                                    sl_spot = spot - rd_sl if sig_raw == "BUY" else spot + rd_sl
-                                    pos_label = "BUY ABOVE" if sig_raw == "BUY" else "SELL BELOW"
-                                    
-                                    tg_text = (
-                                        f"📊 <b>{strk_name}</b>\n\n"
-                                        f"📈 <b>{pos_label} ₹{base_prem:,.0f}</b>\n\n"
-                                        f"🎯 <b>TARGET: ₹{tp_spot:,.0f} ({'+' if sig_raw == 'BUY' else '-'}{rd_target:.0f} Pts)</b>\n\n"
-                                        f"☠️ <b>SL: ₹{sl_spot:,.0f}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified</i>"
-                                    )
-                                else:
-                                    strk_name = f"{specs['name']} (PERPETUAL SWAP)"
-                                    base_prem = spot
-                                    tp_spot = spot * (1 + (rd_target / 100.0)) if sig_raw == "BUY" else spot * (1 - (rd_target / 100.0))
-                                    sl_spot = spot * (1 - (rd_sl / 100.0)) if sig_raw == "BUY" else spot * (1 + (rd_sl / 100.0))
-                                    pos_type = "LONG 🟢" if sig_raw == "BUY" else "SHORT 🔴"
-
-                                    tg_text = (
-                                        f"📊 <b>{strk_name}</b>\n\n"
-                                        f"🚀 <b>POSITION: {pos_type}</b>\n\n"
-                                        f"💵 <b>ENTRY: ${spot:,.2f}</b>\n\n"
-                                        f"🎯 <b>TARGET: ${tp_spot:,.2f} ({'+' if 'LONG' in pos_type else '-'}{rd_target:.1f}%)</b>\n\n"
-                                        f"🛑 <b>STOP LOSS: ${sl_spot:,.2f}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified</i>"
-                                    )
-
-                                send_telegram_alert(tg_text)
-                                current_active[asset] = {
-                                    "asset_name": asset, "strike_info": strk_name if market_cat != "NSE" else inst_name,
-                                    "action": sig_raw, "entry": spot, "target": tp_spot, "sl": sl_spot,
-                                    "premium_entry": base_prem, "last_milestone": 0,
-                                    "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
-                                    "sym": curr_sym, "log_id": log_id
-                                }
-                                save_active_trades(current_active)
-                                logs = load_signals_log()
-                                logs.insert(0, {
-                                    "id": log_id, "time": now_ist, "raw_time": now_raw,
-                                    "instrument": strk_name if market_cat != "NSE" else inst_name, "action": sig_raw, "entry_spot": spot,
-                                    "target": f"{curr_sym}{tp_spot:,.1f}", "sl": f"{curr_sym}{sl_spot:,.1f}",
-                                    "confidence": f"{last_conf}%", "status": "LIVE IN POSITION",
-                                    "exit_price": "-"
-                                })
-                                save_signals_log(logs)
         except Exception:
             pass
         time.sleep(30)
@@ -782,7 +518,7 @@ if not st.session_state.authenticated:
         <div style="background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(30, 41, 59, 0.8); border-radius: 16px; padding: 24px; text-align: center;">
             <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Multi-Strategy Backtester</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Multi-Strategy Engine</p>
             <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
                 <span style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">● LIVE QUANT FEED</span>
             </div>
@@ -795,8 +531,8 @@ if not st.session_state.authenticated:
         if auth_mode == "🔑 Terminal Sign In":
             with st.form("login_form"):
                 st.markdown("##### 🔒 Secure Terminal Authentication")
-                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID (e.g. admin)")
-                password = st.text_input("Quantum Security Key", type="password", value="", placeholder="Enter Security Key")
+                username = st.text_input("Operator User ID", value="", placeholder="Enter User ID")
+                password = st.text_input("Quantum Security Key", type="password", value="", placeholder="Enter Password")
                 if st.form_submit_button("⚡ UNLOCK QUANTUM TERMINAL"):
                     users = st.session_state.users_db
                     if username in users and users[username]["pass"] == password:
@@ -805,25 +541,19 @@ if not st.session_state.authenticated:
                         st.query_params["uid"] = username
                         st.rerun()
                     else:
-                        st.error("⛔ Authentication Denied: Invalid Security Key or User ID.")
+                        st.error("⛔ Authentication Denied: Invalid Security Key.")
         else:
             with st.form("signup_form"):
                 st.markdown("##### 🚀 Mandatory Quantitative Trader Profile")
                 new_name = st.text_input("Full Name *", placeholder="e.g. Samir Khan")
-                new_phone = st.text_input("10-Digit Mobile / WhatsApp Number *", placeholder="e.g. 9876543210")
-                new_user = st.text_input("Create Operator User ID *", placeholder="e.g. samir_quant")
-                new_pass = st.text_input("Create Access Password (Min 4 chars) *", type="password")
+                new_phone = st.text_input("10-Digit Mobile Number *", placeholder="e.g. 9876543210")
+                new_user = st.text_input("Create User ID *", placeholder="e.g. samir_quant")
+                new_pass = st.text_input("Create Access Password *", type="password")
                 
-                if st.form_submit_button("🎉 VERIFY IDENTITY & UNLOCK ACCESS"):
+                if st.form_submit_button("🎉 VERIFY & UNLOCK ACCESS"):
                     clean_phone = re.sub(r'[^0-9]', '', new_phone)
-                    if len(new_name.strip()) < 3:
-                        st.error("❌ Full Name is mandatory.")
-                    elif len(clean_phone) != 10:
-                        st.error("❌ Valid 10-digit Indian Mobile number is mandatory.")
-                    elif len(new_user.strip()) < 3:
-                        st.error("❌ Unique User ID is mandatory.")
-                    elif len(new_pass.strip()) < 4:
-                        st.error("❌ Password must be at least 4 characters.")
+                    if len(new_name.strip()) < 3 or len(clean_phone) != 10 or len(new_user.strip()) < 3 or len(new_pass.strip()) < 4:
+                        st.error("❌ Please provide valid registration details.")
                     elif new_user in st.session_state.users_db:
                         st.error("❌ User ID already registered.")
                     else:
@@ -884,7 +614,7 @@ with st.sidebar:
     lookback_days = st.slider("Lookback Memory (Days)", 1, 60, 30)
 
     st.markdown("---")
-    st.markdown("### 🛠️ 2. Strategy Engine (Registry Pattern)")
+    st.markdown("### 🛠️ 2. Strategy Engine")
     strategy_type = st.selectbox("Quantitative Strategy Library", list(STRATEGY_MAP.keys()))
     
     st.markdown("---")
@@ -906,6 +636,7 @@ with st.sidebar:
 # ==============================================================================
 # 🚀 MAIN DASHBOARD & TABS
 # ==============================================================================
+# DYNAMIC SPOT FETCH FOR SELECTED MARKET FEED
 header_spot = get_live_asset_price(symbol, 57380.0 if symbol == "^NSEBANK" else (24250.0 if symbol == "^NSEI" else 1380.0))
 header_curr = "$" if symbol.endswith("-USD") else "₹"
 
@@ -931,7 +662,7 @@ else:
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Interactive Chart Studio")
-    st.caption("Switch between Mountain Glow Area and Candlestick. Price lines stick permanently during zoom/pan.")
+    st.caption("Real-time streaming chart with localized IST timezone coordinates and persistent price level tracking.")
 
     col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
     with col_dc1:
@@ -956,6 +687,7 @@ with tab_tv_chart:
                 df_demat.columns = df_demat.columns.droplevel(1)
             df_demat.dropna(inplace=True)
 
+            # Localized IST conversion
             ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
             candle_list, area_list = [], []
@@ -1001,7 +733,7 @@ with tab_tv_chart:
             </head>
             <body>
             <div id="metrics_grid">
-                <div class="metric-card"><div class="metric-label">Live Spot</div><div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Live Spot ({asset_dict[live_chart_asset]})</div><div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div></div>
                 <div class="metric-card"><div class="metric-label">Session High</div><div class="metric-val">{curr_label}{init_high:,.2f}</div></div>
                 <div class="metric-card"><div class="metric-label">Session Low</div><div class="metric-val">{curr_label}{init_low:,.2f}</div></div>
             </div>
@@ -1025,7 +757,7 @@ with tab_tv_chart:
                     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
                     rightPriceScale: {{ borderColor: '#1e293b' }},
                     timeScale: {{ borderColor: '#1e293b', timeVisible: true, secondsVisible: false }},
-                    localization: {{ timeFormatter: t => new Date(t * 1000).toLocaleTimeString('en-IN', {{ timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }}) }}
+                    localization: {{ timeFormatter: t => new Date((t + 19800) * 1000).toUTCString().replace("GMT", "IST") }}
                 }});
 
                 const areaSeries = chart.addAreaSeries({{ topColor: 'rgba(56, 189, 248, 0.4)', bottomColor: 'rgba(56, 189, 248, 0.0)', lineColor: '#38bdf8', lineWidth: 2.5 }});
@@ -1046,8 +778,8 @@ with tab_tv_chart:
 
                 chart.subscribeCrosshairMove(param => {{
                     if (param.time) {{
-                        const d = new Date(param.time * 1000);
-                        document.getElementById('leg_time').innerText = d.toLocaleTimeString('en-IN', {{timeZone: 'Asia/Kolkata', hour12: true}});
+                        const d = new Date((param.time + 19800) * 1000);
+                        document.getElementById('leg_time').innerText = d.toUTCString().replace("GMT", "IST");
                         const data = isCandleView ? param.seriesData.get(candleSeries) : param.seriesData.get(areaSeries);
                         if (data) document.getElementById('leg_c').innerText = (data.close || data.value).toFixed(2);
                     }}
@@ -1094,20 +826,24 @@ with tab_tv_chart:
                     }}
                 }});
 
+                let isMarketActive = {'true' if is_live_open else 'false'};
                 let lastClose = rawCandles[rawCandles.length - 1].close;
-                setInterval(() => {{
-                    const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
-                    lastClose = parseFloat((lastClose + delta).toFixed(2));
-                    const lastT = rawCandles[rawCandles.length - 1].time;
-                    areaSeries.update({{ time: lastT, value: lastClose }});
-                    candleSeries.update({{
-                        time: lastT, open: rawCandles[rawCandles.length - 1].open,
-                        high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
-                        low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
-                        close: lastClose,
-                    }});
-                    document.getElementById('card_spot').innerText = "{curr_label}" + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2}});
-                }}, 1000);
+
+                if (isMarketActive) {{
+                    setInterval(() => {{
+                        const delta = (Math.random() - 0.49) * (lastClose * 0.0003);
+                        lastClose = parseFloat((lastClose + delta).toFixed(2));
+                        const lastT = rawCandles[rawCandles.length - 1].time;
+                        areaSeries.update({{ time: lastT, value: lastClose }});
+                        candleSeries.update({{
+                            time: lastT, open: rawCandles[rawCandles.length - 1].open,
+                            high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
+                            low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
+                            close: lastClose,
+                        }});
+                        document.getElementById('card_spot').innerText = "{curr_label}" + lastClose.toLocaleString('en-IN', {{minimumFractionDigits: 2}});
+                    }}, 1000);
+                }}
             </script>
             </body>
             </html>
@@ -1165,7 +901,6 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                         is_buy = position['type'] in ['BUY/CE', 'BUY', 'LONG']
                         
                         if market_type == "OPTION":
-                            # Exit Option Premium calculation via Greeks
                             _, _, exit_prem, points_diff = MultiAssetEngine.calculate_option_trade(
                                 spot_entry=position['spot_entry'],
                                 spot_exit=curr_spot,
@@ -1220,7 +955,7 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                 })
                                 position = None
 
-                        else: # STOCKS / COMMODITIES
+                        else:
                             price_diff = (curr_spot - position['entry_price']) if is_buy else (position['entry_price'] - curr_spot)
                             target_hit = price_diff >= target_val
                             sl_hit = price_diff <= -sl_val
@@ -1259,11 +994,9 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                             opt_label = "CE" if sig == 1 else "PE"
                             strike_desc = f"{atm_s} {opt_label}"
                             
-                            # Capital Requirement for Option Buying = Entry Premium * Total Quantity
                             required_margin = entry_prem * total_qty
                             
                             if current_balance < required_margin:
-                                # Calculate max affordable lots
                                 max_lots = int(current_balance // (entry_prem * asset_spec['lot_size']))
                                 if max_lots <= 0:
                                     trade_rejections += 1
@@ -1299,7 +1032,7 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                                 'strike_desc': f"{asset_spec['name']} PERP"
                             }
 
-                        else: # STOCKS
+                        else:
                             required_margin = curr_spot * total_qty
                             if current_balance < required_margin:
                                 max_shares = int(current_balance // curr_spot)
@@ -1398,6 +1131,11 @@ with tab_ai_pilot:
         target_tf = st.selectbox("Resolution", ["5m", "15m", "30m", "1h"], index=1, key="pilot_tf_sel")
     with col_p3:
         target_strat = st.selectbox("Execution Strategy", list(STRATEGY_MAP.keys()), index=0, key="pilot_strat_sel")
+
+    # Real-time spot detection for Autopilot Hub
+    pilot_spot = get_live_asset_price(target_asset, 57380.0 if target_asset == "^NSEBANK" else (24250.0 if target_asset == "^NSEI" else 1380.0))
+    pilot_curr = "$" if target_asset.endswith("-USD") else "₹"
+    st.markdown(f"###### 📊 Real-Time Underlying Spot: `{pilot_curr}{pilot_spot:,.2f}`")
 
     is_idx_p = target_asset in ["^NSEBANK", "^NSEI", "^BSESN", "NIFTY_FIN_SERVICE.NS"]
     col_k1, col_k2 = st.columns(2)
