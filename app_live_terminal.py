@@ -9,7 +9,12 @@ import json
 import threading
 from datetime import datetime, time as dtime
 import pytz
-import pyotp
+
+# Safe Optional Imports for Broker APIs
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
 
 # ==============================================================================
 # 📱 SAM QUANTUM LIVE TERMINAL - 100% INDIAN MARKETS DEMAT SUITE
@@ -310,7 +315,7 @@ class LiveBrokerGateway:
                 return {"status": "FAILED", "error": str(e)}
 
         # Angel One Real Order
-        elif "Angel" in creds.get("broker", ""):
+        elif "Angel" in creds.get("broker", "") and pyotp is not None:
             try:
                 from SmartApi import SmartConnect
                 smart_api = SmartConnect(api_key=creds.get("angel_api_key", ""))
@@ -552,9 +557,9 @@ with st.expander("🛠️ Strategy & Quantitative Settings", expanded=True):
 st.markdown("---")
 
 # 5. Real Broker API Credentials Binding
-with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel / Dhan)", expanded=False):
+with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel)", expanded=False):
     sel_mode = st.radio("Trading Mode", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Trades)"], index=0 if state.get("mode") == "PAPER" else 1)
-    sel_broker = st.selectbox("Choose Demat Broker", ["Zerodha KiteConnect", "Angel One SmartAPI", "DhanHQ API"], index=0)
+    sel_broker = st.selectbox("Choose Demat Broker", ["Zerodha KiteConnect", "Angel One SmartAPI"], index=0)
 
     if "Zerodha" in sel_broker:
         st.markdown("###### 🔐 Zerodha KiteConnect Credentials")
