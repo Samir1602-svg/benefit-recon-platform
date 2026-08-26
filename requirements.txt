@@ -3,3 +3,8 @@ yfinance
 pandas
 numpy
 plotly
+requests
+pytz
+pyotp
+kiteconnect
+smartapi-python
