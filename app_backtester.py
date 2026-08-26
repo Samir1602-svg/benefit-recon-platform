@@ -33,30 +33,24 @@ ACTIVE_TRADES_FILE = "active_trades.json"
 AUTOPILOT_STATE_FILE = "autopilot_state.json"
 SQLITE_DB_FILE = "terminal_audit.db"
 
-# Master Operating Manual Text Definition
 TERMINAL_MANUAL_TEXT = """=====================================================
          SAM QUANTUM OS - OFFICIAL SYSTEM MANUAL
 =====================================================
 
-1. ASSET & RESOLUTION CONFIGURATION
-- Dynamic Dropdown: Syncs real-time prices across NSE, Crypto, MCX & Stocks.
-- Timeframes: Multi-resolution candle streams (1m, 5m, 15m, 1D).
+1. MULTI-ASSET EXECUTION ENGINE
+- Options (Index/Stock F&O): Real Black-Scholes Synthetic Greek Pricing (Delta, IV, DTE).
+- Crypto (Perpetual): Dollar-margined contracts with long/short directional profit tracking.
+- Cash Equities: Discrete integer share allocation based on available capital.
 
-2. STRATEGY ENGINE (REGISTRY PATTERN)
-- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend, VWAP, MACD, Bollinger Bands, ORB.
-- Momentum Filter: RSI Overbought/Oversold boundaries (14 Period).
+2. STRICT LOT SIZE SPECIFICATIONS
+- NIFTY 50: 75 Units per Lot | Strike Interval: 50 Pts
+- BANK NIFTY: 30 Units per Lot | Strike Interval: 100 Pts
+- FINNIFTY: 65 Units per Lot | Strike Interval: 50 Pts
+- SENSEX: 20 Units per Lot | Strike Interval: 100 Pts
 
-3. BLACK-SCHOLES OPTION CHAIN & DEMAT MATRIX
-- 3-Column Demat Option Chain: Real Greeks (Delta, Theta, Gamma, Vega).
-- Auto Expiry Rollover: Automatic rollover to next cycle at market close.
-
-4. CAPITAL & RISK MANAGEMENT (RMS)
-- Capital Affordability Validation: Prevents execution on insufficient margin.
-- Dynamic Lot Sizing: Nifty (75), Bank Nifty (30), Sensex (20), FinNifty (65).
-
-5. 24/7 AUTOPILOT ENGINE
-- Continuous Non-Blocking Daemon: Runs autonomously in background thread.
-- Telegram Signal Engine: Instant dispatch with zero UI thread block.
+3. RISK & CAPITAL GUARD (RMS)
+- Pre-Trade Margin Check: required_margin = entry_premium * total_qty
+- Rejection of trades exceeding available wallet balance.
 =====================================================
 """
 
@@ -64,22 +58,22 @@ TERMINAL_MANUAL_TEXT = """=====================================================
 # 🏛️ SPECIFICATIONS & LOT SIZES (INDIAN INDICES & CRYPTO)
 # ==============================================================================
 INDEX_SPECS = {
-    "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100, "exchange": "NFO", "expiry_day": "Tuesday"},
-    "^NSEI": {"name": "NIFTY", "lot_size": 75, "strike_step": 50, "exchange": "NFO", "expiry_day": "Tuesday"},
-    "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50, "exchange": "NFO", "expiry_day": "Tuesday"},
-    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100, "exchange": "BFO", "expiry_day": "Thursday"},
-    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20, "exchange": "NFO", "expiry_day": "Monthly"},
-    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10, "exchange": "NFO", "expiry_day": "Monthly"},
-    "TCS.NS": {"name": "TCS", "lot_size": 175, "strike_step": 50, "exchange": "NFO", "expiry_day": "Monthly"},
-    "INFY.NS": {"name": "INFY", "lot_size": 400, "strike_step": 20, "exchange": "NFO", "expiry_day": "Monthly"},
-    "GC=F": {"name": "GOLDM", "lot_size": 1, "strike_step": 100, "exchange": "MCX", "expiry_day": "Monthly"},
-    "SI=F": {"name": "SILVERM", "lot_size": 5, "strike_step": 250, "exchange": "MCX", "expiry_day": "Monthly"},
-    "BTC-USD": {"name": "BTC/USDT", "lot_size": 1, "strike_step": 100, "exchange": "PERPETUAL", "expiry_day": "24/7"},
-    "ETH-USD": {"name": "ETH/USDT", "lot_size": 1, "strike_step": 10, "exchange": "PERPETUAL", "expiry_day": "24/7"},
-    "SOL-USD": {"name": "SOL/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "expiry_day": "24/7"},
-    "BNB-USD": {"name": "BNB/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "expiry_day": "24/7"},
-    "XRP-USD": {"name": "XRP/USDT", "lot_size": 10, "strike_step": 0.01, "exchange": "PERPETUAL", "expiry_day": "24/7"},
-    "DOGE-USD": {"name": "DOGE/USDT", "lot_size": 100, "strike_step": 0.001, "exchange": "PERPETUAL", "expiry_day": "24/7"}
+    "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100, "exchange": "NFO", "type": "OPTION", "expiry_day": "Tuesday"},
+    "^NSEI": {"name": "NIFTY", "lot_size": 75, "strike_step": 50, "exchange": "NFO", "type": "OPTION", "expiry_day": "Tuesday"},
+    "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50, "exchange": "NFO", "type": "OPTION", "expiry_day": "Tuesday"},
+    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100, "exchange": "BFO", "type": "OPTION", "expiry_day": "Thursday"},
+    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20, "exchange": "NFO", "type": "STOCK", "expiry_day": "Monthly"},
+    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10, "exchange": "NFO", "type": "STOCK", "expiry_day": "Monthly"},
+    "TCS.NS": {"name": "TCS", "lot_size": 175, "strike_step": 50, "exchange": "NFO", "type": "STOCK", "expiry_day": "Monthly"},
+    "INFY.NS": {"name": "INFY", "lot_size": 400, "strike_step": 20, "exchange": "NFO", "type": "STOCK", "expiry_day": "Monthly"},
+    "GC=F": {"name": "GOLDM", "lot_size": 1, "strike_step": 100, "exchange": "MCX", "type": "COMMODITY", "expiry_day": "Monthly"},
+    "SI=F": {"name": "SILVERM", "lot_size": 5, "strike_step": 250, "exchange": "MCX", "type": "COMMODITY", "expiry_day": "Monthly"},
+    "BTC-USD": {"name": "BTC/USDT", "lot_size": 1, "strike_step": 100, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"},
+    "ETH-USD": {"name": "ETH/USDT", "lot_size": 1, "strike_step": 10, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"},
+    "SOL-USD": {"name": "SOL/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"},
+    "BNB-USD": {"name": "BNB/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"},
+    "XRP-USD": {"name": "XRP/USDT", "lot_size": 10, "strike_step": 0.01, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"},
+    "DOGE-USD": {"name": "DOGE/USDT", "lot_size": 100, "strike_step": 0.001, "exchange": "PERPETUAL", "type": "CRYPTO", "expiry_day": "24/7"}
 }
 
 DEFAULT_USERS = {
@@ -87,6 +81,9 @@ DEFAULT_USERS = {
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
+# ==============================================================================
+# 📦 DATABASE & STATE PERSISTENCE
+# ==============================================================================
 def init_sqlite_db():
     with sqlite3.connect(SQLITE_DB_FILE) as conn:
         cursor = conn.cursor()
@@ -204,7 +201,7 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE
+# 🧮 PURE MATH BLACK-SCHOLES & MULTI-ASSET ENGINE (NO SCIPY DEPENDENCY)
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -212,34 +209,82 @@ def std_norm_cdf(x):
 def std_norm_pdf(x):
     return math.exp(-0.5 * x ** 2) / math.sqrt(2.0 * math.pi)
 
+class MultiAssetEngine:
+    @staticmethod
+    def calculate_option_trade(spot_entry, spot_exit, option_type, days_to_expiry=3, iv=16.0, strike_step=100):
+        """
+        Converts spot movements into accurate Option Premium P&L using Black-Scholes Greeks.
+        """
+        atm_strike = int(round(spot_entry / float(strike_step)) * strike_step)
+        T_entry = max(days_to_expiry / 365.0, 0.0001)
+        sigma = iv / 100.0
+        r = 0.07
+
+        d1 = (math.log(spot_entry / atm_strike) + (r + 0.5 * sigma**2) * T_entry) / (sigma * math.sqrt(T_entry))
+        d2 = d1 - sigma * math.sqrt(T_entry)
+
+        if "CE" in option_type or "BUY" in option_type:
+            entry_premium = spot_entry * std_norm_cdf(d1) - atm_strike * math.exp(-r * T_entry) * std_norm_cdf(d2)
+            delta = std_norm_cdf(d1)
+        else: # PE / SHORT
+            entry_premium = atm_strike * math.exp(-r * T_entry) * std_norm_cdf(-d2) - spot_entry * std_norm_cdf(-d1)
+            delta = std_norm_cdf(d1) - 1.0
+
+        entry_premium = max(15.0, round(entry_premium, 2))
+        spot_movement = spot_exit - spot_entry
+        
+        if "CE" in option_type or "BUY" in option_type:
+            exit_premium = max(5.0, entry_premium + (spot_movement * delta))
+        else:
+            exit_premium = max(5.0, entry_premium - (spot_movement * abs(delta)))
+
+        exit_premium = round(exit_premium, 2)
+        points_pnl = round(exit_premium - entry_premium, 2)
+        return atm_strike, entry_premium, exit_premium, points_pnl
+
+    @staticmethod
+    def calculate_crypto_trade(entry_price, exit_price, position_size_usd, leverage=5.0, is_long=True):
+        contracts = (position_size_usd * leverage) / entry_price
+        price_diff = (exit_price - entry_price) if is_long else (entry_price - exit_price)
+        pnl_usd = price_diff * contracts
+        return round(pnl_usd, 2)
+
+    @staticmethod
+    def calculate_stock_trade(entry_price, exit_price, allocated_capital):
+        shares = int(allocated_capital // entry_price)
+        if shares == 0:
+            return 0, 0.0
+        pnl = (exit_price - entry_price) * shares
+        return shares, round(pnl, 2)
+
 class BlackScholesEngine:
     @staticmethod
     def calculate_greeks(spot, strike, dte_days=2, iv=14.5, risk_free_rate=0.07, option_type="CE"):
         T = max(dte_days / 365.0, 0.0001)
         sigma = max(iv / 100.0, 0.01)
         r = risk_free_rate
-        
+
         d1 = (math.log(spot / strike) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
-        
+
         pdf_d1 = std_norm_pdf(d1)
         cdf_d1 = std_norm_cdf(d1)
         cdf_d2 = std_norm_cdf(d2)
         cdf_neg_d1 = std_norm_cdf(-d1)
         cdf_neg_d2 = std_norm_cdf(-d2)
-        
+
         if option_type.upper() == "CE":
             premium = spot * cdf_d1 - strike * math.exp(-r * T) * cdf_d2
             delta = cdf_d1
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * strike * math.exp(-r * T) * cdf_d2) / 365.0
-        else:
+        else: # PE
             premium = strike * math.exp(-r * T) * cdf_neg_d2 - spot * cdf_neg_d1
             delta = cdf_d1 - 1.0
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * strike * math.exp(-r * T) * cdf_neg_d2) / 365.0
-            
+
         gamma = pdf_d1 / (spot * sigma * math.sqrt(T))
         vega = (spot * math.sqrt(T) * pdf_d1) / 100.0
-        
+
         return {
             "premium": max(0.50, round(premium, 2)),
             "delta": round(delta, 4),
@@ -315,37 +360,7 @@ def is_market_open(symbol_key):
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛡️ CAPITAL & MARGIN ENGINE
-# ==============================================================================
-def validate_and_calculate_margin(capital, current_price, requested_qty, is_option=False, leverage=1.0):
-    unit_cost = current_price if not is_option else max(5.0, current_price * 0.01)
-    total_required = (unit_cost * requested_qty) / leverage
-    
-    if capital < total_required:
-        max_affordable = int((capital * leverage) // unit_cost)
-        if max_affordable <= 0:
-            return {
-                "status": "REJECTED",
-                "reason": f"Insufficient Capital (Required: ₹{total_required:,.2f}, Available: ₹{capital:,.2f})",
-                "traded_qty": 0,
-                "cost": 0.0
-            }
-        return {
-            "status": "ADJUSTED",
-            "reason": f"Order size adjusted to available capital limit.",
-            "traded_qty": max_affordable,
-            "cost": (unit_cost * max_affordable) / leverage
-        }
-        
-    return {
-        "status": "FILLED",
-        "reason": "Margin Approved",
-        "traded_qty": requested_qty,
-        "cost": total_required
-    }
-
-# ==============================================================================
-# 🛠️ STRATEGY REGISTRY PATTERN
+# 🛠️ STRATEGY REGISTRY PATTERN (ISOLATED EXECUTION)
 # ==============================================================================
 class StrategyRegistry:
     @staticmethod
@@ -874,14 +889,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 🛡️ 3. Risk & Capital Guard")
-    capital = st.number_input("Capital Pool / Margin (₹)", value=100000.0, step=10000.0, min_value=1.0)
+    capital = st.number_input("Capital Pool / Wallet Balance (₹)", value=100000.0, step=10000.0, min_value=1.0)
     
     lot_size_val = INDEX_SPECS.get(symbol, {}).get("lot_size", 1)
     num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1, min_value=1)
     total_qty = num_lots * lot_size_val
-    st.caption(f"Requested Quantity: `{total_qty}` Units")
+    st.caption(f"Actual Order Quantity: **{total_qty} units** ({num_lots} Lots × {lot_size_val})")
 
-    is_idx = symbol in ["^NSEBANK", "^NSEI", "^BSESN"]
+    is_idx = symbol in ["^NSEBANK", "^NSEI", "^BSESN", "NIFTY_FIN_SERVICE.NS"]
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         target_val = st.number_input("Target (" + ("Pts" if is_idx else "%") + ")", value=50.0 if is_idx else 2.5, step=5.0 if is_idx else 0.5)
@@ -1103,7 +1118,7 @@ with tab_tv_chart:
         st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
-# 📊 BACKTEST EXECUTION WITH CAPITAL VALIDATION & STRATEGY REGISTRY
+# 📊 BACKTEST EXECUTION WITH MULTI-ASSET ENGINE & ACCURATE OPTION PREMIUM
 # ==============================================================================
 with tab_reports:
     st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
@@ -1136,39 +1151,175 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                 current_balance = capital
                 trade_rejections = 0
 
+                asset_spec = INDEX_SPECS.get(symbol, {"name": symbol, "lot_size": 1, "strike_step": 100, "type": "STOCK"})
+                market_type = asset_spec.get("type", "STOCK")
+                step_size = asset_spec.get("strike_step", 100)
+
                 for i in range(2, len(df_bt)):
                     curr_spot = float(df_bt['Close'].iloc[i])
                     sig = int(df_bt['signal'].iloc[i])
                     time_lbl = df_bt['Time_Str'].iloc[i]
 
+                    # 1. Manage Active Position Exit
                     if position is not None:
                         is_buy = position['type'] in ['BUY/CE', 'BUY', 'LONG']
-                        move = (curr_spot - position['entry']) if is_buy else (position['entry'] - curr_spot)
-                        opt_move = move if is_idx else ((move / position['entry']) * 100)
-
-                        if opt_move >= target_val:
-                            pnl = (target_val * position['qty'] * 0.5) if is_idx else ((target_val / 100) * position['qty'] * position['entry'])
-                            current_balance += (position['cost'] + pnl)
-                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Qty': position['qty'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl, 'Balance': current_balance})
-                            position = None
-                        elif opt_move <= -sl_val:
-                            pnl = (-sl_val * position['qty'] * 0.5) if is_idx else ((-sl_val / 100) * position['qty'] * position['entry'])
-                            current_balance += (position['cost'] + pnl)
-                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Qty': position['qty'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl, 'Balance': current_balance})
-                            position = None
-
-                    elif sig != 0:
-                        margin_eval = validate_and_calculate_margin(current_balance, curr_spot, total_qty, is_option=is_idx, leverage=1.0)
                         
-                        if margin_eval["status"] == "REJECTED":
-                            trade_rejections += 1
-                        else:
-                            trade_qty = margin_eval["traded_qty"]
-                            trade_cost = margin_eval["cost"]
-                            current_balance -= trade_cost
+                        if market_type == "OPTION":
+                            # Exit Option Premium calculation via Greeks
+                            _, _, exit_prem, points_diff = MultiAssetEngine.calculate_option_trade(
+                                spot_entry=position['spot_entry'],
+                                spot_exit=curr_spot,
+                                option_type=position['type'],
+                                days_to_expiry=2,
+                                iv=15.5,
+                                strike_step=step_size
+                            )
+                            opt_move = points_diff
+                            target_hit = opt_move >= target_val
+                            sl_hit = opt_move <= -sl_val
                             
-                            pos_type = 'BUY/CE' if sig == 1 else 'SELL/PE'
-                            position = {'type': pos_type, 'entry': curr_spot, 'time': time_lbl, 'qty': trade_qty, 'cost': trade_cost}
+                            if target_hit or sl_hit:
+                                pnl = points_diff * position['qty']
+                                current_balance += (position['cost'] + pnl)
+                                res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
+                                trades.append({
+                                    'Entry Time': position['time'],
+                                    'Exit Time': time_lbl,
+                                    'Type': position['type'],
+                                    'Strike': position['strike_desc'],
+                                    'Qty': position['qty'],
+                                    'Entry Prem (₹)': position['entry_price'],
+                                    'Exit Prem (₹)': exit_prem,
+                                    'Result': res_label,
+                                    'PnL (₹)': pnl,
+                                    'Balance (₹)': current_balance
+                                })
+                                position = None
+
+                        elif market_type == "CRYPTO":
+                            price_diff = (curr_spot - position['entry_price']) if is_buy else (position['entry_price'] - curr_spot)
+                            pnl_pct = (price_diff / position['entry_price']) * 100.0
+                            target_hit = pnl_pct >= target_val
+                            sl_hit = pnl_pct <= -sl_val
+                            
+                            if target_hit or sl_hit:
+                                pnl_usd = (pnl_pct / 100.0) * position['cost']
+                                current_balance += (position['cost'] + pnl_usd)
+                                res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
+                                trades.append({
+                                    'Entry Time': position['time'],
+                                    'Exit Time': time_lbl,
+                                    'Type': position['type'],
+                                    'Strike': f"{asset_spec['name']} PERP",
+                                    'Qty': position['qty'],
+                                    'Entry Prem (₹)': position['entry_price'],
+                                    'Exit Prem (₹)': curr_spot,
+                                    'Result': res_label,
+                                    'PnL (₹)': pnl_usd,
+                                    'Balance (₹)': current_balance
+                                })
+                                position = None
+
+                        else: # STOCKS / COMMODITIES
+                            price_diff = (curr_spot - position['entry_price']) if is_buy else (position['entry_price'] - curr_spot)
+                            target_hit = price_diff >= target_val
+                            sl_hit = price_diff <= -sl_val
+                            
+                            if target_hit or sl_hit:
+                                pnl_cash = price_diff * position['qty']
+                                current_balance += (position['cost'] + pnl_cash)
+                                res_label = 'TARGET 🎯' if target_hit else 'SL HIT 🔴'
+                                trades.append({
+                                    'Entry Time': position['time'],
+                                    'Exit Time': time_lbl,
+                                    'Type': position['type'],
+                                    'Strike': f"{asset_spec['name']} CASH",
+                                    'Qty': position['qty'],
+                                    'Entry Prem (₹)': position['entry_price'],
+                                    'Exit Prem (₹)': curr_spot,
+                                    'Result': res_label,
+                                    'PnL (₹)': pnl_cash,
+                                    'Balance (₹)': current_balance
+                                })
+                                position = None
+
+                    # 2. Open New Position with Strict Lot Sizing & Margin Check
+                    elif sig != 0:
+                        pos_type = 'BUY/CE' if sig == 1 else 'BUY/PE'
+                        
+                        if market_type == "OPTION":
+                            atm_s, entry_prem, _, _ = MultiAssetEngine.calculate_option_trade(
+                                spot_entry=curr_spot,
+                                spot_exit=curr_spot,
+                                option_type=pos_type,
+                                days_to_expiry=2,
+                                iv=15.5,
+                                strike_step=step_size
+                            )
+                            opt_label = "CE" if sig == 1 else "PE"
+                            strike_desc = f"{atm_s} {opt_label}"
+                            
+                            # Capital Requirement for Option Buying = Entry Premium * Total Quantity
+                            required_margin = entry_prem * total_qty
+                            
+                            if current_balance < required_margin:
+                                # Calculate max affordable lots
+                                max_lots = int(current_balance // (entry_prem * asset_spec['lot_size']))
+                                if max_lots <= 0:
+                                    trade_rejections += 1
+                                    continue
+                                exec_qty = max_lots * asset_spec['lot_size']
+                                required_margin = entry_prem * exec_qty
+                            else:
+                                exec_qty = total_qty
+                                
+                            current_balance -= required_margin
+                            position = {
+                                'type': pos_type,
+                                'spot_entry': curr_spot,
+                                'entry_price': entry_prem,
+                                'time': time_lbl,
+                                'qty': exec_qty,
+                                'cost': required_margin,
+                                'strike_desc': strike_desc
+                            }
+
+                        elif market_type == "CRYPTO":
+                            required_margin = min(current_balance, capital * 0.25)
+                            if current_balance < 10.0:
+                                trade_rejections += 1
+                                continue
+                            current_balance -= required_margin
+                            position = {
+                                'type': 'LONG' if sig == 1 else 'SHORT',
+                                'entry_price': curr_spot,
+                                'time': time_lbl,
+                                'qty': round(required_margin / curr_spot, 4),
+                                'cost': required_margin,
+                                'strike_desc': f"{asset_spec['name']} PERP"
+                            }
+
+                        else: # STOCKS
+                            required_margin = curr_spot * total_qty
+                            if current_balance < required_margin:
+                                max_shares = int(current_balance // curr_spot)
+                                if max_shares <= 0:
+                                    trade_rejections += 1
+                                    continue
+                                exec_qty = max_shares
+                                required_margin = curr_spot * exec_qty
+                            else:
+                                exec_qty = total_qty
+                                
+                            current_balance -= required_margin
+                            position = {
+                                'type': 'BUY' if sig == 1 else 'SELL',
+                                'entry_price': curr_spot,
+                                'time': time_lbl,
+                                'qty': exec_qty,
+                                'cost': required_margin,
+                                'strike_desc': f"{asset_spec['name']} CASH"
+                            }
 
                 with tab_backtest:
                     st.markdown(f"#### 🕯️ Strategy Backtest Chart (`{strategy_type}`)")
@@ -1181,10 +1332,10 @@ if execute_btn or st.session_state.get('backtest_executed', False):
                     st.markdown("#### 💎 Institutional Strategy Scorecard & Capital Audit")
                     if trades:
                         tdf = pd.DataFrame(trades)
-                        net_pnl = tdf['PnL'].sum()
-                        win_count = len(tdf[tdf['PnL'] > 0])
+                        net_pnl = tdf['PnL (₹)'].sum()
+                        win_count = len(tdf[tdf['PnL (₹)'] > 0])
                         win_rate = (win_count / len(tdf)) * 100
-                        tdf['Cum_PnL'] = tdf['PnL'].cumsum()
+                        tdf['Cum_PnL'] = tdf['PnL (₹)'].cumsum()
 
                         k1, k2, k3, k4 = st.columns(4)
                         k1.metric("Net Realized PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}", f"{(net_pnl/capital)*100:+.2f}% ROI")
@@ -1201,7 +1352,7 @@ if execute_btn or st.session_state.get('backtest_executed', False):
 
                 with tab_trades:
                     if trades:
-                        st.markdown("#### 📜 Trade Execution Audit Trail (Capital Sized)")
+                        st.markdown("#### 📜 Trade Execution Audit Trail (Realistic Option Premium & Lots)")
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=400)
                         
                         csv_buf = io.StringIO()
@@ -1248,7 +1399,7 @@ with tab_ai_pilot:
     with col_p3:
         target_strat = st.selectbox("Execution Strategy", list(STRATEGY_MAP.keys()), index=0, key="pilot_strat_sel")
 
-    is_idx_p = target_asset in ["^NSEBANK", "^NSEI", "^BSESN"]
+    is_idx_p = target_asset in ["^NSEBANK", "^NSEI", "^BSESN", "NIFTY_FIN_SERVICE.NS"]
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         tp_val = st.number_input("Target (" + ("Pts" if is_idx_p else "%") + ")", value=float(auto_state.get("target", 50.0)), step=5.0 if is_idx_p else 0.5)
@@ -1295,7 +1446,7 @@ with tab_manual_terminal:
     specs = INDEX_SPECS.get(man_asset, {"name": man_asset, "strike_step": 100})
     step = specs.get("strike_step", 100)
 
-    if man_asset in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
+    if man_asset in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "NIFTY_FIN_SERVICE.NS", "^BSESN"]:
         atm_s = int(round(curr_ref_spot / float(step)) * step)
         strikes_matrix = [atm_s - (step * 2), atm_s - step, atm_s, atm_s + step, atm_s + (step * 2)]
         
