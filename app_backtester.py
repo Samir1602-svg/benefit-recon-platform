@@ -33,6 +33,33 @@ ACTIVE_TRADES_FILE = "active_trades.json"
 AUTOPILOT_STATE_FILE = "autopilot_state.json"
 SQLITE_DB_FILE = "terminal_audit.db"
 
+# Master Operating Manual Text Definition
+TERMINAL_MANUAL_TEXT = """=====================================================
+         SAM QUANTUM OS - OFFICIAL SYSTEM MANUAL
+=====================================================
+
+1. ASSET & RESOLUTION CONFIGURATION
+- Dynamic Dropdown: Syncs real-time prices across NSE, Crypto, MCX & Stocks.
+- Timeframes: Multi-resolution candle streams (1m, 5m, 15m, 1D).
+
+2. STRATEGY ENGINE (REGISTRY PATTERN)
+- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend, VWAP, MACD, Bollinger Bands, ORB.
+- Momentum Filter: RSI Overbought/Oversold boundaries (14 Period).
+
+3. BLACK-SCHOLES OPTION CHAIN & DEMAT MATRIX
+- 3-Column Demat Option Chain: Real Greeks (Delta, Theta, Gamma, Vega).
+- Auto Expiry Rollover: Automatic rollover to next cycle at market close.
+
+4. CAPITAL & RISK MANAGEMENT (RMS)
+- Capital Affordability Validation: Prevents execution on insufficient margin.
+- Dynamic Lot Sizing: Nifty (75), Bank Nifty (30), Sensex (20), FinNifty (65).
+
+5. 24/7 AUTOPILOT ENGINE
+- Continuous Non-Blocking Daemon: Runs autonomously in background thread.
+- Telegram Signal Engine: Instant dispatch with zero UI thread block.
+=====================================================
+"""
+
 # ==============================================================================
 # 🏛️ SPECIFICATIONS & LOT SIZES (INDIAN INDICES & CRYPTO)
 # ==============================================================================
@@ -139,12 +166,12 @@ def save_active_trades(trades):
 
 def load_autopilot_state():
     if not os.path.exists(AUTOPILOT_STATE_FILE):
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "EMA_Institutional_Pullback"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50)"}
     try:
         with open(AUTOPILOT_STATE_FILE, "r") as f:
             return json.load(f)
     except Exception:
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "EMA_Institutional_Pullback"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "1. EMA Institutional Pullback (20/50)"}
 
 def save_autopilot_state(state):
     with open(AUTOPILOT_STATE_FILE, "w") as f:
@@ -288,13 +315,9 @@ def is_market_open(symbol_key):
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛡️ CAPITAL & MARGIN ENGINE (ISSUE 1 RESOLVED)
+# 🛡️ CAPITAL & MARGIN ENGINE
 # ==============================================================================
 def validate_and_calculate_margin(capital, current_price, requested_qty, is_option=False, leverage=1.0):
-    """
-    Validates capital against total order cost / margin requirements.
-    Prevents execution when balance is insufficient.
-    """
     unit_cost = current_price if not is_option else max(5.0, current_price * 0.01)
     total_required = (unit_cost * requested_qty) / leverage
     
@@ -322,7 +345,7 @@ def validate_and_calculate_margin(capital, current_price, requested_qty, is_opti
     }
 
 # ==============================================================================
-# 🛠️ MODULAR STRATEGY REGISTRY PATTERN (ISSUE 2 & 3 RESOLVED)
+# 🛠️ STRATEGY REGISTRY PATTERN
 # ==============================================================================
 class StrategyRegistry:
     @staticmethod
@@ -406,7 +429,6 @@ class StrategyRegistry:
         ema26 = c.ewm(span=26, adjust=False).mean()
         d['MACD'] = ema12 - ema26
         d['SIGNAL_LINE'] = d['MACD'].ewm(span=9, adjust=False).mean()
-        d['HIST'] = d['MACD'] - d['SIGNAL_LINE']
         d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
         
         d['signal'] = 0
@@ -641,7 +663,6 @@ def background_scanner_loop():
                                 del current_active[c_item]
                         save_active_trades(current_active)
 
-                        # Check for new signals
                         if asset not in current_active:
                             last_sig = int(df['signal'].iloc[-1])
                             last_conf = int(df['confidence'].iloc[-1])
@@ -1088,13 +1109,13 @@ with tab_reports:
     st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
     st.download_button(
         label="📥 DOWNLOAD FULL TERMINAL USER MANUAL (.TXT)",
-        data=terminal_manual_text,
+        data=TERMINAL_MANUAL_TEXT,
         file_name="SAM_QUANTUM_User_Manual.txt",
         mime="text/plain",
         use_container_width=True
     )
 
-if execute_btn or 'backtest_executed' in st.session_state:
+if execute_btn or st.session_state.get('backtest_executed', False):
     st.session_state.backtest_executed = True
     with st.spinner(f"⏳ Running Strategy Backtest: {strategy_type}..."):
         try:
@@ -1104,7 +1125,6 @@ if execute_btn or 'backtest_executed' in st.session_state:
                     df_raw.columns = df_raw.columns.droplevel(1)
                 df_raw.dropna(inplace=True)
                 
-                # Dynamic Execution via Strategy Registry
                 strat_func = STRATEGY_MAP.get(strategy_type, StrategyRegistry.ema_pullback)
                 df_bt = strat_func(df_raw)
 
@@ -1121,7 +1141,6 @@ if execute_btn or 'backtest_executed' in st.session_state:
                     sig = int(df_bt['signal'].iloc[i])
                     time_lbl = df_bt['Time_Str'].iloc[i]
 
-                    # 1. Manage Active Position Exit
                     if position is not None:
                         is_buy = position['type'] in ['BUY/CE', 'BUY', 'LONG']
                         move = (curr_spot - position['entry']) if is_buy else (position['entry'] - curr_spot)
@@ -1138,7 +1157,6 @@ if execute_btn or 'backtest_executed' in st.session_state:
                             trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Qty': position['qty'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl, 'Balance': current_balance})
                             position = None
 
-                    # 2. Open New Position with Strict Capital Check
                     elif sig != 0:
                         margin_eval = validate_and_calculate_margin(current_balance, curr_spot, total_qty, is_option=is_idx, leverage=1.0)
                         
@@ -1185,11 +1203,19 @@ if execute_btn or 'backtest_executed' in st.session_state:
                     if trades:
                         st.markdown("#### 📜 Trade Execution Audit Trail (Capital Sized)")
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=400)
+                        
+                        csv_buf = io.StringIO()
+                        pd.DataFrame(trades).to_csv(csv_buf, index=False)
+                        st.download_button("📥 DOWNLOAD AUDIT CSV", data=csv_buf.getvalue(), file_name=f"audit_{symbol}.csv", mime="text/csv")
         except Exception as e:
             st.error(f"Backtest error: {str(e)}")
 else:
     with tab_backtest:
         st.info("💡 Select Strategy & Risk parameters in the sidebar, then click '⚡ EXECUTE STRATEGY BACKTEST' above.")
+    with tab_metrics:
+        st.info("💡 Execute strategy backtest to view performance KPIs.")
+    with tab_trades:
+        st.info("💡 Execute strategy backtest to view trade execution logs.")
 
 # ==============================================================================
 # 🤖 TAB 6: AI 24/7 AUTOPILOT HUB
