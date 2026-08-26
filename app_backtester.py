@@ -60,9 +60,6 @@ DEFAULT_USERS = {
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
 
-# ==============================================================================
-# 📦 DATABASE & STATE PERSISTENCE
-# ==============================================================================
 def init_sqlite_db():
     with sqlite3.connect(SQLITE_DB_FILE) as conn:
         cursor = conn.cursor()
@@ -142,12 +139,12 @@ def save_active_trades(trades):
 
 def load_autopilot_state():
     if not os.path.exists(AUTOPILOT_STATE_FILE):
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0, "strategy": "EMA_Pullback"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "EMA_Institutional_Pullback"}
     try:
         with open(AUTOPILOT_STATE_FILE, "r") as f:
             return json.load(f)
     except Exception:
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0, "strategy": "EMA_Pullback"}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 80, "target": 50.0, "sl": 20.0, "strategy": "EMA_Institutional_Pullback"}
 
 def save_autopilot_state(state):
     with open(AUTOPILOT_STATE_FILE, "w") as f:
@@ -180,14 +177,12 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 PURE MATH BLACK-SCHOLES GREEKS ENGINE (NO SCIPY DEPENDENCY)
+# 🧮 GREEKS & PRICING ENGINE
 # ==============================================================================
 def std_norm_cdf(x):
-    """Cumulative distribution function for standard normal distribution using math.erf."""
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 def std_norm_pdf(x):
-    """Probability density function for standard normal distribution."""
     return math.exp(-0.5 * x ** 2) / math.sqrt(2.0 * math.pi)
 
 class BlackScholesEngine:
@@ -210,7 +205,7 @@ class BlackScholesEngine:
             premium = spot * cdf_d1 - strike * math.exp(-r * T) * cdf_d2
             delta = cdf_d1
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * strike * math.exp(-r * T) * cdf_d2) / 365.0
-        else: # PE
+        else:
             premium = strike * math.exp(-r * T) * cdf_neg_d2 - spot * cdf_neg_d1
             delta = cdf_d1 - 1.0
             theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * strike * math.exp(-r * T) * cdf_neg_d2) / 365.0
@@ -293,103 +288,233 @@ def is_market_open(symbol_key):
     return False, "Market Closed"
 
 # ==============================================================================
-# 🛠️ STRATEGY PATTERN & INDICATORS ENGINE
+# 🛡️ CAPITAL & MARGIN ENGINE (ISSUE 1 RESOLVED)
 # ==============================================================================
-def calc_indicators(df):
-    d = df.copy()
-    c, h, l, o, v = d['Close'], d['High'], d['Low'], d['Open'], d['Volume']
-
-    d['EMA9'] = c.ewm(span=9, adjust=False).mean()
-    d['EMA20'] = c.ewm(span=20, adjust=False).mean()
-    d['EMA21'] = c.ewm(span=21, adjust=False).mean()
-    d['EMA50'] = c.ewm(span=50, adjust=False).mean()
-    d['SMA20'] = c.rolling(window=20).mean()
-
-    delta = c.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(com=13, adjust=False).mean()
-    avg_loss = loss.ewm(com=13, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    d['RSI'] = (100 - (100 / (1 + rs))).fillna(50)
-
-    hl = h - l
-    hc = (h - c.shift(1)).abs()
-    lc = (l - c.shift(1)).abs()
-    tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-    d['ATR'] = tr.rolling(window=14).mean().fillna(tr)
-
-    st_atr = tr.ewm(com=9, adjust=False).mean()
-    hl2 = (h + l) / 2.0
-    basic_ub = hl2 + (2.0 * st_atr)
-    basic_lb = hl2 - (2.0 * st_atr)
-    final_ub = basic_ub.copy()
-    final_lb = basic_lb.copy()
-    direction = np.zeros(len(d))
-
-    for i in range(1, len(d)):
-        if basic_ub.iloc[i] < final_ub.iloc[i-1] or c.iloc[i-1] > final_ub.iloc[i-1]:
-            final_ub.iloc[i] = basic_ub.iloc[i]
-        else:
-            final_ub.iloc[i] = final_ub.iloc[i-1]
+def validate_and_calculate_margin(capital, current_price, requested_qty, is_option=False, leverage=1.0):
+    """
+    Validates capital against total order cost / margin requirements.
+    Prevents execution when balance is insufficient.
+    """
+    unit_cost = current_price if not is_option else max(5.0, current_price * 0.01)
+    total_required = (unit_cost * requested_qty) / leverage
+    
+    if capital < total_required:
+        max_affordable = int((capital * leverage) // unit_cost)
+        if max_affordable <= 0:
+            return {
+                "status": "REJECTED",
+                "reason": f"Insufficient Capital (Required: ₹{total_required:,.2f}, Available: ₹{capital:,.2f})",
+                "traded_qty": 0,
+                "cost": 0.0
+            }
+        return {
+            "status": "ADJUSTED",
+            "reason": f"Order size adjusted to available capital limit.",
+            "traded_qty": max_affordable,
+            "cost": (unit_cost * max_affordable) / leverage
+        }
         
-        if basic_lb.iloc[i] > final_lb.iloc[i-1] or c.iloc[i-1] < final_lb.iloc[i-1]:
-            final_lb.iloc[i] = basic_lb.iloc[i]
-        else:
-            final_lb.iloc[i] = final_lb.iloc[i-1]
-            
-        if c.iloc[i] > final_ub.iloc[i-1]:
-            direction[i] = 1
-        elif c.iloc[i] < final_lb.iloc[i-1]:
-            direction[i] = -1
-        else:
-            direction[i] = direction[i-1]
-
-    d['ST_DIR'] = direction
-    d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
-    return d
-
-class BaseStrategy:
-    def __init__(self, name, params=None):
-        self.name = name
-        self.params = params or {}
-    def evaluate(self, df):
-        raise NotImplementedError
-
-class EMAPullbackStrategy(BaseStrategy):
-    def __init__(self, params=None):
-        super().__init__("EMA_Pullback", params)
-    def evaluate(self, df):
-        c_bar = df.iloc[-1]
-        spot, ema20, ema50, rsi = float(c_bar['Close']), float(c_bar['EMA20']), float(c_bar['EMA50']), float(c_bar['RSI'])
-        vol, vol_sma = float(c_bar['Volume']), float(c_bar['VOL_SMA20'])
-        is_vol_ok = vol >= (vol_sma * 1.1) or vol_sma == 0
-        if ema20 > ema50 and spot >= ema20 and rsi > 52 and is_vol_ok:
-            return "BUY", min(96, int(82 + (rsi - 50) * 1.2))
-        elif ema20 < ema50 and spot <= ema20 and rsi < 48 and is_vol_ok:
-            return "SELL", min(96, int(82 + (50 - rsi) * 1.2))
-        return "NEUTRAL", 50
-
-class SuperTrendStrategy(BaseStrategy):
-    def __init__(self, params=None):
-        super().__init__("SuperTrend_Rider", params)
-    def evaluate(self, df):
-        c_bar, p_bar = df.iloc[-1], df.iloc[-2]
-        st_n, st_p, rsi = int(c_bar['ST_DIR']), int(p_bar['ST_DIR']), float(c_bar['RSI'])
-        if st_p == -1 and st_n == 1 and rsi > 50:
-            return "BUY", 92
-        elif st_p == 1 and st_n == -1 and rsi < 50:
-            return "SELL", 92
-        return "NEUTRAL", 50
+    return {
+        "status": "FILLED",
+        "reason": "Margin Approved",
+        "traded_qty": requested_qty,
+        "cost": total_required
+    }
 
 # ==============================================================================
-# 🤖 24/7 INDEPENDENT BACKGROUND WORKER
+# 🛠️ MODULAR STRATEGY REGISTRY PATTERN (ISSUE 2 & 3 RESOLVED)
+# ==============================================================================
+class StrategyRegistry:
+    @staticmethod
+    def ema_pullback(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
+        d['EMA50'] = c.ewm(span=50, adjust=False).mean()
+        
+        delta = c.diff()
+        gain = delta.clip(lower=0).ewm(com=13, adjust=False).mean()
+        loss = (-delta.clip(upper=0)).ewm(com=13, adjust=False).mean()
+        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        cond_buy = (d['EMA20'] > d['EMA50']) & (d['Close'] >= d['EMA20']) & (d['RSI'] > 52) & (d['Volume'] >= d['VOL_SMA20'])
+        cond_sell = (d['EMA20'] < d['EMA50']) & (d['Close'] <= d['EMA20']) & (d['RSI'] < 48) & (d['Volume'] >= d['VOL_SMA20'])
+        
+        d.loc[cond_buy, 'signal'] = 1
+        d.loc[cond_buy, 'confidence'] = 88
+        d.loc[cond_sell, 'signal'] = -1
+        d.loc[cond_sell, 'confidence'] = 88
+        return d
+
+    @staticmethod
+    def supertrend_rider(df):
+        d = df.copy()
+        c, h, l = d['Close'], d['High'], d['Low']
+        d['EMA200'] = c.ewm(span=200, adjust=False).mean()
+        
+        hl = h - l
+        hc = (h - c.shift(1)).abs()
+        lc = (l - c.shift(1)).abs()
+        tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+        st_atr = tr.ewm(com=9, adjust=False).mean()
+        
+        hl2 = (h + l) / 2.0
+        basic_ub = hl2 + (2.0 * st_atr)
+        basic_lb = hl2 - (2.0 * st_atr)
+        final_ub = basic_ub.copy()
+        final_lb = basic_lb.copy()
+        direction = np.zeros(len(d))
+
+        for i in range(1, len(d)):
+            if basic_ub.iloc[i] < final_ub.iloc[i-1] or c.iloc[i-1] > final_ub.iloc[i-1]:
+                final_ub.iloc[i] = basic_ub.iloc[i]
+            else:
+                final_ub.iloc[i] = final_ub.iloc[i-1]
+            if basic_lb.iloc[i] > final_lb.iloc[i-1] or c.iloc[i-1] < final_lb.iloc[i-1]:
+                final_lb.iloc[i] = basic_lb.iloc[i]
+            else:
+                final_lb.iloc[i] = final_lb.iloc[i-1]
+            if c.iloc[i] > final_ub.iloc[i-1]:
+                direction[i] = 1
+            elif c.iloc[i] < final_lb.iloc[i-1]:
+                direction[i] = -1
+            else:
+                direction[i] = direction[i-1]
+
+        d['ST_DIR'] = direction
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        flip_up = (d['ST_DIR'] == 1) & (d['ST_DIR'].shift(1) == -1) & (d['Close'] > d['EMA200'])
+        flip_down = (d['ST_DIR'] == -1) & (d['ST_DIR'].shift(1) == 1) & (d['Close'] < d['EMA200'])
+        
+        d.loc[flip_up, 'signal'] = 1
+        d.loc[flip_up, 'confidence'] = 92
+        d.loc[flip_down, 'signal'] = -1
+        d.loc[flip_down, 'confidence'] = 92
+        return d
+
+    @staticmethod
+    def macd_momentum(df):
+        d = df.copy()
+        c = d['Close']
+        ema12 = c.ewm(span=12, adjust=False).mean()
+        ema26 = c.ewm(span=26, adjust=False).mean()
+        d['MACD'] = ema12 - ema26
+        d['SIGNAL_LINE'] = d['MACD'].ewm(span=9, adjust=False).mean()
+        d['HIST'] = d['MACD'] - d['SIGNAL_LINE']
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['MACD'] > d['SIGNAL_LINE']) & (d['MACD'].shift(1) <= d['SIGNAL_LINE'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        sell_cond = (d['MACD'] < d['SIGNAL_LINE']) & (d['MACD'].shift(1) >= d['SIGNAL_LINE'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 86
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 86
+        return d
+
+    @staticmethod
+    def bollinger_rsi_reversion(df):
+        d = df.copy()
+        c = d['Close']
+        d['SMA20'] = c.rolling(20).mean()
+        std20 = c.rolling(20).std()
+        d['BB_UPPER'] = d['SMA20'] + (2.0 * std20)
+        d['BB_LOWER'] = d['SMA20'] - (2.0 * std20)
+        
+        delta = c.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30)
+        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70)
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 89
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 89
+        return d
+
+    @staticmethod
+    def orb_breakout(df):
+        d = df.copy()
+        d['signal'] = 0
+        d['confidence'] = 0
+        d['HIGH_15'] = d['High'].rolling(3).max().shift(1)
+        d['LOW_15'] = d['Low'].rolling(3).min().shift(1)
+        
+        buy_cond = (d['Close'] > d['HIGH_15'])
+        sell_cond = (d['Close'] < d['LOW_15'])
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 84
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 84
+        return d
+
+    @staticmethod
+    def donchian_breakout(df):
+        d = df.copy()
+        d['DC_HIGH'] = d['High'].rolling(20).max().shift(1)
+        d['DC_LOW'] = d['Low'].rolling(20).min().shift(1)
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Close'] > d['DC_HIGH'])
+        sell_cond = (d['Close'] < d['DC_LOW'])
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 91
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 91
+        return d
+
+    @staticmethod
+    def vwap_expansion(df):
+        d = df.copy()
+        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
+        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        
+        d['signal'] = 0
+        d['confidence'] = 0
+        
+        buy_cond = (d['Close'] > d['VWAP']) & (d['Close'].shift(1) <= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        sell_cond = (d['Close'] < d['VWAP']) & (d['Close'].shift(1) >= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[buy_cond, 'confidence'] = 87
+        d.loc[sell_cond, 'signal'] = -1
+        d.loc[sell_cond, 'confidence'] = 87
+        return d
+
+STRATEGY_MAP = {
+    "1. EMA Institutional Pullback (20/50)": StrategyRegistry.ema_pullback,
+    "2. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
+    "3. MACD + Volume Spike Momentum": StrategyRegistry.macd_momentum,
+    "4. Bollinger Bands + RSI Mean Reversion": StrategyRegistry.bollinger_rsi_reversion,
+    "5. Opening Range Breakout (ORB 15-Min)": StrategyRegistry.orb_breakout,
+    "6. Donchian Channel Volatility Breakout (20-Period)": StrategyRegistry.donchian_breakout,
+    "7. VWAP Intraday Retest & Expansion": StrategyRegistry.vwap_expansion
+}
+
+# ==============================================================================
+# 🤖 24/7 BACKGROUND WORKER (AUTONOMOUS THREAD)
 # ==============================================================================
 def background_scanner_loop():
-    strategies = {
-        "EMA_Pullback": EMAPullbackStrategy(),
-        "SuperTrend_Rider": SuperTrendStrategy()
-    }
     while True:
         try:
             state = load_autopilot_state()
@@ -399,15 +524,17 @@ def background_scanner_loop():
                 min_conf = state.get("conf", 80)
                 rd_target = state.get("target", 50.0)
                 rd_sl = state.get("sl", 20.0)
-                strat_name = state.get("strategy", "EMA_Pullback")
+                strat_name = state.get("strategy", "1. EMA Institutional Pullback (20/50)")
                 
                 open_flag, _ = is_market_open(asset)
                 if open_flag:
-                    df = yf.download(asset, period="2d", interval=tf, progress=False)
-                    if not df.empty and len(df) >= 15:
+                    df = yf.download(asset, period="3d", interval=tf, progress=False)
+                    if not df.empty and len(df) >= 20:
                         if isinstance(df.columns, pd.MultiIndex):
                             df.columns = df.columns.droplevel(1)
-                        df = calc_indicators(df)
+                        
+                        strat_func = STRATEGY_MAP.get(strat_name, StrategyRegistry.ema_pullback)
+                        df = strat_func(df)
                         
                         spot = float(df['Close'].iloc[-1])
                         now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
@@ -514,11 +641,13 @@ def background_scanner_loop():
                                 del current_active[c_item]
                         save_active_trades(current_active)
 
+                        # Check for new signals
                         if asset not in current_active:
-                            engine = strategies.get(strat_name, EMAPullbackStrategy())
-                            sig_raw, conf = engine.evaluate(df)
-
-                            if sig_raw != "NEUTRAL" and conf >= min_conf:
+                            last_sig = int(df['signal'].iloc[-1])
+                            last_conf = int(df['confidence'].iloc[-1])
+                            
+                            if last_sig != 0 and last_conf >= min_conf:
+                                sig_raw = "BUY" if last_sig == 1 else "SELL"
                                 exp_tag, market_cat = get_dynamic_expiry_and_tag(asset)
                                 specs = INDEX_SPECS.get(asset, {"name": asset, "strike_step": 100})
                                 strike_step = specs.get("strike_step", 100)
@@ -539,7 +668,7 @@ def background_scanner_loop():
                                         f"📈 <b>BUY ABOVE ₹{base_prem}</b>\n\n"
                                         f"🎯 <b>TARGET: ₹{tp_prem} | ₹{tp_prem + 30}</b>\n\n"
                                         f"☠️ <b>SL: ₹{sl_prem}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified ({strat_name})</i>"
+                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified ({strat_name})</i>"
                                     )
                                 elif market_cat == "MCX":
                                     strk_name = f"{specs['name']} ({exp_tag})"
@@ -553,7 +682,7 @@ def background_scanner_loop():
                                         f"📈 <b>{pos_label} ₹{base_prem:,.0f}</b>\n\n"
                                         f"🎯 <b>TARGET: ₹{tp_spot:,.0f} ({'+' if sig_raw == 'BUY' else '-'}{rd_target:.0f} Pts)</b>\n\n"
                                         f"☠️ <b>SL: ₹{sl_spot:,.0f}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified</i>"
                                     )
                                 else:
                                     strk_name = f"{specs['name']} (PERPETUAL SWAP)"
@@ -568,7 +697,7 @@ def background_scanner_loop():
                                         f"💵 <b>ENTRY: ${spot:,.2f}</b>\n\n"
                                         f"🎯 <b>TARGET: ${tp_spot:,.2f} ({'+' if 'LONG' in pos_type else '-'}{rd_target:.1f}%)</b>\n\n"
                                         f"🛑 <b>STOP LOSS: ${sl_spot:,.2f}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {last_conf}% Verified</i>"
                                     )
 
                                 send_telegram_alert(tg_text)
@@ -585,7 +714,7 @@ def background_scanner_loop():
                                     "id": log_id, "time": now_ist, "raw_time": now_raw,
                                     "instrument": strk_name if market_cat != "NSE" else inst_name, "action": sig_raw, "entry_spot": spot,
                                     "target": f"{curr_sym}{tp_spot:,.1f}", "sl": f"{curr_sym}{sl_spot:,.1f}",
-                                    "confidence": f"{conf}%", "status": "LIVE IN POSITION",
+                                    "confidence": f"{last_conf}%", "status": "LIVE IN POSITION",
                                     "exit_price": "-"
                                 })
                                 save_signals_log(logs)
@@ -598,7 +727,6 @@ if 'bg_thread_started' not in st.session_state:
     t = threading.Thread(target=background_scanner_loop, daemon=True)
     t.start()
 
-# Query parameters handling
 query_params = st.query_params
 if not st.session_state.authenticated and "uid" in query_params:
     saved_uid = query_params["uid"]
@@ -618,7 +746,7 @@ if not st.session_state.authenticated:
         <div style="background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(30, 41, 59, 0.8); border-radius: 16px; padding: 24px; text-align: center;">
             <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
             <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM AI</h2>
-            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Automated Radar</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Multi-Strategy Backtester</p>
             <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
                 <span style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">● LIVE QUANT FEED</span>
             </div>
@@ -720,17 +848,17 @@ with st.sidebar:
     lookback_days = st.slider("Lookback Memory (Days)", 1, 60, 30)
 
     st.markdown("---")
-    st.markdown("### 🛠️ 2. Strategy Engine")
-    strategy_type = st.selectbox("Quantitative Archetype", ["1. EMA Institutional Pullback (20/50)", "2. SuperTrend Trend-Rider (10, 2.0)"])
+    st.markdown("### 🛠️ 2. Strategy Engine (Registry Pattern)")
+    strategy_type = st.selectbox("Quantitative Strategy Library", list(STRATEGY_MAP.keys()))
     
     st.markdown("---")
-    st.markdown("### 🛡️ 3. Risk & Capital")
-    capital = st.number_input("Capital Pool (₹)", value=100000.0, step=10000.0)
+    st.markdown("### 🛡️ 3. Risk & Capital Guard")
+    capital = st.number_input("Capital Pool / Margin (₹)", value=100000.0, step=10000.0, min_value=1.0)
     
     lot_size_val = INDEX_SPECS.get(symbol, {}).get("lot_size", 1)
-    num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1)
+    num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1, min_value=1)
     total_qty = num_lots * lot_size_val
-    st.caption(f"Total Contract Quantity: `{total_qty}` Units")
+    st.caption(f"Requested Quantity: `{total_qty}` Units")
 
     is_idx = symbol in ["^NSEBANK", "^NSEI", "^BSESN"]
     col_k1, col_k2 = st.columns(2)
@@ -747,7 +875,7 @@ header_curr = "$" if symbol.endswith("-USD") else "₹"
 
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
+    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Strategy: **{strategy_type.split('.')[1].strip()}**")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
 
@@ -791,7 +919,6 @@ with tab_tv_chart:
             if isinstance(df_demat.columns, pd.MultiIndex):
                 df_demat.columns = df_demat.columns.droplevel(1)
             df_demat.dropna(inplace=True)
-            df_demat = calc_indicators(df_demat)
 
             ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
@@ -814,7 +941,6 @@ with tab_tv_chart:
             init_spot = latest_c['close']
             init_high = float(df_demat['High'].max())
             init_low = float(df_demat['Low'].min())
-            init_rsi = float(df_demat['RSI'].iloc[-1])
 
             demat_studio_html = f"""
             <!DOCTYPE html>
@@ -824,7 +950,7 @@ with tab_tv_chart:
             <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
             <style>
                 body {{ margin: 0; padding: 0; background: #050811; font-family: sans-serif; color: #f1f5f9; overflow: hidden; }}
-                #metrics_grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 8px; }}
+                #metrics_grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }}
                 .metric-card {{ background: #0d1527; border: 1px solid #1e293b; border-radius: 10px; padding: 8px 12px; }}
                 .metric-label {{ font-size: 11px; color: #94a3b8; text-transform: uppercase; }}
                 .metric-val {{ font-family: monospace; font-size: 18px; font-weight: bold; color: #38bdf8; }}
@@ -842,7 +968,6 @@ with tab_tv_chart:
                 <div class="metric-card"><div class="metric-label">Live Spot</div><div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div></div>
                 <div class="metric-card"><div class="metric-label">Session High</div><div class="metric-val">{curr_label}{init_high:,.2f}</div></div>
                 <div class="metric-card"><div class="metric-label">Session Low</div><div class="metric-val">{curr_label}{init_low:,.2f}</div></div>
-                <div class="metric-card"><div class="metric-label">RSI (14)</div><div class="metric-val" style="color: {'#10b981' if init_rsi > 50 else '#ef4444'};">{init_rsi:.1f}</div></div>
             </div>
             <div id="main_wrapper">
                 <div id="left_toolbar">
@@ -957,29 +1082,8 @@ with tab_tv_chart:
         st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
-# 📊 BACKTEST ENGINE EXECUTION
+# 📊 BACKTEST EXECUTION WITH CAPITAL VALIDATION & STRATEGY REGISTRY
 # ==============================================================================
-terminal_manual_text = """=====================================================
-         SAM QUANTUM OS - OFFICIAL SYSTEM MANUAL
-=====================================================
-
-1. ASSET & RESOLUTION CONFIGURATION
-- Dynamic Dropdown: Syncs real-time prices across NSE, Crypto, MCX & Stocks.
-- Timeframes: Multi-resolution candle streams (1m, 5m, 15m, 1D).
-
-2. STRATEGY ENGINE
-- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend.
-- Momentum Filter: RSI Overbought/Oversold boundaries (14 Period).
-
-3. BLACK-SCHOLES OPTION CHAIN
-- 3-Column Demat Option Chain: Real Greeks (Delta, Theta, Gamma, Vega).
-- Auto Expiry Rollover: Automatic rollover to next cycle at market close.
-
-4. 24/7 AUTOPILOT ENGINE
-- Continuous Non-Blocking Daemon: Runs autonomously even when the browser or local machine sleeps.
-=====================================================
-"""
-
 with tab_reports:
     st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
     st.download_button(
@@ -992,62 +1096,71 @@ with tab_reports:
 
 if execute_btn or 'backtest_executed' in st.session_state:
     st.session_state.backtest_executed = True
-    with st.spinner("⏳ Running institutional strategy backtest..."):
+    with st.spinner(f"⏳ Running Strategy Backtest: {strategy_type}..."):
         try:
             df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
-            if not df_raw.empty and len(df_raw) >= 10:
+            if not df_raw.empty and len(df_raw) >= 20:
                 if isinstance(df_raw.columns, pd.MultiIndex):
                     df_raw.columns = df_raw.columns.droplevel(1)
                 df_raw.dropna(inplace=True)
-                df_bt = calc_indicators(df_raw)
+                
+                # Dynamic Execution via Strategy Registry
+                strat_func = STRATEGY_MAP.get(strategy_type, StrategyRegistry.ema_pullback)
+                df_bt = strat_func(df_raw)
 
                 ist_time_bt = df_bt.index.tz_convert('Asia/Kolkata') if df_bt.index.tz is not None else df_bt.index + pd.Timedelta(hours=5, minutes=30)
                 df_bt['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time_bt]
 
                 trades = []
                 position = None
-                last_bar = -1
+                current_balance = capital
+                trade_rejections = 0
 
                 for i in range(2, len(df_bt)):
                     curr_spot = float(df_bt['Close'].iloc[i])
-                    rsi = float(df_bt['RSI'].iloc[i])
-                    ema20 = float(df_bt['EMA20'].iloc[i])
-                    ema50 = float(df_bt['EMA50'].iloc[i])
+                    sig = int(df_bt['signal'].iloc[i])
                     time_lbl = df_bt['Time_Str'].iloc[i]
 
+                    # 1. Manage Active Position Exit
                     if position is not None:
-                        move = (curr_spot - position['entry']) if position['type'] == 'BUY/CE' else (position['entry'] - curr_spot)
+                        is_buy = position['type'] in ['BUY/CE', 'BUY', 'LONG']
+                        move = (curr_spot - position['entry']) if is_buy else (position['entry'] - curr_spot)
                         opt_move = move if is_idx else ((move / position['entry']) * 100)
 
                         if opt_move >= target_val:
-                            pnl = (target_val * total_qty * 0.5) if is_idx else ((target_val / 100) * capital)
-                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
+                            pnl = (target_val * position['qty'] * 0.5) if is_idx else ((target_val / 100) * position['qty'] * position['entry'])
+                            current_balance += (position['cost'] + pnl)
+                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Qty': position['qty'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl, 'Balance': current_balance})
                             position = None
-                            last_bar = i
                         elif opt_move <= -sl_val:
-                            pnl = (-sl_val * total_qty * 0.5) if is_idx else ((-sl_val / 100) * capital)
-                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
+                            pnl = (-sl_val * position['qty'] * 0.5) if is_idx else ((-sl_val / 100) * position['qty'] * position['entry'])
+                            current_balance += (position['cost'] + pnl)
+                            trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Qty': position['qty'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl, 'Balance': current_balance})
                             position = None
-                            last_bar = i
-                    elif last_bar != i:
-                        if ema20 > ema50 and curr_spot > ema20 and rsi > 50:
-                            position = {'type': 'BUY/CE', 'entry': curr_spot, 'time': time_lbl}
-                            last_bar = i
-                        elif ema20 < ema50 and curr_spot < ema20 and rsi < 50:
-                            position = {'type': 'SELL/PE', 'entry': curr_spot, 'time': time_lbl}
-                            last_bar = i
+
+                    # 2. Open New Position with Strict Capital Check
+                    elif sig != 0:
+                        margin_eval = validate_and_calculate_margin(current_balance, curr_spot, total_qty, is_option=is_idx, leverage=1.0)
+                        
+                        if margin_eval["status"] == "REJECTED":
+                            trade_rejections += 1
+                        else:
+                            trade_qty = margin_eval["traded_qty"]
+                            trade_cost = margin_eval["cost"]
+                            current_balance -= trade_cost
+                            
+                            pos_type = 'BUY/CE' if sig == 1 else 'SELL/PE'
+                            position = {'type': pos_type, 'entry': curr_spot, 'time': time_lbl, 'qty': trade_qty, 'cost': trade_cost}
 
                 with tab_backtest:
-                    st.markdown("#### 🕯️ Institutional Backtest Chart")
-                    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.03)
-                    fig.add_trace(go.Candlestick(x=df_bt['Time_Str'], open=df_bt['Open'], high=df_bt['High'], low=df_bt['Low'], close=df_bt['Close'], name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
+                    st.markdown(f"#### 🕯️ Strategy Backtest Chart (`{strategy_type}`)")
+                    fig = make_subplots(rows=1, cols=1)
+                    fig.add_trace(go.Candlestick(x=df_bt['Time_Str'], open=df_bt['Open'], high=df_bt['High'], low=df_bt['Low'], close=df_bt['Close'], name="Price", increasing_line_color='#10b981', decreasing_line_color='#ef4444'))
                     fig.update_layout(template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811', height=580, xaxis_rangeslider_visible=False, dragmode='pan', margin=dict(l=5, r=5, t=10, b=5))
                     st.plotly_chart(fig, use_container_width=True)
 
                 with tab_metrics:
+                    st.markdown("#### 💎 Institutional Strategy Scorecard & Capital Audit")
                     if trades:
                         tdf = pd.DataFrame(trades)
                         net_pnl = tdf['PnL'].sum()
@@ -1055,27 +1168,28 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         win_rate = (win_count / len(tdf)) * 100
                         tdf['Cum_PnL'] = tdf['PnL'].cumsum()
 
-                        st.markdown("#### 💎 Institutional Strategy Scorecard")
                         k1, k2, k3, k4 = st.columns(4)
-                        k1.metric("Net Realized PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}")
+                        k1.metric("Net Realized PnL", f"{'+₹' if net_pnl >= 0 else '-₹'}{abs(net_pnl):,.2f}", f"{(net_pnl/capital)*100:+.2f}% ROI")
                         k2.metric("Win Probability", f"{win_rate:.1f}%", f"{win_count}W / {len(tdf)-win_count}L")
-                        k3.metric("Trade Executions", len(tdf))
-                        k4.metric("Risk Factor", "1 : 2.5")
+                        k3.metric("Trade Executions", len(tdf), f"Rejections (No Margin): {trade_rejections}")
+                        k4.metric("Ending Capital Balance", f"₹{current_balance:,.2f}")
 
                         fig_equity = go.Figure()
                         fig_equity.add_trace(go.Scatter(x=tdf['Exit Time'], y=tdf['Cum_PnL'], mode='lines+markers', line=dict(color='#10b981', width=2.5), fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)', name='Equity'))
                         fig_equity.update_layout(title="📈 Cumulative Equity Trajectory (₹)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=320)
                         st.plotly_chart(fig_equity, use_container_width=True)
+                    else:
+                        st.warning(f"No completed trades generated within parameters. Rejected due to margin: {trade_rejections}")
 
                 with tab_trades:
                     if trades:
-                        st.markdown("#### 📜 Trade Execution Audit Trail")
+                        st.markdown("#### 📜 Trade Execution Audit Trail (Capital Sized)")
                         st.dataframe(pd.DataFrame(trades), use_container_width=True, height=400)
         except Exception as e:
             st.error(f"Backtest error: {str(e)}")
 else:
     with tab_backtest:
-        st.info("💡 Select your Strategy & Parameters in sidebar, then click '⚡ EXECUTE STRATEGY BACKTEST' above.")
+        st.info("💡 Select Strategy & Risk parameters in the sidebar, then click '⚡ EXECUTE STRATEGY BACKTEST' above.")
 
 # ==============================================================================
 # 🤖 TAB 6: AI 24/7 AUTOPILOT HUB
@@ -1089,7 +1203,7 @@ with tab_ai_pilot:
     col_ap1, col_ap2 = st.columns([1.8, 1])
     with col_ap1:
         if auto_state.get("running", False):
-            st.success(f"🟢 **AI AUTOPILOT IS ACTIVE** | Target: `{asset_dict.get(auto_state.get('asset', '^NSEBANK'), '')}` | Edge: `{auto_state.get('conf', 80)}%`")
+            st.success(f"🟢 **AI AUTOPILOT IS ACTIVE** | Target: `{asset_dict.get(auto_state.get('asset', '^NSEBANK'), '')}` | Strategy: `{auto_state.get('strategy', 'EMA Pullback')}`")
         else:
             st.warning("🔴 **AI AUTOPILOT ENGINE IS OFF (STANDBY)**")
 
@@ -1106,7 +1220,7 @@ with tab_ai_pilot:
     with col_p2:
         target_tf = st.selectbox("Resolution", ["5m", "15m", "30m", "1h"], index=1, key="pilot_tf_sel")
     with col_p3:
-        min_conf = st.slider("Minimum AI Edge Confidence %", 70, 95, auto_state.get("conf", 80), key="pilot_conf_slider")
+        target_strat = st.selectbox("Execution Strategy", list(STRATEGY_MAP.keys()), index=0, key="pilot_strat_sel")
 
     is_idx_p = target_asset in ["^NSEBANK", "^NSEI", "^BSESN"]
     col_k1, col_k2 = st.columns(2)
@@ -1118,7 +1232,7 @@ with tab_ai_pilot:
     if st.button("💾 SAVE AUTOPILOT ENGINE SETTINGS"):
         auto_state["asset"] = target_asset
         auto_state["tf"] = target_tf
-        auto_state["conf"] = min_conf
+        auto_state["strategy"] = target_strat
         auto_state["target"] = tp_val
         auto_state["sl"] = sl_val
         save_autopilot_state(auto_state)
@@ -1199,10 +1313,12 @@ with tab_manual_terminal:
         man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 25}", key="man_sl_txt_pro")
         REASONING_PRESETS = [
             "EMA 20 Pullback + Volume Confirmation",
-            "EMA Golden/Death Crossover (9/21 Acceleration)",
             "SuperTrend Dynamic Breakout (10, 2.0)",
-            "VWAP Intraday Retest & Expansion Zone",
-            "Candlestick Hammer Reversal / Engulfing",
+            "MACD + Volume Spike Momentum",
+            "Bollinger Bands + RSI Mean Reversion",
+            "Opening Range Breakout (ORB)",
+            "Donchian Channel Volatility Squeeze",
+            "VWAP Intraday Retest & Expansion",
             "✍️ Custom Setup Note (Enter Below)"
         ]
         sel_reason_preset = st.selectbox("Setup Reasoning Engine", REASONING_PRESETS, index=0)
