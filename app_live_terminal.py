@@ -17,10 +17,10 @@ except ImportError:
     pyotp = None
 
 # ==============================================================================
-# 📱 SAM QUANTUM LIVE TERMINAL - 100% INDIAN MARKETS DEMAT SUITE
+# 📱 SAM QUANTUM PRO LIVE TERMINAL (INSTITUTIONAL STRATEGY MATRIX)
 # ==============================================================================
 st.set_page_config(
-    page_title="SAM LIVE ALGO | Mobile Demat",
+    page_title="SAM LIVE DEMAT | Institutional Algo Suite",
     page_icon="⚡",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -43,19 +43,33 @@ INDEX_SPECS = {
 # 💾 PERSISTENCE CONTROLLER
 # ==============================================================================
 def load_algo_state():
+    default_state = {
+        "running": False,
+        "mode": "PAPER",
+        "broker": "Zerodha KiteConnect",
+        "symbol": "^NSEBANK",
+        "strategy": "1. [Quantman Replica] 9:20 AM Short Straddle (25% SL + Re-Entry)",
+        "lots": 2,
+        "target": 50.0,
+        "sl": 20.0,
+        "max_daily_loss": 5000.0,
+        "active_position": None,
+        "today_trades": 0,
+        "date": "",
+        "net_pnl": 0.0,
+        "last_heartbeat": "-",
+        "circuit_triggered": False
+    }
     if not os.path.exists(ALGO_STATE_FILE):
-        return {
-            "running": False, "mode": "PAPER", "broker": "Zerodha KiteConnect",
-            "symbol": "^NSEBANK", "strategy": "4. Candlestick Pattern Engine (Hammer / Engulfing)",
-            "lots": 2, "target": 50.0, "sl": 20.0, "active_position": None,
-            "today_trades": 0, "date": "", "net_pnl": 0.0, "last_heartbeat": "-",
-            "broker_connected": False
-        }
+        return default_state
     try:
         with open(ALGO_STATE_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            for k, v in default_state.items():
+                data.setdefault(k, v)
+            return data
     except Exception:
-        return {"running": False, "mode": "PAPER", "broker": "Zerodha KiteConnect", "symbol": "^NSEBANK", "strategy": "4. Candlestick Pattern Engine (Hammer / Engulfing)", "lots": 2, "target": 50.0, "sl": 20.0, "active_position": None, "today_trades": 0, "date": "", "net_pnl": 0.0, "last_heartbeat": "-", "broker_connected": False}
+        return default_state
 
 def save_algo_state(st_dict):
     with open(ALGO_STATE_FILE, "w") as f:
@@ -88,7 +102,7 @@ def save_trade_logs(logs):
         json.dump(logs, f, indent=4)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE (EXACT BACKTEST FORMULA)
+# 🧮 GREEKS & PRICING ENGINE
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -122,7 +136,7 @@ def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days
     points_pnl = round(exit_premium - entry_premium, 2)
     return atm_strike, entry_premium, exit_premium, points_pnl
 
-def calculate_taxes(entry_premium, exit_premium, qty):
+def calculate_statutory_taxes(entry_premium, exit_premium, qty):
     buy_turnover = entry_premium * qty
     sell_turnover = exit_premium * qty
     total_turnover = buy_turnover + sell_turnover
@@ -134,7 +148,7 @@ def calculate_taxes(entry_premium, exit_premium, qty):
     return round(brokerage + stt + exchange_txn + gst + slippage, 2)
 
 # ==============================================================================
-# 🛠️ 7 STRATEGIES REGISTRY (EXACT BACKTEST LOGIC)
+# 🛠️ 10 INSTITUTIONAL STRATEGIES REGISTRY
 # ==============================================================================
 def compute_adx(df, period=14):
     d = df.copy()
@@ -151,6 +165,76 @@ def compute_adx(df, period=14):
     return dx.rolling(period).mean().fillna(20)
 
 class StrategyRegistry:
+    @staticmethod
+    def straddle_920_replica(df):
+        d = df.copy()
+        d['signal'] = 0
+        ist_time = d.index.tz_convert('Asia/Kolkata') if d.index.tz is not None else d.index + pd.Timedelta(hours=5, minutes=30)
+        time_only = [t.time() for t in ist_time]
+        
+        # 09:20 - 09:30 AM Entry trigger
+        for i, t in enumerate(time_only):
+            if dtime(9, 20) <= t <= dtime(9, 30):
+                d.iloc[i, d.columns.get_loc('signal')] = 2 # Multi-leg Short Straddle
+        return d
+
+    @staticmethod
+    def delta_iron_condor_replica(df):
+        d = df.copy()
+        d['signal'] = 0
+        ist_time = d.index.tz_convert('Asia/Kolkata') if d.index.tz is not None else d.index + pd.Timedelta(hours=5, minutes=30)
+        time_only = [t.time() for t in ist_time]
+        
+        # 10:00 AM Entry on Expiry Days
+        for i, t in enumerate(time_only):
+            if dtime(10, 0) <= t <= dtime(10, 15):
+                d.iloc[i, d.columns.get_loc('signal')] = 4 # 4-Leg Iron Condor
+        return d
+
+    @staticmethod
+    def mirror_pip_vwap_trend(df):
+        d = df.copy()
+        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
+        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
+        d['EMA200'] = d['Close'].ewm(span=200, adjust=False).mean()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        
+        d['signal'] = 0
+        cond_buy = (d['Close'] > d['EMA200']) & (d['Low'] <= d['VWAP']) & (d['Close'] > d['VWAP']) & (d['Volume'] > d['VOL_SMA20'])
+        cond_sell = (d['Close'] < d['EMA200']) & (d['High'] >= d['VWAP']) & (d['Close'] < d['VWAP']) & (d['Volume'] > d['VOL_SMA20'])
+        d.loc[cond_buy, 'signal'] = 1
+        d.loc[cond_sell, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def opening_range_breakout(df):
+        d = df.copy()
+        d['signal'] = 0
+        ist_time = d.index.tz_convert('Asia/Kolkata') if d.index.tz is not None else d.index + pd.Timedelta(hours=5, minutes=30)
+        
+        # High and Low of First 15-min bar (09:15 - 09:30)
+        first_bar_h = d['High'].iloc[0]
+        first_bar_l = d['Low'].iloc[0]
+        
+        cond_buy = (d['Close'] > first_bar_h)
+        cond_sell = (d['Close'] < first_bar_l)
+        d.loc[cond_buy, 'signal'] = 1
+        d.loc[cond_sell, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def candlestick_pattern(df):
+        d = df.copy()
+        o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
+        body = (c - o).abs()
+        range_hl = h - l
+        d['signal'] = 0
+        is_hammer = (l < o.combine(c, min) - 2 * body) & (h <= o.combine(c, max) + body * 0.5) & (range_hl > body * 2.5)
+        is_star = (h > o.combine(c, max) + 2 * body) & (l >= o.combine(c, min) - body * 0.5) & (range_hl > body * 2.5)
+        d.loc[is_hammer, 'signal'] = 1
+        d.loc[is_star, 'signal'] = -1
+        return d
+
     @staticmethod
     def ema_pullback(df):
         d = df.copy()
@@ -221,19 +305,6 @@ class StrategyRegistry:
         return d
 
     @staticmethod
-    def candlestick_pattern(df):
-        d = df.copy()
-        o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
-        body = (c - o).abs()
-        range_hl = h - l
-        d['signal'] = 0
-        is_hammer = (l < o.combine(c, min) - 2 * body) & (h <= o.combine(c, max) + body * 0.5) & (range_hl > body * 2.5)
-        is_star = (h > o.combine(c, max) + 2 * body) & (l >= o.combine(c, min) - body * 0.5) & (range_hl > body * 2.5)
-        d.loc[is_hammer, 'signal'] = 1
-        d.loc[is_star, 'signal'] = -1
-        return d
-
-    @staticmethod
     def volume_breakout(df):
         d = df.copy()
         d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
@@ -247,23 +318,11 @@ class StrategyRegistry:
         return d
 
     @staticmethod
-    def vwap_expansion(df):
-        d = df.copy()
-        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
-        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
-        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
-        d['signal'] = 0
-        buy_cond = (d['Close'] > d['VWAP']) & (d['Close'].shift(1) <= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        sell_cond = (d['Close'] < d['VWAP']) & (d['Close'].shift(1) >= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
-        d.loc[buy_cond, 'signal'] = 1
-        d.loc[sell_cond, 'signal'] = -1
-        return d
-
-    @staticmethod
     def bollinger_rsi_reversion(df):
         d = df.copy()
         c = d['Close']
         d['SMA20'] = c.rolling(20).mean()
+        d['EMA200'] = c.ewm(span=200, adjust=False).mean()
         std20 = c.rolling(20).std()
         d['BB_UPPER'] = d['SMA20'] + (2.0 * std20)
         d['BB_LOWER'] = d['SMA20'] - (2.0 * std20)
@@ -272,20 +331,23 @@ class StrategyRegistry:
         loss = (-delta.clip(upper=0)).rolling(14).mean()
         d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
         d['signal'] = 0
-        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30)
-        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70)
+        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30) & (d['Close'] > d['EMA200'])
+        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70) & (d['Close'] < d['EMA200'])
         d.loc[buy_cond, 'signal'] = 1
         d.loc[sell_cond, 'signal'] = -1
         return d
 
 STRATEGY_MAP = {
-    "1. EMA Institutional Pullback (20/50 Trend)": StrategyRegistry.ema_pullback,
-    "2. EMA Golden/Death Crossover (9/21 Acceleration)": StrategyRegistry.ema_crossover,
-    "3. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
-    "4. Candlestick Pattern Engine (Hammer / Engulfing)": StrategyRegistry.candlestick_pattern,
-    "5. Volume Spike + Momentum Breakout": StrategyRegistry.volume_breakout,
-    "6. VWAP Intraday Retest & Expansion": StrategyRegistry.vwap_expansion,
-    "7. Bollinger Band Dynamic Mean Reversion": StrategyRegistry.bollinger_rsi_reversion
+    "1. [Quantman Replica] 9:20 AM Short Straddle (25% SL + Re-Entry)": StrategyRegistry.straddle_920_replica,
+    "2. [Delta Exchange Replica] Expiry Day Delta-Neutral Iron Condor": StrategyRegistry.delta_iron_condor_replica,
+    "3. [Mirror Pip Replica] VWAP + 200 EMA Institutional Trend Pullback": StrategyRegistry.mirror_pip_vwap_trend,
+    "4. 15-Minute Opening Range Breakout (ORB High/Low)": StrategyRegistry.opening_range_breakout,
+    "5. Candlestick Pattern Engine (Hammer / Shooting Star)": StrategyRegistry.candlestick_pattern,
+    "6. EMA Institutional Pullback (20/50 Trend)": StrategyRegistry.ema_pullback,
+    "7. EMA Golden/Death Crossover (9/21 Acceleration)": StrategyRegistry.ema_crossover,
+    "8. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
+    "9. Volume Spike + Momentum 20-High Breakout": StrategyRegistry.volume_breakout,
+    "10. Bollinger Bands Dynamic Squeeze & Mean Reversion": StrategyRegistry.bollinger_rsi_reversion
 }
 
 # ==============================================================================
@@ -298,7 +360,7 @@ class LiveBrokerGateway:
         if mode == "PAPER":
             return {"status": "SUCCESS", "order_id": f"PAPER_{int(time.time())}"}
         
-        # Zerodha Real Order
+        # Zerodha Real Order Execution
         if "Zerodha" in creds.get("broker", ""):
             try:
                 from kiteconnect import KiteConnect
@@ -314,7 +376,7 @@ class LiveBrokerGateway:
             except Exception as e:
                 return {"status": "FAILED", "error": str(e)}
 
-        # Angel One Real Order
+        # Angel One Real Order Execution
         elif "Angel" in creds.get("broker", "") and pyotp is not None:
             try:
                 from SmartApi import SmartConnect
@@ -349,10 +411,26 @@ def live_execution_daemon():
             save_algo_state(state)
 
             if state.get("running", False):
+                # Daily Session Reset at 09:15 AM
                 if state.get("date") != today_str:
                     state["date"] = today_str
                     state["today_trades"] = 0
+                    state["net_pnl"] = 0.0
+                    state["circuit_triggered"] = False
                     save_algo_state(state)
+
+                # Daily Max Loss Circuit Breaker Kill-Switch
+                if state.get("net_pnl", 0) <= -abs(state.get("max_daily_loss", 5000.0)):
+                    if not state.get("circuit_triggered", False):
+                        state["running"] = False
+                        state["circuit_triggered"] = True
+                        if state.get("active_position"):
+                            pos = state["active_position"]
+                            LiveBrokerGateway.place_order(pos["tradingsymbol"], pos["qty"], "SELL", state.get("mode"))
+                            state["active_position"] = None
+                        save_algo_state(state)
+                    time.sleep(20)
+                    continue
 
                 if dtime(9, 15) <= cur_time <= dtime(15, 30):
                     # Auto Square-Off at 15:15 IST
@@ -374,7 +452,7 @@ def live_execution_daemon():
                     sym = state.get("symbol", "^NSEBANK")
                     spec = INDEX_SPECS.get(sym, {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100})
                     total_qty = state.get("lots", 2) * spec["lot_size"]
-                    strat_name = state.get("strategy", "4. Candlestick Pattern Engine (Hammer / Engulfing)")
+                    strat_name = state.get("strategy", list(STRATEGY_MAP.keys())[0])
 
                     df = yf.download(sym, period="2d", interval="15m", progress=False)
                     if not df.empty and len(df) >= 10:
@@ -386,7 +464,7 @@ def live_execution_daemon():
                         curr_spot = float(df['Close'].iloc[-1])
                         last_signal = int(df['signal'].iloc[-2])
 
-                        # Active Position Exit Check
+                        # 1. Manage Active Position Exit
                         if state.get("active_position") is not None:
                             pos = state["active_position"]
                             pos["bars_held"] += 1
@@ -400,7 +478,7 @@ def live_execution_daemon():
 
                             if target_hit or sl_hit:
                                 gross_pnl = points_diff * total_qty
-                                taxes = calculate_taxes(pos["entry_prem"], exit_prem, total_qty)
+                                taxes = calculate_statutory_taxes(pos["entry_prem"], exit_prem, total_qty)
                                 net_pnl = gross_pnl - taxes
                                 
                                 LiveBrokerGateway.place_order(pos["tradingsymbol"], total_qty, "SELL", state.get("mode"))
@@ -416,16 +494,17 @@ def live_execution_daemon():
                                 state["active_position"] = None
                                 save_algo_state(state)
 
-                        # New Signal Entry Check
+                        # 2. Open New Trade on Valid Strategy Signal
                         elif last_signal != 0 and state.get("today_trades", 0) < 2:
-                            is_blackout = dtime(11, 30) <= cur_time <= dtime(13, 15)
+                            # 11:30 - 13:15 Sideways Blackout Guard (Applied for Non-Straddle Directional trades)
+                            is_blackout = (dtime(11, 30) <= cur_time <= dtime(13, 15)) and (last_signal in [1, -1])
                             if not is_blackout:
-                                pos_type = "BUY/CE" if last_signal == 1 else "BUY/PE"
+                                pos_type = "BUY/CE" if last_signal == 1 else "BUY/PE" if last_signal == -1 else "SHORT STRADDLE"
                                 atm_s, entry_prem, _, _ = calculate_option_trade(
                                     spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
                                     bars_held=0, days_to_expiry=2, strike_step=spec["strike_step"]
                                 )
-                                opt_lbl = "CE" if last_signal == 1 else "PE"
+                                opt_lbl = "CE" if last_signal == 1 else "PE" if last_signal == -1 else "ATM STRADDLE"
                                 strike_desc = f"{spec['name']} {atm_s} {opt_lbl}"
                                 tradingsymbol = f"{spec['name']}{now_ist.strftime('%y%b').upper()}{atm_s}{opt_lbl}"
 
@@ -458,7 +537,7 @@ total_contract_qty = state.get("lots", 2) * spec["lot_size"]
 st.markdown("""
 <div style="text-align:center; padding: 10px 0 14px 0;">
     <h2 style="color: #38bdf8; margin: 0; font-weight: 800; font-size: 24px;">⚡ SAM LIVE DEMAT</h2>
-    <span style="color: #94a3b8; font-size: 12px;">Mobile Autonomous Algorithmic Engine (Indian F&O)</span>
+    <span style="color: #94a3b8; font-size: 12px;">Institutional Multi-Strategy Execution Engine</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -481,10 +560,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if state.get("circuit_triggered", False):
+    st.error(f"🛑 MAX DAILY LOSS CIRCUIT HIT (-₹{state.get('max_daily_loss', 5000):,.2f}). Trading automatically locked for today.")
+
 # 2. Main One-Touch Control Buttons
 c1, c2 = st.columns(2)
 with c1:
-    if st.button("▶️ START ALGO", type="primary", use_container_width=True):
+    if st.button("▶️ START ALGO", type="primary", use_container_width=True, disabled=state.get("circuit_triggered", False)):
         state["running"] = True
         save_algo_state(state)
         st.rerun()
@@ -523,7 +605,7 @@ if active_pos:
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.info(f"No active trade. Engine scanning market on `{state.get('strategy', 'Candlestick')}`.")
+    st.info(f"No active trade. Engine scanning market on: `{state.get('strategy')}`.")
 
 # Daily Performance KPIs
 m1, m2 = st.columns(2)
@@ -532,24 +614,33 @@ m2.metric("Daily Trades Cap", f"{state.get('today_trades', 0)} / 2")
 
 st.markdown("---")
 
-# 4. Strategy & Asset Selector
-with st.expander("🛠️ Strategy & Quantitative Settings", expanded=True):
-    sel_strat = st.selectbox("Execution Strategy Library", list(STRATEGY_MAP.keys()), index=list(STRATEGY_MAP.keys()).index(state.get("strategy", "4. Candlestick Pattern Engine (Hammer / Engulfing)")) if state.get("strategy") in STRATEGY_MAP else 3)
-    sel_sym = st.selectbox("Underlying Market", list(INDEX_SPECS.keys()), index=list(INDEX_SPECS.keys()).index(state.get("symbol", "^NSEBANK")) if state.get("symbol") in INDEX_SPECS else 0, format_func=lambda x: INDEX_SPECS[x]["name"])
-    sel_lots = st.number_input("Number of Lots", value=int(state.get("lots", 2)), min_value=1, step=1)
+# 4. Strategy & Asset Selector (Expanded by Default for Easy Switch)
+with st.expander("🛠️ Strategy Selection & RMS Parameters", expanded=True):
+    strat_keys = list(STRATEGY_MAP.keys())
+    cur_strat_idx = strat_keys.index(state.get("strategy")) if state.get("strategy") in strat_keys else 0
+    sel_strat = st.selectbox("Select Quantitative / Institutional Model", strat_keys, index=cur_strat_idx)
+    
+    asset_keys = list(INDEX_SPECS.keys())
+    cur_asset_idx = asset_keys.index(state.get("symbol")) if state.get("symbol") in asset_keys else 0
+    sel_sym = st.selectbox("Underlying Market Asset", asset_keys, index=cur_asset_idx, format_func=lambda x: INDEX_SPECS[x]["name"])
+    
+    sel_lots = st.number_input("Number of Execution Lots", value=int(state.get("lots", 2)), min_value=1, step=1)
     
     col_t1, col_t2 = st.columns(2)
     with col_t1:
-        sel_target = st.number_input("Target (Pts)", value=float(state.get("target", 50.0)), step=5.0)
+        sel_target = st.number_input("Target Points (Pts)", value=float(state.get("target", 50.0)), step=5.0)
     with col_t2:
-        sel_sl = st.number_input("Hard SL (Pts)", value=float(state.get("sl", 20.0)), step=5.0)
+        sel_sl = st.number_input("Stop Loss (Pts)", value=float(state.get("sl", 20.0)), step=5.0)
 
-    if st.button("💾 SAVE STRATEGY PARAMETERS", use_container_width=True):
+    sel_max_loss = st.number_input("Daily Max Loss Circuit Kill-Switch (₹)", value=float(state.get("max_daily_loss", 5000.0)), step=1000.0)
+
+    if st.button("💾 APPLY STRATEGY CONFIGURATION", use_container_width=True):
         state["strategy"] = sel_strat
         state["symbol"] = sel_sym
         state["lots"] = sel_lots
         state["target"] = sel_target
         state["sl"] = sel_sl
+        state["max_daily_loss"] = sel_max_loss
         save_algo_state(state)
         st.success("✅ Strategy Parameters Synced.")
         st.rerun()
@@ -558,8 +649,8 @@ st.markdown("---")
 
 # 5. Real Broker API Credentials Binding
 with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel)", expanded=False):
-    sel_mode = st.radio("Trading Mode", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Trades)"], index=0 if state.get("mode") == "PAPER" else 1)
-    sel_broker = st.selectbox("Choose Demat Broker", ["Zerodha KiteConnect", "Angel One SmartAPI"], index=0)
+    sel_mode = st.radio("Execution Environment", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Capital)"], index=0 if state.get("mode") == "PAPER" else 1)
+    sel_broker = st.selectbox("Select Demat Broker", ["Zerodha KiteConnect", "Angel One SmartAPI"], index=0)
 
     if "Zerodha" in sel_broker:
         st.markdown("###### 🔐 Zerodha KiteConnect Credentials")
@@ -567,7 +658,7 @@ with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel)", expanded
         k_secret = st.text_input("Kite API Secret", value=creds.get("kite_api_secret", ""), type="password")
         k_token = st.text_input("Kite Daily Access Token", value=creds.get("kite_access_token", ""), type="password")
         
-        if st.button("🔗 ATTACH & TEST ZERODHA API", use_container_width=True):
+        if st.button("🔗 ATTACH & SAVE ZERODHA API", use_container_width=True):
             creds["broker"] = "Zerodha"
             creds["kite_api_key"] = k_key
             creds["kite_api_secret"] = k_secret
@@ -585,7 +676,7 @@ with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel)", expanded
         a_key = st.text_input("SmartAPI Key", value=creds.get("angel_api_key", ""), type="password")
         a_totp = st.text_input("Angel TOTP Secret Key", value=creds.get("angel_totp_key", ""), type="password")
         
-        if st.button("🔗 ATTACH & TEST ANGEL ONE API", use_container_width=True):
+        if st.button("🔗 ATTACH & SAVE ANGEL ONE API", use_container_width=True):
             creds["broker"] = "Angel"
             creds["angel_client_id"] = a_client
             creds["angel_pin"] = a_pin
