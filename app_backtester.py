@@ -14,6 +14,9 @@ import re
 import time
 import requests
 import threading
+import math
+import sqlite3
+from scipy.stats import norm
 
 # ==============================================================================
 # 💎 SAM QUANTUM TERMINAL - INSTITUTIONAL QUANT ENGINE & PRO DEMAT SUITE
@@ -29,11 +32,63 @@ DB_FILE = "users_db.json"
 SIGNALS_LOG_FILE = "ai_signals_history.json"
 ACTIVE_TRADES_FILE = "active_trades.json"
 AUTOPILOT_STATE_FILE = "autopilot_state.json"
+SQLITE_DB_FILE = "terminal_audit.db"
+
+# ==============================================================================
+# 🏛️ SPECIFICATIONS & LOT SIZES (INDIAN INDICES & CRYPTO)
+# ==============================================================================
+INDEX_SPECS = {
+    "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100, "exchange": "NFO", "expiry_day": "Tuesday"},
+    "^NSEI": {"name": "NIFTY", "lot_size": 75, "strike_step": 50, "exchange": "NFO", "expiry_day": "Tuesday"},
+    "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50, "exchange": "NFO", "expiry_day": "Tuesday"},
+    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100, "exchange": "BFO", "expiry_day": "Thursday"},
+    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20, "exchange": "NFO", "expiry_day": "Monthly"},
+    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10, "exchange": "NFO", "expiry_day": "Monthly"},
+    "TCS.NS": {"name": "TCS", "lot_size": 175, "strike_step": 50, "exchange": "NFO", "expiry_day": "Monthly"},
+    "INFY.NS": {"name": "INFY", "lot_size": 400, "strike_step": 20, "exchange": "NFO", "expiry_day": "Monthly"},
+    "GC=F": {"name": "GOLDM", "lot_size": 1, "strike_step": 100, "exchange": "MCX", "expiry_day": "Monthly"},
+    "SI=F": {"name": "SILVERM", "lot_size": 5, "strike_step": 250, "exchange": "MCX", "expiry_day": "Monthly"},
+    "BTC-USD": {"name": "BTC/USDT", "lot_size": 1, "strike_step": 100, "exchange": "PERPETUAL", "expiry_day": "24/7"},
+    "ETH-USD": {"name": "ETH/USDT", "lot_size": 1, "strike_step": 10, "exchange": "PERPETUAL", "expiry_day": "24/7"},
+    "SOL-USD": {"name": "SOL/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "expiry_day": "24/7"},
+    "BNB-USD": {"name": "BNB/USDT", "lot_size": 1, "strike_step": 1, "exchange": "PERPETUAL", "expiry_day": "24/7"},
+    "XRP-USD": {"name": "XRP/USDT", "lot_size": 10, "strike_step": 0.01, "exchange": "PERPETUAL", "expiry_day": "24/7"},
+    "DOGE-USD": {"name": "DOGE/USDT", "lot_size": 100, "strike_step": 0.001, "exchange": "PERPETUAL", "expiry_day": "24/7"}
+}
 
 DEFAULT_USERS = {
     "admin": {"pass": "sam@2026", "name": "Sam (Founder)", "phone": "9999999999", "tier": "Master Admin", "created_at": "2026-08-20"},
     "vip_trader": {"pass": "quant100x", "name": "VIP Algo Trader", "phone": "9876543210", "tier": "Institutional Pro", "created_at": "2026-08-21"}
 }
+
+# ==============================================================================
+# 📦 DATABASE & STATE PERSISTENCE
+# ==============================================================================
+def init_sqlite_db():
+    with sqlite3.connect(SQLITE_DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS signal_tracker (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT,
+            market_type TEXT,
+            symbol TEXT,
+            instrument TEXT,
+            action TEXT,
+            entry_price REAL,
+            target_1 REAL,
+            target_2 REAL,
+            stop_loss REAL,
+            exit_price REAL,
+            pnl_points REAL,
+            pnl_cash REAL,
+            status TEXT,
+            edge_confidence INTEGER
+        )
+        """)
+        conn.commit()
+
+init_sqlite_db()
 
 def load_users():
     if not os.path.exists(DB_FILE):
@@ -88,12 +143,12 @@ def save_active_trades(trades):
 
 def load_autopilot_state():
     if not os.path.exists(AUTOPILOT_STATE_FILE):
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0, "strategy": "EMA_Pullback"}
     try:
         with open(AUTOPILOT_STATE_FILE, "r") as f:
             return json.load(f)
     except Exception:
-        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0}
+        return {"running": False, "asset": "^NSEBANK", "tf": "15m", "conf": 85, "target": 50.0, "sl": 20.0, "strategy": "EMA_Pullback"}
 
 def save_autopilot_state(state):
     with open(AUTOPILOT_STATE_FILE, "w") as f:
@@ -101,16 +156,10 @@ def save_autopilot_state(state):
 
 if 'users_db' not in st.session_state:
     st.session_state.users_db = load_users()
-
 if 'signals_history' not in st.session_state:
     st.session_state.signals_history = load_signals_log()
-
 if 'active_radar_trades' not in st.session_state:
     st.session_state.active_radar_trades = load_active_trades()
-
-if 'auto_pilot_running' not in st.session_state:
-    st.session_state.auto_pilot_running = False
-
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_info' not in st.session_state:
@@ -132,8 +181,44 @@ def send_telegram_alert(message):
         return False, str(e)
 
 # ==============================================================================
-# 🧮 GREEK OPTION CHAIN & REAL-TIME SPOT FETCH
+# 🧮 BLACK-SCHOLES GREEKS ENGINE & DYNAMIC DEMAT PRICING
 # ==============================================================================
+class BlackScholesEngine:
+    @staticmethod
+    def calculate_greeks(spot, strike, dte_days=2, iv=14.5, risk_free_rate=0.07, option_type="CE"):
+        T = max(dte_days / 365.0, 0.0001)
+        sigma = max(iv / 100.0, 0.01)
+        r = risk_free_rate
+        
+        d1 = (math.log(spot / strike) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+        d2 = d1 - sigma * math.sqrt(T)
+        
+        pdf_d1 = norm.pdf(d1)
+        cdf_d1 = norm.cdf(d1)
+        cdf_d2 = norm.cdf(d2)
+        cdf_neg_d1 = norm.cdf(-d1)
+        cdf_neg_d2 = norm.cdf(-d2)
+        
+        if option_type.upper() == "CE":
+            premium = spot * cdf_d1 - strike * math.exp(-r * T) * cdf_d2
+            delta = cdf_d1
+            theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * strike * math.exp(-r * T) * cdf_d2) / 365.0
+        else: # PE
+            premium = strike * math.exp(-r * T) * cdf_neg_d2 - spot * cdf_neg_d1
+            delta = cdf_d1 - 1.0
+            theta = (- (spot * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * strike * math.exp(-r * T) * cdf_neg_d2) / 365.0
+            
+        gamma = pdf_d1 / (spot * sigma * math.sqrt(T))
+        vega = (spot * math.sqrt(T) * pdf_d1) / 100.0
+        
+        return {
+            "premium": max(0.50, round(premium, 2)),
+            "delta": round(delta, 4),
+            "gamma": round(gamma, 6),
+            "theta": round(theta, 2),
+            "vega": round(vega, 2)
+        }
+
 def get_live_asset_price(symbol_key, default_price=57380.0):
     try:
         df_quick = yf.download(symbol_key, period="1d", interval="1m", progress=False)
@@ -144,46 +229,6 @@ def get_live_asset_price(symbol_key, default_price=57380.0):
     except Exception:
         pass
     return default_price
-
-def calculate_demat_premium(spot_price, strike_price, opt_type, asset_symbol):
-    diff = (strike_price - spot_price) if opt_type == "PE" else (spot_price - strike_price)
-    if asset_symbol == "^NSEBANK":
-        base_atm = 188.0
-        if diff >= 0:
-            return int(base_atm + (diff * 0.53))
-        else:
-            otm_dist = abs(diff)
-            if otm_dist <= 100:
-                return int(145.0 + (100 - otm_dist) * 0.43)
-            elif otm_dist <= 200:
-                return int(111.0 + (200 - otm_dist) * 0.34)
-            elif otm_dist <= 300:
-                return int(83.0 + (300 - otm_dist) * 0.28)
-            elif otm_dist <= 400:
-                return int(62.0 + (400 - otm_dist) * 0.21)
-            else:
-                return max(15, int(62.0 * np.exp(-(otm_dist - 400) / 400)))
-    elif asset_symbol == "^NSEI":
-        base_atm = 95.0
-        if diff >= 0:
-            return int(base_atm + (diff * 0.5))
-        else:
-            otm_dist = abs(diff)
-            if otm_dist <= 50:
-                return int(72.0 + (50 - otm_dist) * 0.46)
-            elif otm_dist <= 100:
-                return int(52.0 + (100 - otm_dist) * 0.40)
-            elif otm_dist <= 150:
-                return int(35.0 + (150 - otm_dist) * 0.34)
-            else:
-                return max(10, int(35.0 * np.exp(-(otm_dist - 150) / 150)))
-    elif asset_symbol in ["RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
-        base_atm = spot_price * 0.015
-        if diff >= 0:
-            return int(base_atm + (diff * 0.5))
-        else:
-            return max(5, int(base_atm * np.exp(diff / (spot_price * 0.05))))
-    return int(spot_price)
 
 def get_dynamic_expiry_and_tag(asset_symbol):
     ist = pytz.timezone('Asia/Kolkata')
@@ -240,7 +285,10 @@ def is_market_open(symbol_key):
 
     return False, "Market Closed"
 
-def calc_indicators(df, params):
+# ==============================================================================
+# 🛠️ STRATEGY PATTERN & INDICATORS ENGINE
+# ==============================================================================
+def calc_indicators(df):
     d = df.copy()
     c, h, l, o, v = d['Close'], d['High'], d['Low'], d['Open'], d['Volume']
 
@@ -294,10 +342,47 @@ def calc_indicators(df, params):
     d['VOL_SMA20'] = v.rolling(window=20).mean().fillna(v)
     return d
 
+class BaseStrategy:
+    def __init__(self, name, params=None):
+        self.name = name
+        self.params = params or {}
+    def evaluate(self, df):
+        raise NotImplementedError
+
+class EMAPullbackStrategy(BaseStrategy):
+    def __init__(self, params=None):
+        super().__init__("EMA_Pullback", params)
+    def evaluate(self, df):
+        c_bar = df.iloc[-1]
+        spot, ema20, ema50, rsi = float(c_bar['Close']), float(c_bar['EMA20']), float(c_bar['EMA50']), float(c_bar['RSI'])
+        vol, vol_sma = float(c_bar['Volume']), float(c_bar['VOL_SMA20'])
+        is_vol_ok = vol >= (vol_sma * 1.1) or vol_sma == 0
+        if ema20 > ema50 and spot >= ema20 and rsi > 52 and is_vol_ok:
+            return "BUY", min(96, int(82 + (rsi - 50) * 1.2))
+        elif ema20 < ema50 and spot <= ema20 and rsi < 48 and is_vol_ok:
+            return "SELL", min(96, int(82 + (50 - rsi) * 1.2))
+        return "NEUTRAL", 50
+
+class SuperTrendStrategy(BaseStrategy):
+    def __init__(self, params=None):
+        super().__init__("SuperTrend_Rider", params)
+    def evaluate(self, df):
+        c_bar, p_bar = df.iloc[-1], df.iloc[-2]
+        st_n, st_p, rsi = int(c_bar['ST_DIR']), int(p_bar['ST_DIR']), float(c_bar['RSI'])
+        if st_p == -1 and st_n == 1 and rsi > 50:
+            return "BUY", 92
+        elif st_p == 1 and st_n == -1 and rsi < 50:
+            return "SELL", 92
+        return "NEUTRAL", 50
+
 # ==============================================================================
-# 🤖 24/7 BACKGROUND WORKER (ACCURATE SHORT & LONG MILESTONE CALCULATION)
+# 🤖 24/7 INDEPENDENT BACKGROUND WORKER
 # ==============================================================================
 def background_scanner_loop():
+    strategies = {
+        "EMA_Pullback": EMAPullbackStrategy(),
+        "SuperTrend_Rider": SuperTrendStrategy()
+    }
     while True:
         try:
             state = load_autopilot_state()
@@ -307,6 +392,7 @@ def background_scanner_loop():
                 min_conf = state.get("conf", 80)
                 rd_target = state.get("target", 50.0)
                 rd_sl = state.get("sl", 20.0)
+                strat_name = state.get("strategy", "EMA_Pullback")
                 
                 open_flag, _ = is_market_open(asset)
                 if open_flag:
@@ -314,17 +400,9 @@ def background_scanner_loop():
                     if not df.empty and len(df) >= 15:
                         if isinstance(df.columns, pd.MultiIndex):
                             df.columns = df.columns.droplevel(1)
-                        df = calc_indicators(df, {})
+                        df = calc_indicators(df)
                         
-                        c_bar = df.iloc[-1]
-                        p_bar = df.iloc[-2]
-                        spot = float(c_bar['Close'])
-                        rsi_v = float(c_bar['RSI'])
-                        ema20_v = float(c_bar['EMA20'])
-                        ema50_v = float(c_bar['EMA50'])
-                        st_n = int(c_bar['ST_DIR'])
-                        st_p = int(p_bar['ST_DIR'])
-                        
+                        spot = float(df['Close'].iloc[-1])
                         now_ist = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%I:%M %p IST')
                         now_raw = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         log_id = f"{asset}_{int(time.time())}"
@@ -333,7 +411,6 @@ def background_scanner_loop():
                         current_active = load_active_trades()
                         completed = []
                         
-                        # 1. Update running trades with Accurate Short/Long Trailing Logic
                         for r_sym, r_trade in list(current_active.items()):
                             live_spot = spot
                             entry_p = r_trade['entry']
@@ -348,7 +425,6 @@ def background_scanner_loop():
                             is_crypto = asset.endswith("-USD")
                             is_mcx = asset in ["GC=F", "SI=F", "CL=F"]
 
-                            # Profit move calculation: In SHORT, profit = entry - current spot
                             if is_short and (is_crypto or is_mcx or "SHORT" in action):
                                 spot_move = entry_p - live_spot
                                 target_hit = live_spot <= tp_p
@@ -358,7 +434,6 @@ def background_scanner_loop():
                                 target_hit = (live_spot >= tp_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot <= tp_p)
                                 sl_hit = (live_spot <= sl_p) if ("BUY" in action or "LONG" in action or "CE" in action) else (live_spot >= sl_p)
 
-                            # Dynamic Milestone Update (Checks actual profit expansion)
                             if is_crypto:
                                 profit_pct = (spot_move / entry_p) * 100.0
                                 if profit_pct >= (last_milestone + 0.8) and not target_hit and not sl_hit:
@@ -432,68 +507,56 @@ def background_scanner_loop():
                                 del current_active[c_item]
                         save_active_trades(current_active)
 
-                        # 2. Check for New Setup Trigger
                         if asset not in current_active:
-                            sig = "NEUTRAL"
-                            conf = 50
-                            
-                            if ema20_v > ema50_v and spot > ema20_v and rsi_v > 52:
-                                sig = "BUY / CALL (CE) 🟢" if not asset.endswith("-USD") else "BUY / LONG 🟢"
-                                conf = min(96, 85 + int((rsi_v - 50) * 1.2))
-                            elif ema20_v < ema50_v and spot < ema20_v and rsi_v < 48:
-                                sig = "SELL / PUT (PE) 🔴" if not asset.endswith("-USD") else "SELL / SHORT 🔴"
-                                conf = min(96, 85 + int((50 - rsi_v) * 1.2))
-                            elif st_p == -1 and st_n == 1:
-                                sig = "BUY / CALL (CE) 🟢" if not asset.endswith("-USD") else "BUY / LONG 🟢"
-                                conf = 92
-                            elif st_p == 1 and st_n == -1:
-                                sig = "SELL / PUT (PE) 🔴" if not asset.endswith("-USD") else "SELL / SHORT 🔴"
-                                conf = 92
+                            engine = strategies.get(strat_name, EMAPullbackStrategy())
+                            sig_raw, conf = engine.evaluate(df)
 
-                            if sig != "NEUTRAL" and conf >= min_conf:
+                            if sig_raw != "NEUTRAL" and conf >= min_conf:
                                 exp_tag, market_cat = get_dynamic_expiry_and_tag(asset)
+                                specs = INDEX_SPECS.get(asset, {"name": asset, "strike_step": 100})
+                                strike_step = specs.get("strike_step", 100)
+                                strike_val = int(round(spot / float(strike_step)) * strike_step)
+                                
                                 if market_cat == "NSE":
-                                    strike_step = 100 if asset == "^NSEBANK" else (50 if asset == "^NSEI" else 20)
-                                    strike_val = int(round(spot / float(strike_step)) * strike_step)
-                                    opt_type = "CE" if "BUY" in sig else "PE"
-                                    inst_prefix = "BANKNIFTY" if asset == "^NSEBANK" else ("NIFTY" if asset == "^NSEI" else asset.replace(".NS", ""))
-                                    strk_name = f"{inst_prefix} {strike_val} {opt_type} ({exp_tag})"
-                                    base_prem = calculate_demat_premium(spot, strike_val, opt_type, asset)
+                                    opt_type = "CE" if sig_raw == "BUY" else "PE"
+                                    inst_name = f"{specs['name']} {strike_val} {opt_type} ({exp_tag})"
+                                    greeks = BlackScholesEngine.calculate_greeks(spot, strike_val, 2, 14.5, 0.07, opt_type)
+                                    base_prem = greeks["premium"]
                                     tp_prem = int(base_prem + (rd_target * 0.55))
                                     sl_prem = int(base_prem - (rd_sl * 0.55))
-                                    tp_spot = spot + rd_target if "BUY" in sig else spot - rd_target
-                                    sl_spot = spot - rd_sl if "BUY" in sig else spot + rd_sl
+                                    tp_spot = spot + rd_target if sig_raw == "BUY" else spot - rd_target
+                                    sl_spot = spot - rd_sl if sig_raw == "BUY" else spot + rd_sl
 
                                     tg_text = (
-                                        f"📊 <b>{strk_name}</b>\n\n"
-                                        f"📈 <b>BUY ABOVE {base_prem}</b>\n\n"
-                                        f"🎯 <b>TARGET {tp_prem} | {tp_prem + 30}</b>\n\n"
-                                        f"☠️ <b>SL - {sl_prem}</b>\n\n"
-                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
+                                        f"📊 <b>{inst_name}</b>\n\n"
+                                        f"📈 <b>BUY ABOVE ₹{base_prem}</b>\n\n"
+                                        f"🎯 <b>TARGET: ₹{tp_prem} | ₹{tp_prem + 30}</b>\n\n"
+                                        f"☠️ <b>SL: ₹{sl_prem}</b>\n\n"
+                                        f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified ({strat_name})</i>"
                                     )
                                 elif market_cat == "MCX":
-                                    strk_name = f"{asset} ({exp_tag})"
+                                    strk_name = f"{specs['name']} ({exp_tag})"
                                     base_prem = int(spot)
-                                    tp_spot = spot + rd_target if "BUY" in sig else spot - rd_target
-                                    sl_spot = spot - rd_sl if "BUY" in sig else spot + rd_sl
-                                    pos_label = "BUY ABOVE" if "BUY" in sig else "SELL BELOW"
+                                    tp_spot = spot + rd_target if sig_raw == "BUY" else spot - rd_target
+                                    sl_spot = spot - rd_sl if sig_raw == "BUY" else spot + rd_sl
+                                    pos_label = "BUY ABOVE" if sig_raw == "BUY" else "SELL BELOW"
                                     
                                     tg_text = (
                                         f"📊 <b>{strk_name}</b>\n\n"
                                         f"📈 <b>{pos_label} ₹{base_prem:,.0f}</b>\n\n"
-                                        f"🎯 <b>TARGET: ₹{tp_spot:,.0f} ({'+' if 'BUY' in sig else '-'}{rd_target:.0f} Pts)</b>\n\n"
+                                        f"🎯 <b>TARGET: ₹{tp_spot:,.0f} ({'+' if sig_raw == 'BUY' else '-'}{rd_target:.0f} Pts)</b>\n\n"
                                         f"☠️ <b>SL: ₹{sl_spot:,.0f}</b>\n\n"
                                         f"<i>⏱ Trigger: {now_ist} | 🧠 Edge: {conf}% Verified</i>"
                                     )
-                                else: # Crypto Perpetual
-                                    strk_name = f"{asset} (PERPETUAL SWAP)"
+                                else:
+                                    strk_name = f"{specs['name']} (PERPETUAL SWAP)"
                                     base_prem = spot
-                                    tp_spot = spot * (1 + (rd_target / 100.0)) if "BUY" in sig or "LONG" in sig else spot * (1 - (rd_target / 100.0))
-                                    sl_spot = spot * (1 - (rd_sl / 100.0)) if "BUY" in sig or "LONG" in sig else spot * (1 + (rd_sl / 100.0))
-                                    pos_type = "LONG 🟢" if "BUY" in sig or "LONG" in sig else "SHORT 🔴"
+                                    tp_spot = spot * (1 + (rd_target / 100.0)) if sig_raw == "BUY" else spot * (1 - (rd_target / 100.0))
+                                    sl_spot = spot * (1 - (rd_sl / 100.0)) if sig_raw == "BUY" else spot * (1 + (rd_sl / 100.0))
+                                    pos_type = "LONG 🟢" if sig_raw == "BUY" else "SHORT 🔴"
 
                                     tg_text = (
-                                        f"📊 <b>{asset} (PERPETUAL SWAP)</b>\n\n"
+                                        f"📊 <b>{strk_name}</b>\n\n"
                                         f"🚀 <b>POSITION: {pos_type}</b>\n\n"
                                         f"💵 <b>ENTRY: ${spot:,.2f}</b>\n\n"
                                         f"🎯 <b>TARGET: ${tp_spot:,.2f} ({'+' if 'LONG' in pos_type else '-'}{rd_target:.1f}%)</b>\n\n"
@@ -503,8 +566,8 @@ def background_scanner_loop():
 
                                 send_telegram_alert(tg_text)
                                 current_active[asset] = {
-                                    "asset_name": asset, "strike_info": strk_name,
-                                    "action": sig, "entry": spot, "target": tp_spot, "sl": sl_spot,
+                                    "asset_name": asset, "strike_info": strk_name if market_cat != "NSE" else inst_name,
+                                    "action": sig_raw, "entry": spot, "target": tp_spot, "sl": sl_spot,
                                     "premium_entry": base_prem, "last_milestone": 0,
                                     "status": "LIVE IN POSITION", "trailed": False, "time": now_ist,
                                     "sym": curr_sym, "log_id": log_id
@@ -513,7 +576,7 @@ def background_scanner_loop():
                                 logs = load_signals_log()
                                 logs.insert(0, {
                                     "id": log_id, "time": now_ist, "raw_time": now_raw,
-                                    "instrument": strk_name, "action": sig, "entry_spot": spot,
+                                    "instrument": strk_name if market_cat != "NSE" else inst_name, "action": sig_raw, "entry_spot": spot,
                                     "target": f"{curr_sym}{tp_spot:,.1f}", "sl": f"{curr_sym}{sl_spot:,.1f}",
                                     "confidence": f"{conf}%", "status": "LIVE IN POSITION",
                                     "exit_price": "-"
@@ -527,130 +590,6 @@ if 'bg_thread_started' not in st.session_state:
     st.session_state.bg_thread_started = True
     t = threading.Thread(target=background_scanner_loop, daemon=True)
     t.start()
-
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebarContent"] {
-        overscroll-behavior: none !important;
-        background: radial-gradient(circle at 50% 0%, #0d1527 0%, #050811 75%, #020408 100%) !important;
-        color: #f1f5f9;
-        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
-    }
-
-    .brand-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
-        border: 1px solid rgba(56, 189, 248, 0.25);
-        border-radius: 16px;
-        padding: 16px 24px;
-        margin-bottom: 18px;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.8);
-    }
-    
-    .glass-card {
-        background: rgba(13, 20, 36, 0.75);
-        border: 1px solid rgba(30, 41, 59, 0.8);
-        border-radius: 16px;
-        padding: 24px;
-        backdrop-filter: blur(12px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-    }
-
-    .pulse-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(16, 185, 129, 0.12);
-        color: #10b981;
-        border: 1px solid rgba(16, 185, 129, 0.4);
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    .admin-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(168, 85, 247, 0.15);
-        color: #c084fc;
-        border: 1px solid rgba(168, 85, 247, 0.4);
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    .ai-live-banner {
-        background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 78, 59, 0.4) 100%);
-        border: 2px solid #10b981;
-        border-radius: 14px;
-        padding: 14px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-        box-shadow: 0 0 25px rgba(16, 185, 129, 0.3);
-    }
-
-    .ai-off-banner {
-        background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%);
-        border: 2px solid #ef4444;
-        border-radius: 14px;
-        padding: 14px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-    }
-
-    div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(11, 17, 32, 0.9) 100%) !important;
-        border: 1px solid rgba(51, 65, 85, 0.7) !important;
-        border-radius: 14px !important;
-        padding: 14px 18px !important;
-    }
-
-    div[data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-weight: 800 !important;
-        color: #38bdf8 !important;
-    }
-
-    .stButton>button {
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 10px !important;
-        padding: 12px 24px !important;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: rgba(13, 20, 36, 0.85);
-        border-radius: 14px;
-        padding: 6px;
-        border: 1px solid rgba(30, 41, 59, 0.8);
-        gap: 6px;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
-        color: #38bdf8 !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 10px;
-        font-weight: 700;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # Query parameters handling
 query_params = st.query_params
@@ -669,13 +608,12 @@ if not st.session_state.authenticated:
     with col_l2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("""
-        <div class="glass-card" style="text-align: center;">
+        <div style="background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(30, 41, 59, 0.8); border-radius: 16px; padding: 24px; text-align: center;">
             <div style="font-size: 38px; margin-bottom: 4px;">⚡</div>
-            <h2 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px;">SAM QUANTUM AI</h2>
+            <h2 style="color: #38bdf8; margin: 0; font-weight: 800;">SAM QUANTUM AI</h2>
             <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 14px 0;">Institutional Quantitative Terminal & Automated Radar</p>
             <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 15px;">
-                <span class="pulse-badge">● LIVE QUANT FEED</span>
-                <span style="background: rgba(56, 189, 248, 0.1); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; font-family:'JetBrains Mono';">256-BIT SECURE</span>
+                <span style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">● LIVE QUANT FEED</span>
             </div>
             <hr style="border-color: rgba(30, 41, 59, 0.8); margin-top: 10px;">
         </div>
@@ -708,22 +646,19 @@ if not st.session_state.authenticated:
                 if st.form_submit_button("🎉 VERIFY IDENTITY & UNLOCK ACCESS"):
                     clean_phone = re.sub(r'[^0-9]', '', new_phone)
                     if len(new_name.strip()) < 3:
-                        st.error("❌ Full Name is mandatory (Min 3 characters).")
+                        st.error("❌ Full Name is mandatory.")
                     elif len(clean_phone) != 10:
                         st.error("❌ Valid 10-digit Indian Mobile number is mandatory.")
                     elif len(new_user.strip()) < 3:
                         st.error("❌ Unique User ID is mandatory.")
                     elif len(new_pass.strip()) < 4:
-                        st.error("❌ Access password must be at least 4 characters.")
+                        st.error("❌ Password must be at least 4 characters.")
                     elif new_user in st.session_state.users_db:
-                        st.error("❌ User ID already registered. Please choose another.")
+                        st.error("❌ User ID already registered.")
                     else:
                         st.session_state.users_db[new_user] = {
-                            "pass": new_pass,
-                            "name": new_name.strip(),
-                            "phone": clean_phone,
-                            "tier": "Free Member",
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                            "pass": new_pass, "name": new_name.strip(), "phone": clean_phone,
+                            "tier": "Free Member", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
                         }
                         save_users(st.session_state.users_db)
                         st.session_state.authenticated = True
@@ -733,7 +668,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==============================================================================
-# 🎛️ SIDEBAR & ASSET ALLOCATION (SAFE INITIALIZATION - NO ATTRIBUTE ERRORS)
+# 🎛️ SIDEBAR & RISK CONTROLS
 # ==============================================================================
 user_info_dict = st.session_state.get("user_info") or {}
 curr_tier = user_info_dict.get("tier", "Free Member")
@@ -741,32 +676,7 @@ curr_uid = user_info_dict.get("id", "")
 user_name = user_info_dict.get("name", "Authorized Operator")
 is_admin = curr_tier == "Master Admin" or curr_uid == "admin"
 
-FULL_ASSETS = {
-    "^NSEBANK": "Bank Nifty Index (^NSEBANK)",
-    "^NSEI": "Nifty 50 Index (^NSEI)",
-    "RELIANCE.NS": "Reliance Industries",
-    "HDFCBANK.NS": "HDFC Bank",
-    "TCS.NS": "Tata Consultancy Services",
-    "INFY.NS": "Infosys",
-    "GC=F": "MCX Gold Mini / Spot (GC=F)",
-    "SI=F": "MCX Silver Mini (SI=F)",
-    "BTC-USD": "Bitcoin (BTC/USD)",
-    "ETH-USD": "Ethereum (ETH/USD)",
-    "SOL-USD": "Solana (SOL/USD)",
-    "BNB-USD": "Binance Coin (BNB/USD)",
-    "XRP-USD": "Ripple (XRP/USD)",
-    "DOGE-USD": "Dogecoin (DOGE/USD)"
-}
-
-STRATEGY_OPTIONS = [
-    "1. EMA Institutional Pullback (20/50 Trend)",
-    "2. EMA Golden/Death Crossover (9/21)",
-    "3. SuperTrend Trend-Rider (10, 2.0)",
-    "4. Candlestick Pattern Engine (Hammer / Engulfing)",
-    "5. Volume Spike + Momentum Breakout",
-    "6. VWAP Intraday Retest & Expansion",
-    "7. Bollinger Band Dynamic Mean Reversion"
-]
+FULL_ASSETS = {k: v["name"] for k, v in INDEX_SPECS.items()}
 
 if curr_tier == "Free Member":
     allowed_asset_keys = ["^NSEBANK", "^NSEI", "BTC-USD"]
@@ -782,12 +692,10 @@ asset_dict = {k: FULL_ASSETS[k] for k in allowed_asset_keys}
 
 with st.sidebar:
     st.markdown(f"""
-    <div style="background:{'rgba(30, 27, 75, 0.8)' if is_admin else 'rgba(15, 23, 42, 0.8)'}; border:1px solid {'#818cf8' if is_admin else '#334155'}; border-radius:12px; padding:14px; margin-bottom:14px; backdrop-filter:blur(8px);">
-        <span style="color:#38bdf8; font-weight:800; font-size:14px; font-family:'JetBrains Mono';">⚡ SAM QUANTUM OS</span><br>
+    <div style="background:{'rgba(30, 27, 75, 0.8)' if is_admin else 'rgba(15, 23, 42, 0.8)'}; border:1px solid {'#818cf8' if is_admin else '#334155'}; border-radius:12px; padding:14px; margin-bottom:14px;">
+        <span style="color:#38bdf8; font-weight:800; font-size:14px;">⚡ SAM QUANTUM OS</span><br>
         <span style="color:#f8fafc; font-size:12px;">Operator: <b>{user_name}</b></span><br>
-        <span class="{'admin-badge' if is_admin else 'pulse-badge'}" style="margin-top:6px;">
-            {'👑 MASTER FOUNDER' if is_admin else f'● {curr_tier.upper()}'}
-        </span>
+        <span style="color: #10b981; font-size: 11px; font-weight: 700;">● {curr_tier.upper()}</span>
     </div>
     """, unsafe_allow_html=True)
     
@@ -802,23 +710,23 @@ with st.sidebar:
     st.markdown("### 📊 1. Asset & Resolution")
     symbol = st.selectbox("Market Feed", options=list(asset_dict.keys()), format_func=lambda x: asset_dict[x])
     timeframe = st.selectbox("Resolution Stream", allowed_tf, index=0)
-    
-    max_days = 7 if timeframe in ["1m", "2m"] else 60
-    default_days = 5 if timeframe in ["1m", "2m"] else 30
-    lookback_days = st.slider("Lookback Memory (Days)", 1, max_days, default_days)
+    lookback_days = st.slider("Lookback Memory (Days)", 1, 60, 30)
 
     st.markdown("---")
     st.markdown("### 🛠️ 2. Strategy Engine")
-    strategy_type = st.selectbox("Quantitative Archetype", STRATEGY_OPTIONS)
-    rsi_filter = st.checkbox("Require RSI 50-Level Momentum Filter", value=True)
-
+    strategy_type = st.selectbox("Quantitative Archetype", ["1. EMA Institutional Pullback (20/50)", "2. SuperTrend Trend-Rider (10, 2.0)"])
+    
     st.markdown("---")
     st.markdown("### 🛡️ 3. Risk & Capital")
     capital = st.number_input("Capital Pool (₹)", value=100000.0, step=10000.0)
-    qty = st.number_input("Lot / Contract Quantity", value=150, step=15)
-    delta = st.slider("Option Delta / Leverage Factor", 0.1, 1.0, 0.5, 0.05)
+    
+    # Dynamic Lot Size Assignment
+    lot_size_val = INDEX_SPECS.get(symbol, {}).get("lot_size", 1)
+    num_lots = st.number_input(f"Number of Lots (Lot Size: {lot_size_val})", value=2, step=1)
+    total_qty = num_lots * lot_size_val
+    st.caption(f"Total Contract Quantity: `{total_qty}` Units")
 
-    is_idx = symbol in ["^NSEBANK", "^NSEI"]
+    is_idx = symbol in ["^NSEBANK", "^NSEI", "^BSESN"]
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         target_val = st.number_input("Target (" + ("Pts" if is_idx else "%") + ")", value=50.0 if is_idx else 2.5, step=5.0 if is_idx else 0.5)
@@ -828,54 +736,24 @@ with st.sidebar:
 # ==============================================================================
 # 🚀 MAIN DASHBOARD & TABS
 # ==============================================================================
-st.markdown(f"""
-<div class="brand-header">
-    <div>
-        <h3 style="color: #38bdf8; margin: 0; font-weight: 800; letter-spacing: -0.5px; font-family: 'JetBrains Mono';">⚡ SAM QUANTUM STUDIO</h3>
-        <span style="color: #94a3b8; font-size: 12px;">Institutional Quantitative Studio, Demat Live Charting & Autonomous 24/7 Engine</span>
-    </div>
-    <div style="text-align: right;">
-        <span class="{'admin-badge' if is_admin else 'pulse-badge'}">
-            {'👑 MASTER FOUNDER ACCESS' if is_admin else f'● {curr_tier.upper()}'}
-        </span><br>
-        <span style="color: #64748b; font-size: 11px; font-family:'JetBrains Mono';">LATENCY: 12ms | SECURE FEED</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# Dynamic Live Spot Sync on Top Header
 header_spot = get_live_asset_price(symbol, 57380.0 if symbol == "^NSEBANK" else (24250.0 if symbol == "^NSEI" else 1380.0))
 header_curr = "$" if symbol.endswith("-USD") else "₹"
 
 col_run1, col_run2 = st.columns([3, 1])
 with col_run1:
-    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Strategy: **{strategy_type.split('.')[1].strip()}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
+    st.write(f"💼 **Active Target:** `{asset_dict[symbol]}` | Live Spot: **{header_curr}{header_spot:,.2f}** | Risk Profile: **Risk {sl_val}{' Pts' if is_idx else '%'} to Gain {target_val}{' Pts' if is_idx else '%'}**")
 with col_run2:
     execute_btn = st.button("⚡ EXECUTE STRATEGY BACKTEST", type="primary")
 
-# Full Tab Matrix with Backtesting and KPIs Restored
 if is_admin:
     tab_tv_chart, tab_backtest, tab_metrics, tab_trades, tab_reports, tab_ai_pilot, tab_manual_terminal, tab_ai_logbook, tab_admin_access = st.tabs([
-        "📊 Live Demat Chart Studio",
-        "📈 Pro Touch Backtest Chart", 
-        "📊 Scorecard & KPIs", 
-        "📜 Trade Logs", 
-        "📥 Download Reports", 
-        "🤖 AI 24/7 Autopilot Hub",
-        "✍️ Pro Manual Option Chain Terminal",
-        "📑 Daily AI Signal Logbook",
-        "👑 Access & Revoke Console"
+        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs",
+        "📥 Download Reports", "🤖 AI 24/7 Autopilot Hub", "✍️ Pro Manual Option Chain", "📑 Signal Logbook", "👑 Admin Console"
     ])
 else:
     tab_tv_chart, tab_backtest, tab_metrics, tab_trades, tab_reports, tab_ai_pilot, tab_manual_terminal, tab_ai_logbook = st.tabs([
-        "📊 Live Demat Chart Studio",
-        "📈 Pro Touch Backtest Chart", 
-        "📊 Scorecard & KPIs", 
-        "📜 Trade Logs", 
-        "📥 Download Reports", 
-        "🤖 AI 24/7 Autopilot Hub",
-        "✍️ Pro Manual Option Chain Terminal",
-        "📑 Daily AI Signal Logbook"
+        "📊 Live Demat Chart Studio", "📈 Pro Backtest Chart", "📊 Scorecard & KPIs", "📜 Trade Logs",
+        "📥 Download Reports", "🤖 AI 24/7 Autopilot Hub", "✍️ Pro Manual Option Chain", "📑 Signal Logbook"
     ])
 
 # ==============================================================================
@@ -883,7 +761,7 @@ else:
 # ==============================================================================
 with tab_tv_chart:
     st.markdown("#### 📊 Live Demat Interactive Chart Studio")
-    st.caption("Switch between Groww-style Mountain Glow and Pro Candlestick. Support & Resistance price levels stick permanently during zoom/pan.")
+    st.caption("Switch between Mountain Glow Area and Candlestick. Price lines stick permanently during zoom/pan.")
 
     col_dc1, col_dc2, col_dc3 = st.columns([1.5, 1, 1])
     with col_dc1:
@@ -895,24 +773,23 @@ with tab_tv_chart:
         curr_label = "$" if is_usd else "₹"
         is_live_open, gate_desc = is_market_open(live_chart_asset)
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"<span class='{'pulse-badge' if is_live_open else 'admin-badge'}'>● {gate_desc.upper()}</span>", unsafe_allow_html=True)
+        st.markdown(f"**Status:** `{gate_desc.upper()}`")
 
     try:
         period_str = "1d" if live_chart_tf in ["1m", "5m"] else "5d" if live_chart_tf in ["15m", "30m"] else "30d"
         df_demat = yf.download(live_chart_asset, period=period_str, interval=live_chart_tf, progress=False)
         
         if df_demat.empty or len(df_demat) < 5:
-            st.warning("⚠️ Live market feed connecting. Please select 5m or 15m resolution.")
+            st.warning("⚠️ Connecting live market feed...")
         else:
             if isinstance(df_demat.columns, pd.MultiIndex):
                 df_demat.columns = df_demat.columns.droplevel(1)
             df_demat.dropna(inplace=True)
-            df_demat = calc_indicators(df_demat, {})
+            df_demat = calc_indicators(df_demat)
 
             ist_time_demat = df_demat.index.tz_convert('Asia/Kolkata') if df_demat.index.tz is not None else df_demat.index + pd.Timedelta(hours=5, minutes=30)
             
-            candle_list = []
-            area_list = []
+            candle_list, area_list = [], []
             for i in range(len(df_demat)):
                 row = df_demat.iloc[i]
                 t_sec = int(ist_time_demat[i].timestamp())
@@ -940,133 +817,55 @@ with tab_tv_chart:
             <meta charset="UTF-8">
             <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
             <style>
-                body {{
-                    margin: 0; padding: 0; background: #050811;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    color: #f1f5f9; overflow: hidden;
-                }}
-                #metrics_grid {{
-                    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px;
-                }}
-                .metric-card {{
-                    background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(11, 17, 32, 0.95) 100%);
-                    border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 12px; padding: 10px 14px;
-                }}
-                .metric-label {{ font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }}
-                .metric-val {{ font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; color: #38bdf8; }}
-                #main_wrapper {{
-                    display: flex; width: 100%; height: 560px; position: relative;
-                    border: 1px solid #1e293b; border-radius: 12px; overflow: hidden;
-                }}
-                #left_toolbar {{
-                    width: 46px; background: #0d1527; border-right: 1px solid #1e293b;
-                    display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 8px; z-index: 100;
-                }}
-                .tool-btn {{
-                    width: 34px; height: 34px; border-radius: 8px; border: 1px solid transparent;
-                    background: transparent; color: #94a3b8; display: flex; align-items: center; justify-content: center;
-                    cursor: pointer; transition: all 0.2s;
-                }}
+                body {{ margin: 0; padding: 0; background: #050811; font-family: sans-serif; color: #f1f5f9; overflow: hidden; }}
+                #metrics_grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 8px; }}
+                .metric-card {{ background: #0d1527; border: 1px solid #1e293b; border-radius: 10px; padding: 8px 12px; }}
+                .metric-label {{ font-size: 11px; color: #94a3b8; text-transform: uppercase; }}
+                .metric-val {{ font-family: monospace; font-size: 18px; font-weight: bold; color: #38bdf8; }}
+                #main_wrapper {{ display: flex; width: 100%; height: 540px; border: 1px solid #1e293b; border-radius: 10px; }}
+                #left_toolbar {{ width: 44px; background: #0d1527; border-right: 1px solid #1e293b; display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 6px; }}
+                .tool-btn {{ width: 32px; height: 32px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #94a3b8; display: flex; align-items: center; justify-content: center; cursor: pointer; }}
                 .tool-btn:hover {{ background: #1e293b; color: #38bdf8; }}
-                .tool-btn.active {{ background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #38bdf8; }}
+                .tool-btn.active {{ background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; color: #38bdf8; }}
                 #chart_container {{ flex: 1; height: 100%; position: relative; }}
-                #legend_box {{
-                    position: absolute; top: 10px; left: 56px; z-index: 60; color: #94a3b8; font-size: 11.5px;
-                    font-family: 'JetBrains Mono', monospace; background: rgba(13, 21, 39, 0.85); padding: 4px 10px;
-                    border-radius: 6px; border: 1px solid #1e293b; pointer-events: none;
-                }}
+                #legend_box {{ position: absolute; top: 8px; left: 52px; z-index: 60; color: #94a3b8; font-size: 11px; font-family: monospace; background: rgba(13, 21, 39, 0.85); padding: 4px 8px; border-radius: 4px; border: 1px solid #1e293b; }}
             </style>
             </head>
             <body>
-            
             <div id="metrics_grid">
-                <div class="metric-card">
-                    <div class="metric-label">Live Market Spot</div>
-                    <div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Session High</div>
-                    <div class="metric-val" id="card_high">{curr_label}{init_high:,.2f}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Session Low</div>
-                    <div class="metric-val" id="card_low">{curr_label}{init_low:,.2f}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">RSI Momentum (14)</div>
-                    <div class="metric-val" style="color: {'#10b981' if init_rsi > 50 else '#ef4444'};">{init_rsi:.1f}</div>
-                </div>
+                <div class="metric-card"><div class="metric-label">Live Spot</div><div class="metric-val" id="card_spot">{curr_label}{init_spot:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Session High</div><div class="metric-val">{curr_label}{init_high:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">Session Low</div><div class="metric-val">{curr_label}{init_low:,.2f}</div></div>
+                <div class="metric-card"><div class="metric-label">RSI (14)</div><div class="metric-val" style="color: {'#10b981' if init_rsi > 50 else '#ef4444'};">{init_rsi:.1f}</div></div>
             </div>
-
             <div id="main_wrapper">
                 <div id="left_toolbar">
-                    <button class="tool-btn active" id="btn_cursor" title="4-Way Navigation / Pan Mode">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_switch_view" title="Toggle Mountain Glow / Candlestick">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 16l4-4 4 4 6-6"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_horiz" title="Straight Horizontal S/R Line (Price Bound)">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_del_last" title="Delete Last Line">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 6L5 20M5 6l14 14"/></svg>
-                    </button>
-                    <button class="tool-btn" id="btn_clear" title="Clear All Lines">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                    <button class="tool-btn active" id="btn_cursor" title="Pan Mode">🔍</button>
+                    <button class="tool-btn" id="btn_switch_view" title="Toggle View">📈</button>
+                    <button class="tool-btn" id="btn_horiz" title="Draw S/R Level">➖</button>
+                    <button class="tool-btn" id="btn_del_last" title="Delete Last Line">↩️</button>
+                    <button class="tool-btn" id="btn_clear" title="Clear All Lines">🗑️</button>
                 </div>
-
-                <div id="legend_box">
-                    <span style="color:#38bdf8;font-weight:700;">{asset_dict[live_chart_asset]}</span> | <span id="leg_time">-</span> | Spot: <span id="leg_c">-</span>
-                </div>
-
+                <div id="legend_box"><span style="color:#38bdf8;font-weight:bold;">{asset_dict[live_chart_asset]}</span> | <span id="leg_time">-</span> | Price: <span id="leg_c">-</span></div>
                 <div id="chart_container"></div>
             </div>
-
             <script>
                 const container = document.getElementById('chart_container');
-
                 const chart = LightweightCharts.createChart(container, {{
-                    width: container.clientWidth,
-                    height: 560,
-                    layout: {{
-                        background: {{ color: '#050811' }},
-                        textColor: '#94a3b8',
-                        fontFamily: 'Plus Jakarta Sans',
-                    }},
-                    grid: {{
-                        vertLines: {{ color: 'rgba(30, 41, 59, 0.4)' }},
-                        horzLines: {{ color: 'rgba(30, 41, 59, 0.4)' }},
-                    }},
+                    width: container.clientWidth, height: 540,
+                    layout: {{ background: {{ color: '#050811' }}, textColor: '#94a3b8' }},
+                    grid: {{ vertLines: {{ color: 'rgba(30, 41, 59, 0.4)' }}, horzLines: {{ color: 'rgba(30, 41, 59, 0.4)' }} }},
                     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
                     rightPriceScale: {{ borderColor: '#1e293b' }},
                     timeScale: {{ borderColor: '#1e293b', timeVisible: true, secondsVisible: false }},
-                    localization: {{
-                        timeFormatter: businessDayOrTimestamp => {{
-                            const date = new Date(businessDayOrTimestamp * 1000);
-                            return date.toLocaleTimeString('en-IN', {{ timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }});
-                        }},
-                    }},
+                    localization: {{ timeFormatter: t => new Date(t * 1000).toLocaleTimeString('en-IN', {{ timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }}) }}
                 }});
 
-                const areaSeries = chart.addAreaSeries({{
-                    topColor: 'rgba(56, 189, 248, 0.4)',
-                    bottomColor: 'rgba(56, 189, 248, 0.0)',
-                    lineColor: '#38bdf8',
-                    lineWidth: 2.5,
-                }});
-
-                const candleSeries = chart.addCandlestickSeries({{
-                    upColor: '#10b981', downColor: '#ef4444',
-                    borderUpColor: '#10b981', borderDownColor: '#ef4444',
-                    wickUpColor: '#10b981', wickDownColor: '#ef4444',
-                    visible: false,
-                }});
+                const areaSeries = chart.addAreaSeries({{ topColor: 'rgba(56, 189, 248, 0.4)', bottomColor: 'rgba(56, 189, 248, 0.0)', lineColor: '#38bdf8', lineWidth: 2.5 }});
+                const candleSeries = chart.addCandlestickSeries({{ upColor: '#10b981', downColor: '#ef4444', borderUpColor: '#10b981', borderDownColor: '#ef4444', wickUpColor: '#10b981', wickDownColor: '#ef4444', visible: false }});
 
                 const rawCandles = {candles_json};
                 const rawArea = {area_json};
-
                 areaSeries.setData(rawArea);
                 candleSeries.setData(rawCandles);
                 chart.timeScale().fitContent();
@@ -1083,9 +882,7 @@ with tab_tv_chart:
                         const d = new Date(param.time * 1000);
                         document.getElementById('leg_time').innerText = d.toLocaleTimeString('en-IN', {{timeZone: 'Asia/Kolkata', hour12: true}});
                         const data = isCandleView ? param.seriesData.get(candleSeries) : param.seriesData.get(areaSeries);
-                        if (data) {{
-                            document.getElementById('leg_c').innerText = (data.close || data.value).toFixed(2);
-                        }}
+                        if (data) document.getElementById('leg_c').innerText = (data.close || data.value).toFixed(2);
                     }}
                 }});
 
@@ -1122,12 +919,7 @@ with tab_tv_chart:
                         const price = activeS.coordinateToPrice(param.point.y);
                         if (price) {{
                             const pl = activeS.createPriceLine({{
-                                price: price,
-                                color: '#38bdf8',
-                                lineWidth: 2,
-                                lineStyle: LightweightCharts.LineStyle.Solid,
-                                axisLabelVisible: true,
-                                title: 'S/R ' + price.toFixed(1),
+                                price: price, color: '#38bdf8', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: 'S/R ' + price.toFixed(1)
                             }});
                             priceLines.push(pl);
                         }}
@@ -1142,8 +934,7 @@ with tab_tv_chart:
                     const lastT = rawCandles[rawCandles.length - 1].time;
                     areaSeries.update({{ time: lastT, value: lastClose }});
                     candleSeries.update({{
-                        time: lastT,
-                        open: rawCandles[rawCandles.length - 1].open,
+                        time: lastT, open: rawCandles[rawCandles.length - 1].open,
                         high: Math.max(rawCandles[rawCandles.length - 1].high, lastClose),
                         low: Math.min(rawCandles[rawCandles.length - 1].low, lastClose),
                         close: lastClose,
@@ -1154,13 +945,13 @@ with tab_tv_chart:
             </body>
             </html>
             """
-            components.html(demat_studio_html, height=690)
+            components.html(demat_studio_html, height=660)
 
     except Exception as e:
         st.error(f"Error initializing chart: {str(e)}")
 
 # ==============================================================================
-# 📊 BACKTEST EXECUTION ENGINE & TABS 2-5 (FULL RESTORATION)
+# 📊 BACKTEST ENGINE EXECUTION
 # ==============================================================================
 terminal_manual_text = """=====================================================
          SAM QUANTUM OS - OFFICIAL SYSTEM MANUAL
@@ -1171,28 +962,20 @@ terminal_manual_text = """=====================================================
 - Timeframes: Multi-resolution candle streams (1m, 5m, 15m, 1D).
 
 2. STRATEGY ENGINE
-- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend, VWAP.
+- Quant Archetype: Institutional EMA Pullback (20/50 Trend), SuperTrend.
 - Momentum Filter: RSI Overbought/Oversold boundaries (14 Period).
 
-3. OPTION CHAIN & DEMAT MATRIX
-- 3-Column Demat Option Chain: Real Greek Option Delta & OTM/ATM decay matching Groww/Zerodha/Dhan.
+3. BLACK-SCHOLES OPTION CHAIN
+- 3-Column Demat Option Chain: Real Greeks (Delta, Theta, Gamma, Vega).
 - Auto Expiry Rollover: Automatic rollover to next cycle at market close.
 
 4. 24/7 AUTOPILOT ENGINE
 - Continuous Non-Blocking Daemon: Runs autonomously even when the browser or local machine sleeps.
-- Telegram Signal Engine: Direct instant dispatch with zero UI thread block.
 =====================================================
 """
 
 with tab_reports:
     st.markdown("### 📥 Instant Mobile Audit Reports & Master Handbook")
-    st.markdown("#### 📘 SAM QUANTUM OS - Official System Handbook")
-    st.markdown("""
-    > **Terminal Architecture & System Overview:**
-    * **Engine 1 - Live Demat Chart Studio:** Real-time spot price mapping, dynamic RSI momentum filters, and EMA institutional pullback detection.
-    * **Engine 2 - Autopilot Hub & Signal Logbook:** Real-time automated trigger validation and multi-asset position sizing.
-    * **Engine 3 - Multi-Tier Gatekeeper:** Dynamic permission control (`Free Member`, `VIP Algo Trader`, `Institutional Pro`, `Master Admin`).
-    """)
     st.download_button(
         label="📥 DOWNLOAD FULL TERMINAL USER MANUAL (.TXT)",
         data=terminal_manual_text,
@@ -1206,13 +989,11 @@ if execute_btn or 'backtest_executed' in st.session_state:
     with st.spinner("⏳ Running institutional strategy backtest..."):
         try:
             df_raw = yf.download(symbol, period=f"{lookback_days}d", interval=timeframe, progress=False)
-            if df_raw.empty or len(df_raw) < 10:
-                st.warning("⚠️ No historical data returned. Please select a higher timeframe or lookback.")
-            else:
+            if not df_raw.empty and len(df_raw) >= 10:
                 if isinstance(df_raw.columns, pd.MultiIndex):
                     df_raw.columns = df_raw.columns.droplevel(1)
                 df_raw.dropna(inplace=True)
-                df_bt = calc_indicators(df_raw, {})
+                df_bt = calc_indicators(df_raw)
 
                 ist_time_bt = df_bt.index.tz_convert('Asia/Kolkata') if df_bt.index.tz is not None else df_bt.index + pd.Timedelta(hours=5, minutes=30)
                 df_bt['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time_bt]
@@ -1233,12 +1014,12 @@ if execute_btn or 'backtest_executed' in st.session_state:
                         opt_move = move if is_idx else ((move / position['entry']) * 100)
 
                         if opt_move >= target_val:
-                            pnl = (target_val * qty * delta) if is_idx else ((target_val / 100) * capital)
+                            pnl = (target_val * total_qty * 0.5) if is_idx else ((target_val / 100) * capital)
                             trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'TARGET HIT 🎯', 'Points': target_val, 'PnL': pnl})
                             position = None
                             last_bar = i
                         elif opt_move <= -sl_val:
-                            pnl = (-sl_val * qty * delta) if is_idx else ((-sl_val / 100) * capital)
+                            pnl = (-sl_val * total_qty * 0.5) if is_idx else ((-sl_val / 100) * capital)
                             trades.append({'Entry Time': position['time'], 'Exit Time': time_lbl, 'Type': position['type'], 'Entry Price': position['entry'], 'Exit Price': curr_spot, 'Result': 'SL HIT 🛑', 'Points': -sl_val, 'PnL': pnl})
                             position = None
                             last_bar = i
@@ -1257,9 +1038,7 @@ if execute_btn or 'backtest_executed' in st.session_state:
                     fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['EMA20'], line=dict(color='#38bdf8', width=1.5), name='EMA 20'), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['EMA50'], line=dict(color='#f59e0b', width=1.5), name='EMA 50'), row=1, col=1)
                     fig.add_trace(go.Scatter(x=df_bt['Time_Str'], y=df_bt['RSI'], line=dict(color='#c084fc', width=1.5), name='RSI (14)'), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="rgba(239, 68, 68, 0.4)", row=2, col=1)
-                    fig.add_hline(y=30, line_dash="dash", line_color="rgba(16, 185, 129, 0.4)", row=2, col=1)
-                    fig.update_layout(template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811', height=620, xaxis_rangeslider_visible=False, dragmode='pan', margin=dict(l=5, r=5, t=10, b=5))
+                    fig.update_layout(template="plotly_dark", paper_bgcolor='#050811', plot_bgcolor='#050811', height=580, xaxis_rangeslider_visible=False, dragmode='pan', margin=dict(l=5, r=5, t=10, b=5))
                     st.plotly_chart(fig, use_container_width=True)
 
                 with tab_metrics:
@@ -1279,20 +1058,13 @@ if execute_btn or 'backtest_executed' in st.session_state:
 
                         fig_equity = go.Figure()
                         fig_equity.add_trace(go.Scatter(x=tdf['Exit Time'], y=tdf['Cum_PnL'], mode='lines+markers', line=dict(color='#10b981', width=2.5), fill='tozeroy', fillcolor='rgba(16, 185, 129, 0.05)', name='Equity'))
-                        fig_equity.update_layout(title="📈 Cumulative Equity Trajectory (₹)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=340)
+                        fig_equity.update_layout(title="📈 Cumulative Equity Trajectory (₹)", template="plotly_dark", paper_bgcolor='#0d1424', plot_bgcolor='#0d1424', height=320)
                         st.plotly_chart(fig_equity, use_container_width=True)
 
                 with tab_trades:
                     if trades:
                         st.markdown("#### 📜 Trade Execution Audit Trail")
-                        st.dataframe(pd.DataFrame(trades), use_container_width=True, height=450)
-
-                with tab_reports:
-                    st.markdown("### 📥 Instant Mobile Audit Reports")
-                    if trades:
-                        csv_buf = io.StringIO()
-                        pd.DataFrame(trades).to_csv(csv_buf, index=False)
-                        st.download_button("📥 DOWNLOAD CSV AUDIT", data=csv_buf.getvalue(), file_name=f"sam_quantum_{symbol}.csv", mime="text/csv")
+                        st.dataframe(pd.DataFrame(trades), use_container_width=True, height=400)
         except Exception as e:
             st.error(f"Backtest error: {str(e)}")
 else:
@@ -1300,36 +1072,20 @@ else:
         st.info("💡 Select your Strategy & Parameters in sidebar, then click '⚡ EXECUTE STRATEGY BACKTEST' above.")
 
 # ==============================================================================
-# 🤖 TAB 6: AI 24/7 AUTONOMOUS PILOT HUB
+# 🤖 TAB 6: AI 24/7 AUTOPILOT HUB
 # ==============================================================================
 with tab_ai_pilot:
     st.markdown("### 🤖 24/7 Autonomous AI Opportunity Radar")
-    st.caption("AI continuously audits multi-confluences in the background. Even if your browser sleeps or WiFi disconnects, AI executes signals seamlessly.")
+    st.caption("AI continuously audits multi-confluences in background thread with zero UI thread block.")
 
     auto_state = load_autopilot_state()
 
     col_ap1, col_ap2 = st.columns([1.8, 1])
     with col_ap1:
         if auto_state.get("running", False):
-            st.markdown(f"""
-            <div class="ai-live-banner">
-                <div>
-                    <span style="color:#10b981; font-weight:800; font-size:16px; font-family:'JetBrains Mono';">🟢 AI AUTOPILOT ENGINE IS LIVE & RUNNING</span><br>
-                    <span style="color:#cbd5e1; font-size:12px;">Active Market: <b>{asset_dict.get(auto_state.get('asset', '^NSEBANK'), auto_state.get('asset', ''))}</b> | Min Edge: <b>{auto_state.get('conf', 80)}%</b></span>
-                </div>
-                <span class="pulse-badge">● 24/7 BACKGROUND WORKER</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"🟢 **AI AUTOPILOT IS ACTIVE** | Target: `{asset_dict.get(auto_state.get('asset', '^NSEBANK'), '')}` | Edge: `{auto_state.get('conf', 80)}%`")
         else:
-            st.markdown("""
-            <div class="ai-off-banner">
-                <div>
-                    <span style="color:#ef4444; font-weight:800; font-size:16px; font-family:'JetBrains Mono';">🔴 AI AUTOPILOT ENGINE IS OFF (STANDBY)</span><br>
-                    <span style="color:#94a3b8; font-size:12px;">Toggle switch on the right to start continuous 24/7 background execution.</span>
-                </div>
-                <span style="color:#ef4444; font-weight:700; font-size:12px;">PAUSED</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.warning("🔴 **AI AUTOPILOT ENGINE IS OFF (STANDBY)**")
 
     with col_ap2:
         pilot_switch = st.toggle("⚡ ACTIVATE 24/7 AUTOPILOT", value=auto_state.get("running", False), key="pilot_worker_toggle")
@@ -1346,7 +1102,7 @@ with tab_ai_pilot:
     with col_p3:
         min_conf = st.slider("Minimum AI Edge Confidence %", 70, 95, auto_state.get("conf", 80), key="pilot_conf_slider")
 
-    is_idx_p = target_asset in ["^NSEBANK", "^NSEI"]
+    is_idx_p = target_asset in ["^NSEBANK", "^NSEI", "^BSESN"]
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         tp_val = st.number_input("Target (" + ("Pts" if is_idx_p else "%") + ")", value=float(auto_state.get("target", 50.0)), step=5.0 if is_idx_p else 0.5)
@@ -1363,7 +1119,7 @@ with tab_ai_pilot:
         st.success("✅ Autopilot parameters saved to 24/7 background worker.")
 
     st.markdown("---")
-    st.markdown("#### 🌐 Active Open Positions (Live Accountability Monitor)")
+    st.markdown("#### 🌐 Active Open Positions")
     active_now = load_active_trades()
     if active_now:
         act_df = pd.DataFrame(list(active_now.values()))
@@ -1372,14 +1128,14 @@ with tab_ai_pilot:
             save_active_trades({})
             st.rerun()
     else:
-        st.info("No active open positions currently running. As soon as AI triggers setups, they will track here in real-time.")
+        st.info("No active open positions currently running.")
 
 # ==============================================================================
-# ✍️ TAB 7: PRO MANUAL OPTION CHAIN TERMINAL (INDIVIDUAL SPOT ISOLATION)
+# ✍️ TAB 7: PRO MANUAL OPTION CHAIN TERMINAL (BLACK-SCHOLES GREEKS)
 # ==============================================================================
 with tab_manual_terminal:
     st.markdown("### ✍️ Pro Manual Option Chain Terminal")
-    st.caption("Clean 3-column Option Chain format (Calls CE | Strike | Puts PE) with real Demat premiums matching Groww / Zerodha / Dhan.")
+    st.caption("3-column Option Chain with real-time Black-Scholes Greeks and theoretical Delta/Theta pricing.")
 
     col_man1, col_man2 = st.columns([1.5, 1])
     with col_man1:
@@ -1390,21 +1146,24 @@ with tab_manual_terminal:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(f"###### 📊 Live Selected Spot: `{curr_sym}{curr_ref_spot:,.2f}`")
 
-    # 1. Indian Markets (True 3-Column Demat Option Chain with Accurate Steps)
+    specs = INDEX_SPECS.get(man_asset, {"name": man_asset, "strike_step": 100})
+    step = specs.get("strike_step", 100)
+
     if man_asset in ["^NSEBANK", "^NSEI", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS"]:
-        step = 100 if man_asset == "^NSEBANK" else (50 if man_asset == "^NSEI" else 20)
         atm_s = int(round(curr_ref_spot / float(step)) * step)
         strikes_matrix = [atm_s - (step * 2), atm_s - step, atm_s, atm_s + step, atm_s + (step * 2)]
         
         chain_rows = []
         for s in strikes_matrix:
-            ce_p = calculate_demat_premium(curr_ref_spot, s, 'CE', man_asset)
-            pe_p = calculate_demat_premium(curr_ref_spot, s, 'PE', man_asset)
+            g_ce = BlackScholesEngine.calculate_greeks(curr_ref_spot, s, 2, 14.5, 0.07, 'CE')
+            g_pe = BlackScholesEngine.calculate_greeks(curr_ref_spot, s, 2, 14.5, 0.07, 'PE')
             tag = " (ATM)" if s == atm_s else " (ITM)" if s < atm_s else " (OTM)"
             chain_rows.append({
-                "Call (CE) Premium": f"₹{ce_p}",
+                "Call Delta": g_ce["delta"],
+                "Call (CE) Premium": f"₹{g_ce['premium']}",
                 "Strike Price": f"{s}{tag}",
-                "Put (PE) Premium": f"₹{pe_p}"
+                "Put (PE) Premium": f"₹{g_pe['premium']}",
+                "Put Delta": g_pe["delta"]
             })
         st.table(pd.DataFrame(chain_rows))
 
@@ -1416,14 +1175,13 @@ with tab_manual_terminal:
 
         clean_type = "PE" if "PUT" in sel_opt_type else "CE"
         exp_tag, _ = get_dynamic_expiry_and_tag(man_asset)
-        inst_prefix = "BANKNIFTY" if man_asset == "^NSEBANK" else ("NIFTY" if man_asset == "^NSEI" else man_asset.replace(".NS", ""))
-        inst_name = f"{inst_prefix} {sel_strike} {clean_type} ({exp_tag})"
-        auto_buy_price = calculate_demat_premium(curr_ref_spot, sel_strike, clean_type, man_asset)
+        inst_name = f"{specs['name']} {sel_strike} {clean_type} ({exp_tag})"
+        auto_greeks = BlackScholesEngine.calculate_greeks(curr_ref_spot, sel_strike, 2, 14.5, 0.07, clean_type)
+        auto_buy_price = auto_greeks["premium"]
 
-    # 2. Crypto & Commodities
     else:
         exp_tag, cat = get_dynamic_expiry_and_tag(man_asset)
-        inst_name = f"{asset_dict[man_asset]} ({exp_tag})"
+        inst_name = f"{specs['name']} ({exp_tag})"
         auto_buy_price = int(curr_ref_spot)
         sel_opt_type = st.selectbox("Order Type", ["BUY / LONG 🟢", "SELL / SHORT 🔴"], index=0)
 
@@ -1433,14 +1191,12 @@ with tab_manual_terminal:
         man_tp = st.text_input("Target", value=f"{man_buy_price + 35} | {man_buy_price + 65}", key="man_tp_txt_pro")
     with col_mb2:
         man_sl = st.text_input("Hard Stop Loss", value=f"{man_buy_price - 25}", key="man_sl_txt_pro")
-        
         REASONING_PRESETS = [
             "EMA 20 Pullback + Volume Confirmation",
             "EMA Golden/Death Crossover (9/21 Acceleration)",
             "SuperTrend Dynamic Breakout (10, 2.0)",
             "VWAP Intraday Retest & Expansion Zone",
             "Candlestick Hammer Reversal / Engulfing",
-            "Institutional Supply/Demand Zone Sweep",
             "✍️ Custom Setup Note (Enter Below)"
         ]
         sel_reason_preset = st.selectbox("Setup Reasoning Engine", REASONING_PRESETS, index=0)
@@ -1515,7 +1271,7 @@ with tab_ai_logbook:
                 st.success("Logbook cleared.")
                 st.rerun()
     else:
-        st.info("Logbook is empty for the last 12 hours. As soon as signals trigger, they will be archived here.")
+        st.info("Logbook is empty for the last 12 hours.")
 
 # ==============================================================================
 # 👑 TAB 9: ADMIN ACCESS & TIER CONTROL CONSOLE
