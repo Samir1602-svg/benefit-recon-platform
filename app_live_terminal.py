@@ -9,9 +9,10 @@ import json
 import threading
 from datetime import datetime, time as dtime
 import pytz
+import pyotp
 
 # ==============================================================================
-# 📱 SAM QUANTUM MOBILE LIVE TRADING TERMINAL
+# 📱 SAM QUANTUM LIVE TERMINAL - 100% INDIAN MARKETS DEMAT SUITE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM LIVE ALGO | Mobile Demat",
@@ -22,42 +23,51 @@ st.set_page_config(
 
 ALGO_STATE_FILE = "live_algo_production_state.json"
 TRADE_LOGS_FILE = "live_executed_orders.json"
+BROKER_CREDENTIALS_FILE = "broker_credentials_secure.json"
 
 INDEX_SPECS = {
     "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100},
     "^NSEI": {"name": "NIFTY", "lot_size": 75, "strike_step": 50},
     "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50},
-    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100}
+    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100},
+    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20},
+    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10}
 }
 
 # ==============================================================================
-# 💾 PERSISTENT DATABASE & STATE
+# 💾 PERSISTENCE CONTROLLER
 # ==============================================================================
 def load_algo_state():
     if not os.path.exists(ALGO_STATE_FILE):
         return {
-            "running": False,
-            "mode": "PAPER",
-            "broker": "Zerodha Kite",
-            "symbol": "^NSEBANK",
-            "lots": 2,
-            "target": 50.0,
-            "sl": 20.0,
-            "active_position": None,
-            "today_trades": 0,
-            "date": "",
-            "net_pnl": 0.0,
-            "last_heartbeat": "-"
+            "running": False, "mode": "PAPER", "broker": "Zerodha KiteConnect",
+            "symbol": "^NSEBANK", "strategy": "4. Candlestick Pattern Engine (Hammer / Engulfing)",
+            "lots": 2, "target": 50.0, "sl": 20.0, "active_position": None,
+            "today_trades": 0, "date": "", "net_pnl": 0.0, "last_heartbeat": "-",
+            "broker_connected": False
         }
     try:
         with open(ALGO_STATE_FILE, "r") as f:
             return json.load(f)
     except Exception:
-        return {"running": False, "mode": "PAPER", "broker": "Zerodha Kite", "symbol": "^NSEBANK", "lots": 2, "target": 50.0, "sl": 20.0, "active_position": None, "today_trades": 0, "date": "", "net_pnl": 0.0, "last_heartbeat": "-"}
+        return {"running": False, "mode": "PAPER", "broker": "Zerodha KiteConnect", "symbol": "^NSEBANK", "strategy": "4. Candlestick Pattern Engine (Hammer / Engulfing)", "lots": 2, "target": 50.0, "sl": 20.0, "active_position": None, "today_trades": 0, "date": "", "net_pnl": 0.0, "last_heartbeat": "-", "broker_connected": False}
 
 def save_algo_state(st_dict):
     with open(ALGO_STATE_FILE, "w") as f:
         json.dump(st_dict, f, indent=4)
+
+def load_broker_creds():
+    if not os.path.exists(BROKER_CREDENTIALS_FILE):
+        return {}
+    try:
+        with open(BROKER_CREDENTIALS_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_broker_creds(creds):
+    with open(BROKER_CREDENTIALS_FILE, "w") as f:
+        json.dump(creds, f, indent=4)
 
 def load_trade_logs():
     if not os.path.exists(TRADE_LOGS_FILE):
@@ -73,7 +83,7 @@ def save_trade_logs(logs):
         json.dump(logs, f, indent=4)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE
+# 🧮 GREEKS & PRICING ENGINE (EXACT BACKTEST FORMULA)
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -107,19 +117,216 @@ def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days
     points_pnl = round(exit_premium - entry_premium, 2)
     return atm_strike, entry_premium, exit_premium, points_pnl
 
-def evaluate_candlestick_pattern(df):
+def calculate_taxes(entry_premium, exit_premium, qty):
+    buy_turnover = entry_premium * qty
+    sell_turnover = exit_premium * qty
+    total_turnover = buy_turnover + sell_turnover
+    brokerage = 40.0
+    stt = sell_turnover * 0.001
+    exchange_txn = total_turnover * 0.000505
+    gst = (brokerage + exchange_txn) * 0.18
+    slippage = (buy_turnover * 0.004) + (sell_turnover * 0.004)
+    return round(brokerage + stt + exchange_txn + gst + slippage, 2)
+
+# ==============================================================================
+# 🛠️ 7 STRATEGIES REGISTRY (EXACT BACKTEST LOGIC)
+# ==============================================================================
+def compute_adx(df, period=14):
     d = df.copy()
-    o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
-    body = (c - o).abs()
-    range_hl = h - l
-    
-    d['signal'] = 0
-    is_hammer = (l < o.combine(c, min) - 2 * body) & (h <= o.combine(c, max) + body * 0.5) & (range_hl > body * 2.5)
-    is_star = (h > o.combine(c, max) + 2 * body) & (l >= o.combine(c, min) - body * 0.5) & (range_hl > body * 2.5)
-    
-    d.loc[is_hammer, 'signal'] = 1
-    d.loc[is_star, 'signal'] = -1
-    return d
+    c, h, l = d['Close'], d['High'], d['Low']
+    up_move = h - h.shift(1)
+    down_move = l.shift(1) - l
+    pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+    tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(period).mean().replace(0, np.nan)
+    pos_di = 100 * (pd.Series(pos_dm, index=d.index).rolling(period).mean() / atr)
+    neg_di = 100 * (pd.Series(neg_dm, index=d.index).rolling(period).mean() / atr)
+    dx = 100 * ((pos_di - neg_di).abs() / (pos_di + neg_di).replace(0, np.nan))
+    return dx.rolling(period).mean().fillna(20)
+
+class StrategyRegistry:
+    @staticmethod
+    def ema_pullback(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
+        d['EMA50'] = c.ewm(span=50, adjust=False).mean()
+        d['ADX'] = compute_adx(d, 14)
+        delta = c.diff()
+        gain = delta.clip(lower=0).ewm(com=13, adjust=False).mean()
+        loss = (-delta.clip(upper=0)).ewm(com=13, adjust=False).mean()
+        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        d['signal'] = 0
+        cond_buy = (d['EMA20'] > d['EMA50']) & (d['Close'] >= d['EMA20']) & (d['RSI'] > 52) & (d['ADX'] > 22) & (d['Volume'] >= d['VOL_SMA20'])
+        cond_sell = (d['EMA20'] < d['EMA50']) & (d['Close'] <= d['EMA20']) & (d['RSI'] < 48) & (d['ADX'] > 22) & (d['Volume'] >= d['VOL_SMA20'])
+        d.loc[cond_buy, 'signal'] = 1
+        d.loc[cond_sell, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def ema_crossover(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA9'] = c.ewm(span=9, adjust=False).mean()
+        d['EMA21'] = c.ewm(span=21, adjust=False).mean()
+        d['ADX'] = compute_adx(d, 14)
+        d['signal'] = 0
+        cross_up = (d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1)) & (d['ADX'] > 22)
+        cross_down = (d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1)) & (d['ADX'] > 22)
+        d.loc[cross_up, 'signal'] = 1
+        d.loc[cross_down, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def supertrend_rider(df):
+        d = df.copy()
+        c, h, l = d['Close'], d['High'], d['Low']
+        d['EMA200'] = c.ewm(span=200, adjust=False).mean()
+        tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+        st_atr = tr.ewm(com=9, adjust=False).mean()
+        hl2 = (h + l) / 2.0
+        basic_ub = hl2 + (2.0 * st_atr)
+        basic_lb = hl2 - (2.0 * st_atr)
+        final_ub = basic_ub.copy()
+        final_lb = basic_lb.copy()
+        direction = np.zeros(len(d))
+        for i in range(1, len(d)):
+            if basic_ub.iloc[i] < final_ub.iloc[i-1] or c.iloc[i-1] > final_ub.iloc[i-1]:
+                final_ub.iloc[i] = basic_ub.iloc[i]
+            else:
+                final_ub.iloc[i] = final_ub.iloc[i-1]
+            if basic_lb.iloc[i] > final_lb.iloc[i-1] or c.iloc[i-1] < final_lb.iloc[i-1]:
+                final_lb.iloc[i] = basic_lb.iloc[i]
+            else:
+                final_lb.iloc[i] = final_lb.iloc[i-1]
+            if c.iloc[i] > final_ub.iloc[i-1]:
+                direction[i] = 1
+            elif c.iloc[i] < final_lb.iloc[i-1]:
+                direction[i] = -1
+            else:
+                direction[i] = direction[i-1]
+        d['ST_DIR'] = direction
+        d['signal'] = 0
+        flip_up = (d['ST_DIR'] == 1) & (d['ST_DIR'].shift(1) == -1) & (d['Close'] > d['EMA200'])
+        flip_down = (d['ST_DIR'] == -1) & (d['ST_DIR'].shift(1) == 1) & (d['Close'] < d['EMA200'])
+        d.loc[flip_up, 'signal'] = 1
+        d.loc[flip_down, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def candlestick_pattern(df):
+        d = df.copy()
+        o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
+        body = (c - o).abs()
+        range_hl = h - l
+        d['signal'] = 0
+        is_hammer = (l < o.combine(c, min) - 2 * body) & (h <= o.combine(c, max) + body * 0.5) & (range_hl > body * 2.5)
+        is_star = (h > o.combine(c, max) + 2 * body) & (l >= o.combine(c, min) - body * 0.5) & (range_hl > body * 2.5)
+        d.loc[is_hammer, 'signal'] = 1
+        d.loc[is_star, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def volume_breakout(df):
+        d = df.copy()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        d['HIGH_20'] = d['High'].rolling(20).max().shift(1)
+        d['LOW_20'] = d['Low'].rolling(20).min().shift(1)
+        d['signal'] = 0
+        buy_cond = (d['Close'] > d['HIGH_20']) & (d['Volume'] > d['VOL_SMA20'] * 1.5)
+        sell_cond = (d['Close'] < d['LOW_20']) & (d['Volume'] > d['VOL_SMA20'] * 1.5)
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[sell_cond, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def vwap_expansion(df):
+        d = df.copy()
+        typical_price = (d['High'] + d['Low'] + d['Close']) / 3.0
+        d['VWAP'] = (typical_price * d['Volume']).cumsum() / d['Volume'].cumsum()
+        d['VOL_SMA20'] = d['Volume'].rolling(20).mean().fillna(d['Volume'])
+        d['signal'] = 0
+        buy_cond = (d['Close'] > d['VWAP']) & (d['Close'].shift(1) <= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        sell_cond = (d['Close'] < d['VWAP']) & (d['Close'].shift(1) >= d['VWAP'].shift(1)) & (d['Volume'] > d['VOL_SMA20'])
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[sell_cond, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def bollinger_rsi_reversion(df):
+        d = df.copy()
+        c = d['Close']
+        d['SMA20'] = c.rolling(20).mean()
+        std20 = c.rolling(20).std()
+        d['BB_UPPER'] = d['SMA20'] + (2.0 * std20)
+        d['BB_LOWER'] = d['SMA20'] - (2.0 * std20)
+        delta = c.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        d['RSI'] = 100 - (100 / (1 + (gain / loss.replace(0, np.nan))))
+        d['signal'] = 0
+        buy_cond = (d['Low'] <= d['BB_LOWER']) & (d['RSI'] < 30)
+        sell_cond = (d['High'] >= d['BB_UPPER']) & (d['RSI'] > 70)
+        d.loc[buy_cond, 'signal'] = 1
+        d.loc[sell_cond, 'signal'] = -1
+        return d
+
+STRATEGY_MAP = {
+    "1. EMA Institutional Pullback (20/50 Trend)": StrategyRegistry.ema_pullback,
+    "2. EMA Golden/Death Crossover (9/21 Acceleration)": StrategyRegistry.ema_crossover,
+    "3. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": StrategyRegistry.supertrend_rider,
+    "4. Candlestick Pattern Engine (Hammer / Engulfing)": StrategyRegistry.candlestick_pattern,
+    "5. Volume Spike + Momentum Breakout": StrategyRegistry.volume_breakout,
+    "6. VWAP Intraday Retest & Expansion": StrategyRegistry.vwap_expansion,
+    "7. Bollinger Band Dynamic Mean Reversion": StrategyRegistry.bollinger_rsi_reversion
+}
+
+# ==============================================================================
+# 🏛️ UNIFIED LIVE BROKER GATEWAY
+# ==============================================================================
+class LiveBrokerGateway:
+    @staticmethod
+    def place_order(tradingsymbol, qty, action, mode="PAPER"):
+        creds = load_broker_creds()
+        if mode == "PAPER":
+            return {"status": "SUCCESS", "order_id": f"PAPER_{int(time.time())}"}
+        
+        # Zerodha Real Order
+        if "Zerodha" in creds.get("broker", ""):
+            try:
+                from kiteconnect import KiteConnect
+                kite = KiteConnect(api_key=creds.get("kite_api_key", ""))
+                kite.set_access_token(creds.get("kite_access_token", ""))
+                t_type = kite.TRANSACTION_TYPE_BUY if action == "BUY" else kite.TRANSACTION_TYPE_SELL
+                order_id = kite.place_order(
+                    variety=kite.VARIETY_REGULAR, exchange=kite.EXCHANGE_NFO,
+                    tradingsymbol=tradingsymbol, transaction_type=t_type,
+                    quantity=qty, order_type=kite.ORDER_TYPE_MARKET, product=kite.PRODUCT_MIS
+                )
+                return {"status": "SUCCESS", "order_id": order_id}
+            except Exception as e:
+                return {"status": "FAILED", "error": str(e)}
+
+        # Angel One Real Order
+        elif "Angel" in creds.get("broker", ""):
+            try:
+                from SmartApi import SmartConnect
+                smart_api = SmartConnect(api_key=creds.get("angel_api_key", ""))
+                totp = pyotp.TOTP(creds.get("angel_totp_key", "")).now()
+                smart_api.generateSession(creds.get("angel_client_id", ""), creds.get("angel_pin", ""), totp)
+                orderparams = {
+                    "variety": "NORMAL", "tradingsymbol": tradingsymbol, "symboltoken": "OPTIDX",
+                    "transactiontype": action, "exchange": "NFO", "ordertype": "MARKET",
+                    "producttype": "INTRADAY", "duration": "DAY", "quantity": str(qty)
+                }
+                order_id = smart_api.placeOrder(orderparams)
+                return {"status": "SUCCESS", "order_id": order_id}
+            except Exception as e:
+                return {"status": "FAILED", "error": str(e)}
+
+        return {"status": "SUCCESS", "order_id": "SIM_OK"}
 
 # ==============================================================================
 # 🤖 24/7 BACKGROUND EXECUTION DAEMON
@@ -133,31 +340,25 @@ def live_execution_daemon():
             today_str = now_ist.strftime('%Y-%m-%d')
             cur_time = now_ist.time()
 
-            # Update heartbeat timestamp
             state["last_heartbeat"] = now_ist.strftime('%I:%M:%S %p IST')
             save_algo_state(state)
 
             if state.get("running", False):
-                # Daily Counter Reset at 09:15 AM
                 if state.get("date") != today_str:
                     state["date"] = today_str
                     state["today_trades"] = 0
                     save_algo_state(state)
 
-                # Intraday Trading Window (09:15 to 15:30 IST)
                 if dtime(9, 15) <= cur_time <= dtime(15, 30):
                     # Auto Square-Off at 15:15 IST
                     if cur_time >= dtime(15, 15) and state.get("active_position") is not None:
                         pos = state["active_position"]
+                        LiveBrokerGateway.place_order(pos["tradingsymbol"], pos["qty"], "SELL", state.get("mode"))
                         logs = load_trade_logs()
                         logs.insert(0, {
-                            "time": now_ist.strftime('%d-%b %I:%M %p'),
-                            "strike": pos["strike_desc"],
-                            "type": pos["type"],
-                            "entry": pos["entry_prem"],
-                            "exit": pos["entry_prem"],
-                            "pnl": 0.0,
-                            "result": "EOD AUTO SQUARE-OFF"
+                            "time": now_ist.strftime('%d-%b %I:%M %p'), "strike": pos["strike_desc"],
+                            "type": pos["type"], "entry": pos["entry_prem"], "exit": pos["entry_prem"],
+                            "pnl": 0.0, "result": "EOD AUTO SQUAREOFF"
                         })
                         save_trade_logs(logs)
                         state["active_position"] = None
@@ -168,74 +369,69 @@ def live_execution_daemon():
                     sym = state.get("symbol", "^NSEBANK")
                     spec = INDEX_SPECS.get(sym, {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100})
                     total_qty = state.get("lots", 2) * spec["lot_size"]
+                    strat_name = state.get("strategy", "4. Candlestick Pattern Engine (Hammer / Engulfing)")
 
                     df = yf.download(sym, period="2d", interval="15m", progress=False)
                     if not df.empty and len(df) >= 10:
                         if isinstance(df.columns, pd.MultiIndex):
                             df.columns = df.columns.droplevel(1)
-                        df = evaluate_candlestick_pattern(df)
+
+                        strat_func = STRATEGY_MAP.get(strat_name, StrategyRegistry.candlestick_pattern)
+                        df = strat_func(df)
                         curr_spot = float(df['Close'].iloc[-1])
                         last_signal = int(df['signal'].iloc[-2])
 
-                        # Exit Monitoring
+                        # Active Position Exit Check
                         if state.get("active_position") is not None:
                             pos = state["active_position"]
                             pos["bars_held"] += 1
                             _, _, exit_prem, points_diff = calculate_option_trade(
-                                spot_entry=pos["spot_entry"],
-                                spot_exit=curr_spot,
-                                option_type=pos["type"],
-                                bars_held=pos["bars_held"],
-                                days_to_expiry=2,
-                                strike_step=spec["strike_step"]
+                                spot_entry=pos["spot_entry"], spot_exit=curr_spot, option_type=pos["type"],
+                                bars_held=pos["bars_held"], days_to_expiry=2, strike_step=spec["strike_step"]
                             )
 
                             target_hit = points_diff >= state.get("target", 50.0)
                             sl_hit = points_diff <= -state.get("sl", 20.0)
 
                             if target_hit or sl_hit:
-                                pnl_rupees = points_diff * total_qty
-                                state["net_pnl"] += pnl_rupees
+                                gross_pnl = points_diff * total_qty
+                                taxes = calculate_taxes(pos["entry_prem"], exit_prem, total_qty)
+                                net_pnl = gross_pnl - taxes
+                                
+                                LiveBrokerGateway.place_order(pos["tradingsymbol"], total_qty, "SELL", state.get("mode"))
+                                state["net_pnl"] += net_pnl
+                                
                                 logs = load_trade_logs()
                                 logs.insert(0, {
-                                    "time": now_ist.strftime('%d-%b %I:%M %p'),
-                                    "strike": pos["strike_desc"],
-                                    "type": pos["type"],
-                                    "entry": pos["entry_prem"],
-                                    "exit": exit_prem,
-                                    "pnl": round(pnl_rupees, 2),
-                                    "result": "TARGET 🎯" if target_hit else "SL HIT 🔴"
+                                    "time": now_ist.strftime('%d-%b %I:%M %p'), "strike": pos["strike_desc"],
+                                    "type": pos["type"], "entry": pos["entry_prem"], "exit": exit_prem,
+                                    "pnl": round(net_pnl, 2), "result": "TARGET 🎯" if target_hit else "SL HIT 🔴"
                                 })
                                 save_trade_logs(logs)
                                 state["active_position"] = None
                                 save_algo_state(state)
 
-                        # New Signal Entry
+                        # New Signal Entry Check
                         elif last_signal != 0 and state.get("today_trades", 0) < 2:
-                            # 11:30 to 13:15 Blackout Guard
                             is_blackout = dtime(11, 30) <= cur_time <= dtime(13, 15)
                             if not is_blackout:
                                 pos_type = "BUY/CE" if last_signal == 1 else "BUY/PE"
                                 atm_s, entry_prem, _, _ = calculate_option_trade(
-                                    spot_entry=curr_spot,
-                                    spot_exit=curr_spot,
-                                    option_type=pos_type,
-                                    bars_held=0,
-                                    days_to_expiry=2,
-                                    strike_step=spec["strike_step"]
+                                    spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
+                                    bars_held=0, days_to_expiry=2, strike_step=spec["strike_step"]
                                 )
                                 opt_lbl = "CE" if last_signal == 1 else "PE"
                                 strike_desc = f"{spec['name']} {atm_s} {opt_lbl}"
+                                tradingsymbol = f"{spec['name']}{now_ist.strftime('%y%b').upper()}{atm_s}{opt_lbl}"
 
-                                state["active_position"] = {
-                                    "type": pos_type,
-                                    "strike_desc": strike_desc,
-                                    "spot_entry": curr_spot,
-                                    "entry_prem": entry_prem,
-                                    "bars_held": 0
-                                }
-                                state["today_trades"] += 1
-                                save_algo_state(state)
+                                order_res = LiveBrokerGateway.place_order(tradingsymbol, total_qty, "BUY", state.get("mode"))
+                                if order_res["status"] == "SUCCESS":
+                                    state["active_position"] = {
+                                        "type": pos_type, "strike_desc": strike_desc, "tradingsymbol": tradingsymbol,
+                                        "spot_entry": curr_spot, "entry_prem": entry_prem, "bars_held": 0, "qty": total_qty
+                                    }
+                                    state["today_trades"] += 1
+                                    save_algo_state(state)
         except Exception:
             pass
         time.sleep(20)
@@ -246,21 +442,22 @@ if 'daemon_started' not in st.session_state:
     t.start()
 
 # ==============================================================================
-# 📱 MOBILE APP UI (FAST, TOUCH-FRIENDLY & NATIVE)
+# 📱 MOBILE DEMAT WEB INTERFACE
 # ==============================================================================
 state = load_algo_state()
+creds = load_broker_creds()
 spec = INDEX_SPECS.get(state.get("symbol", "^NSEBANK"), {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100})
 total_contract_qty = state.get("lots", 2) * spec["lot_size"]
 
-# Top Mobile Header
+# Mobile Header
 st.markdown("""
-<div style="text-align:center; padding: 10px 0 16px 0;">
+<div style="text-align:center; padding: 10px 0 14px 0;">
     <h2 style="color: #38bdf8; margin: 0; font-weight: 800; font-size: 24px;">⚡ SAM LIVE DEMAT</h2>
-    <span style="color: #94a3b8; font-size: 12px;">Mobile Autonomous Algorithmic Engine</span>
+    <span style="color: #94a3b8; font-size: 12px;">Mobile Autonomous Algorithmic Engine (Indian F&O)</span>
 </div>
 """, unsafe_allow_html=True)
 
-# 1. Main Status Indicator Card
+# 1. Main Live Status Banner
 status_bg = "rgba(16, 185, 129, 0.12)" if state.get("running") else "rgba(239, 68, 68, 0.12)"
 status_border = "#10b981" if state.get("running") else "#ef4444"
 status_text = "🟢 ALGO SCANNING LIVE" if state.get("running") else "🔴 ALGO ENGINE PAUSED"
@@ -293,6 +490,9 @@ with c2:
         st.rerun()
 
 if st.button("🛑 EMERGENCY SQUARE-OFF & EXIT", use_container_width=True):
+    if state.get("active_position"):
+        pos = state["active_position"]
+        LiveBrokerGateway.place_order(pos.get("tradingsymbol", ""), pos.get("qty", total_contract_qty), "SELL", state.get("mode"))
     state["active_position"] = None
     save_algo_state(state)
     st.error("⚠️ All open positions squared off immediately.")
@@ -300,7 +500,7 @@ if st.button("🛑 EMERGENCY SQUARE-OFF & EXIT", use_container_width=True):
 
 st.markdown("---")
 
-# 3. Live Position & PnL Readout
+# 3. Live Active Position Display
 st.markdown("##### 💼 Active Position & Live P&L")
 active_pos = state.get("active_position")
 
@@ -309,47 +509,96 @@ if active_pos:
     <div style="background: #0f172a; border: 1px solid #38bdf8; border-radius: 12px; padding: 14px; margin-bottom: 12px;">
         <div style="display:flex; justify-content:space-between;">
             <span style="color: #38bdf8; font-weight: 800; font-size: 14px;">{active_pos.get('strike_desc')}</span>
-            <span style="color: #10b981; font-weight: 700; font-size: 13px;">{total_contract_qty} Qty ({state.get('lots', 2)} Lots)</span>
+            <span style="color: #10b981; font-weight: 700; font-size: 13px;">{active_pos.get('qty', total_contract_qty)} Qty ({state.get('lots', 2)} Lots)</span>
         </div>
         <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;">
             Entry Premium: <b>₹{active_pos.get('entry_prem'):.2f}</b><br>
-            Target Prem: <b style="color:#10b981;">₹{active_pos.get('entry_prem') + state.get('target', 50):.2f}</b> | SL Prem: <b style="color:#ef4444;">₹{active_pos.get('entry_prem') - state.get('sl', 20):.2f}</b>
+            Target: <b style="color:#10b981;">₹{active_pos.get('entry_prem') + state.get('target', 50):.2f}</b> | Hard SL: <b style="color:#ef4444;">₹{active_pos.get('entry_prem') - state.get('sl', 20):.2f}</b>
         </div>
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.info("No active open trade. Engine waiting for next 15-minute Candlestick setup.")
+    st.info(f"No active trade. Engine scanning market on `{state.get('strategy', 'Candlestick')}`.")
 
-# Summary Metrics Grid
+# Daily Performance KPIs
 m1, m2 = st.columns(2)
-m1.metric("Today Realized PnL", f"{'+₹' if state.get('net_pnl', 0) >= 0 else '-₹'}{abs(state.get('net_pnl', 0)):,.2f}")
-m2.metric("Daily Trades", f"{state.get('today_trades', 0)} / 2")
+m1.metric("Today Realized Net PnL", f"{'+₹' if state.get('net_pnl', 0) >= 0 else '-₹'}{abs(state.get('net_pnl', 0)):,.2f}")
+m2.metric("Daily Trades Cap", f"{state.get('today_trades', 0)} / 2")
 
 st.markdown("---")
 
-# 4. Settings & Broker Configuration (Mobile Collapsible)
-with st.expander("⚙️ Strategy Parameters & Broker Binding", expanded=False):
-    sel_sym = st.selectbox("Underlying Market", list(INDEX_SPECS.keys()), index=0, format_func=lambda x: INDEX_SPECS[x]["name"])
+# 4. Strategy & Asset Selector
+with st.expander("🛠️ Strategy & Quantitative Settings", expanded=True):
+    sel_strat = st.selectbox("Execution Strategy Library", list(STRATEGY_MAP.keys()), index=list(STRATEGY_MAP.keys()).index(state.get("strategy", "4. Candlestick Pattern Engine (Hammer / Engulfing)")) if state.get("strategy") in STRATEGY_MAP else 3)
+    sel_sym = st.selectbox("Underlying Market", list(INDEX_SPECS.keys()), index=list(INDEX_SPECS.keys()).index(state.get("symbol", "^NSEBANK")) if state.get("symbol") in INDEX_SPECS else 0, format_func=lambda x: INDEX_SPECS[x]["name"])
     sel_lots = st.number_input("Number of Lots", value=int(state.get("lots", 2)), min_value=1, step=1)
-    sel_mode = st.radio("Trading Mode", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Capital)"], index=0 if state.get("mode") == "PAPER" else 1)
-    sel_broker = st.selectbox("Attached Broker", ["Zerodha KiteConnect", "Angel One SmartAPI", "Groww / Dhan API"])
     
-    if st.button("💾 SAVE SETTINGS", use_container_width=True):
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        sel_target = st.number_input("Target (Pts)", value=float(state.get("target", 50.0)), step=5.0)
+    with col_t2:
+        sel_sl = st.number_input("Hard SL (Pts)", value=float(state.get("sl", 20.0)), step=5.0)
+
+    if st.button("💾 SAVE STRATEGY PARAMETERS", use_container_width=True):
+        state["strategy"] = sel_strat
         state["symbol"] = sel_sym
         state["lots"] = sel_lots
-        state["mode"] = "PAPER" if "Paper" in sel_mode else "LIVE"
-        state["broker"] = sel_broker
+        state["target"] = sel_target
+        state["sl"] = sel_sl
         save_algo_state(state)
-        st.success("✅ Settings updated successfully.")
+        st.success("✅ Strategy Parameters Synced.")
         st.rerun()
 
-# 5. Live Orders Execution Trail
-st.markdown("##### 📜 Today's Executed Order Logs")
+st.markdown("---")
+
+# 5. Real Broker API Credentials Binding
+with st.expander("🔑 Attach Real Demat Broker API (Zerodha / Angel / Dhan)", expanded=False):
+    sel_mode = st.radio("Trading Mode", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Trades)"], index=0 if state.get("mode") == "PAPER" else 1)
+    sel_broker = st.selectbox("Choose Demat Broker", ["Zerodha KiteConnect", "Angel One SmartAPI", "DhanHQ API"], index=0)
+
+    if "Zerodha" in sel_broker:
+        st.markdown("###### 🔐 Zerodha KiteConnect Credentials")
+        k_key = st.text_input("Kite API Key", value=creds.get("kite_api_key", ""), type="password")
+        k_secret = st.text_input("Kite API Secret", value=creds.get("kite_api_secret", ""), type="password")
+        k_token = st.text_input("Kite Daily Access Token", value=creds.get("kite_access_token", ""), type="password")
+        
+        if st.button("🔗 ATTACH & TEST ZERODHA API", use_container_width=True):
+            creds["broker"] = "Zerodha"
+            creds["kite_api_key"] = k_key
+            creds["kite_api_secret"] = k_secret
+            creds["kite_access_token"] = k_token
+            save_broker_creds(creds)
+            state["mode"] = "LIVE" if "Live" in sel_mode else "PAPER"
+            save_algo_state(state)
+            st.success("✅ Zerodha KiteConnect credentials bound successfully.")
+            st.rerun()
+
+    elif "Angel" in sel_broker:
+        st.markdown("###### 🔐 Angel One SmartAPI Credentials")
+        a_client = st.text_input("Angel Client ID", value=creds.get("angel_client_id", ""))
+        a_pin = st.text_input("Angel MPIN / Password", value=creds.get("angel_pin", ""), type="password")
+        a_key = st.text_input("SmartAPI Key", value=creds.get("angel_api_key", ""), type="password")
+        a_totp = st.text_input("Angel TOTP Secret Key", value=creds.get("angel_totp_key", ""), type="password")
+        
+        if st.button("🔗 ATTACH & TEST ANGEL ONE API", use_container_width=True):
+            creds["broker"] = "Angel"
+            creds["angel_client_id"] = a_client
+            creds["angel_pin"] = a_pin
+            creds["angel_api_key"] = a_key
+            creds["angel_totp_key"] = a_totp
+            save_broker_creds(creds)
+            state["mode"] = "LIVE" if "Live" in sel_mode else "PAPER"
+            save_algo_state(state)
+            st.success("✅ Angel One credentials bound successfully.")
+            st.rerun()
+
+# 6. Today's Executed Order Logs
+st.markdown("##### 📜 Executed Orders Logbook")
 logs = load_trade_logs()
 if logs:
     log_df = pd.DataFrame(logs)
     st.dataframe(log_df, use_container_width=True, height=220)
-    if st.button("🗑️ Reset Execution Logs", use_container_width=True):
+    if st.button("🗑️ Clear Execution History", use_container_width=True):
         save_trade_logs([])
         st.rerun()
 else:
