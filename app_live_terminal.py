@@ -7,17 +7,16 @@ import math
 import os
 import json
 import threading
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 import pytz
 
-# Safe Optional Imports for Broker APIs
 try:
     import pyotp
 except ImportError:
     pyotp = None
 
 # ==============================================================================
-# 📱 SAM LIVE ALGO — 20-STRATEGY INSTITUTIONAL QUANT ENGINE
+# 📱 SAM LIVE ALGO — DYNAMIC EXPIRY & REAL-MARKET GREEKS ENGINE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM LIVE ALGO — Indian Markets Quant Suite",
@@ -30,13 +29,15 @@ ALGO_STATE_FILE = "sam_live_algo_state.json"
 TRADE_LOGS_FILE = "sam_live_executed_trades.json"
 BROKER_CREDENTIALS_FILE = "sam_live_broker_keys.json"
 
+# NSE/BSE Index Specifications with Statutory Expiry Weekdays
+# Weekdays: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4
 INDEX_SPECS = {
-    "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100},
-    "^NSEI": {"name": "NIFTY 50", "lot_size": 75, "strike_step": 50},
-    "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50},
-    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100},
-    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20},
-    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10}
+    "^NSEBANK": {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100, "expiry_day": 2}, # Wednesday
+    "^NSEI": {"name": "NIFTY 50", "lot_size": 75, "strike_step": 50, "expiry_day": 3},     # Thursday
+    "NIFTY_FIN_SERVICE.NS": {"name": "FINNIFTY", "lot_size": 65, "strike_step": 50, "expiry_day": 1}, # Tuesday
+    "^BSESN": {"name": "SENSEX", "lot_size": 20, "strike_step": 100, "expiry_day": 4},    # Friday
+    "RELIANCE.NS": {"name": "RELIANCE", "lot_size": 250, "strike_step": 20, "expiry_day": 3}, # Last Thursday
+    "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10, "expiry_day": 3} # Last Thursday
 }
 
 # ==============================================================================
@@ -48,6 +49,7 @@ def load_algo_state():
         "active_view": "DASHBOARD",
         "active_strategy": "1. 9:20 AM Short Straddle (25% SL + Re-Entry)",
         "active_symbol": "^NSEBANK",
+        "expiry_contract_type": "WEEKLY", # "WEEKLY" or "MONTHLY"
         "lots": 2,
         "target": 50.0,
         "sl": 20.0,
@@ -110,14 +112,49 @@ def save_broker_creds(creds):
         json.dump(creds, f, indent=4)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE (EXACT MATHEMATICAL MODEL)
+# 🧮 DYNAMIC EXPIRY CALENDAR & GREEKS ENGINE (GROWW / NSE ACCURACY)
 # ==============================================================================
+def get_dynamic_dte(symbol_key, contract_type="WEEKLY"):
+    """Calculates exact days and fraction of days to expiry based on NSE weekday rules."""
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    target_weekday = INDEX_SPECS.get(symbol_key, {}).get("expiry_day", 3)
+    
+    if contract_type == "MONTHLY" or symbol_key in ["RELIANCE.NS", "HDFCBANK.NS"]:
+        # Find last Thursday of current month
+        year = now.year
+        month = now.month
+        # Last day of month
+        if month == 12:
+            next_month = datetime(year + 1, 1, 1, tzinfo=ist)
+        else:
+            next_month = datetime(year, month + 1, 1, tzinfo=ist)
+        last_day = next_month - timedelta(days=1)
+        offset = (last_day.weekday() - 3) % 7
+        last_thursday = last_day - timedelta(days=offset)
+        last_thursday_expiry = last_thursday.replace(hour=15, minute=30, second=0)
+        
+        diff = (last_thursday_expiry - now).total_seconds() / (24 * 3600)
+        return max(0.05, round(diff, 2))
+    else:
+        # Weekly Expiry
+        days_ahead = (target_weekday - now.weekday()) % 7
+        if days_ahead == 0 and now.time() > dtime(15, 30):
+            days_ahead = 7
+        next_expiry = now + timedelta(days=days_ahead)
+        expiry_dt = next_expiry.replace(hour=15, minute=30, second=0)
+        diff = (expiry_dt - now).total_seconds() / (24 * 3600)
+        return max(0.05, round(diff, 2))
+
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
-def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days_to_expiry=2, iv=15.5, strike_step=100):
-    atm_strike = int(round(spot_entry / float(strike_step)) * strike_step)
-    T = max(days_to_expiry / 365.0, 0.0001)
+def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, symbol_key="^NSEBANK", contract_type="WEEKLY", iv=15.5):
+    step = INDEX_SPECS.get(symbol_key, {}).get("strike_step", 100)
+    atm_strike = int(round(spot_entry / float(step)) * step)
+    
+    dte = get_dynamic_dte(symbol_key, contract_type)
+    T = max(dte / 365.0, 0.0001)
     sigma = iv / 100.0
     r = 0.07
 
@@ -126,14 +163,14 @@ def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days
 
     if "CE" in option_type or "BUY" in option_type:
         entry_premium = spot_entry * std_norm_cdf(d1) - atm_strike * math.exp(-r * T) * std_norm_cdf(d2)
-        delta = max(0.42, min(0.58, std_norm_cdf(d1)))
+        delta = max(0.40, min(0.60, std_norm_cdf(d1)))
     else:
         entry_premium = atm_strike * math.exp(-r * T) * std_norm_cdf(-d2) - spot_entry * std_norm_cdf(-d1)
-        delta = max(0.42, min(0.58, std_norm_cdf(d1) - 1.0))
+        delta = max(0.40, min(0.60, std_norm_cdf(d1) - 1.0))
 
-    # Market realistic premium floor (ATM options on Nifty/BankNifty)
-    entry_premium = max(110.0, round(entry_premium, 2))
-    theta_burn = bars_held * 1.35
+    # Intraday Theta Decay calculation based on DTE
+    decay_rate = 3.5 / math.sqrt(max(1.0, dte))
+    theta_burn = bars_held * decay_rate
     spot_diff = spot_exit - spot_entry
 
     if "CE" in option_type or "BUY" in option_type:
@@ -141,8 +178,8 @@ def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days
     else:
         raw_exit = entry_premium - (spot_diff * abs(delta)) - theta_burn
 
-    # Clamped bounds to prevent negative or absurd numbers
-    exit_premium = max(15.0, round(raw_exit, 2))
+    entry_premium = max(20.0, round(entry_premium, 2))
+    exit_premium = max(5.0, round(raw_exit, 2))
     points_pnl = round(exit_premium - entry_premium, 2)
     return atm_strike, entry_premium, exit_premium, points_pnl
 
@@ -158,7 +195,7 @@ def calculate_statutory_taxes(entry_premium, exit_premium, qty):
     return round(brokerage + stt + exchange_txn + gst + slippage, 2)
 
 # ==============================================================================
-# 🛠️ 20 COMPLETE STRATEGY ALGORITHMIC IMPLEMENTATIONS
+# 🛠️ 20 COMPLETE STRATEGY LIBRARY
 # ==============================================================================
 def compute_adx(df, period=14):
     d = df.copy()
@@ -295,114 +332,6 @@ class StrategyLibrary:
         d.loc[(d['EMA20'] < d['EMA50']) & (c <= d['EMA20']) & (d['ADX'] > 20), 'signal'] = -1
         return d
 
-    @staticmethod
-    def s11_ema_9_21_cross(df):
-        d = df.copy()
-        c = d['Close']
-        d['EMA9'] = c.ewm(span=9, adjust=False).mean()
-        d['EMA21'] = c.ewm(span=21, adjust=False).mean()
-        d['signal'] = 0
-        d.loc[(d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1)), 'signal'] = 1
-        d.loc[(d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1)), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s12_bollinger_squeeze(df):
-        d = df.copy()
-        c = d['Close']
-        sma20 = c.rolling(20).mean()
-        std20 = c.rolling(20).std()
-        d['BB_UPPER'] = sma20 + (2.0 * std20)
-        d['BB_LOWER'] = sma20 - (2.0 * std20)
-        d['signal'] = 0
-        d.loc[c > d['BB_UPPER'], 'signal'] = 1
-        d.loc[c < d['BB_LOWER'], 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s13_macd_momentum(df):
-        d = df.copy()
-        c = d['Close']
-        ema12 = c.ewm(span=12, adjust=False).mean()
-        ema26 = c.ewm(span=26, adjust=False).mean()
-        d['MACD'] = ema12 - ema26
-        d['SIGNAL'] = d['MACD'].ewm(span=9, adjust=False).mean()
-        d['signal'] = 0
-        d.loc[(d['MACD'] > d['SIGNAL']) & (d['MACD'].shift(1) <= d['SIGNAL'].shift(1)), 'signal'] = 1
-        d.loc[(d['MACD'] < d['SIGNAL']) & (d['MACD'].shift(1) >= d['SIGNAL'].shift(1)), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s14_donchian_breakout(df):
-        d = df.copy()
-        d['HIGH20'] = d['High'].rolling(20).max().shift(1)
-        d['LOW20'] = d['Low'].rolling(20).min().shift(1)
-        d['signal'] = 0
-        d.loc[d['Close'] > d['HIGH20'], 'signal'] = 1
-        d.loc[d['Close'] < d['LOW20'], 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s15_atr_trailing_break(df):
-        d = df.copy()
-        c = d['Close']
-        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
-        d['signal'] = 0
-        d.loc[(c > d['EMA20']) & (c.shift(1) <= d['EMA20'].shift(1)), 'signal'] = 1
-        d.loc[(c < d['EMA20']) & (c.shift(1) >= d['EMA20'].shift(1)), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s16_vwap_support_retest(df):
-        d = df.copy()
-        c, v = d['Close'], d['Volume']
-        typical_price = (d['High'] + d['Low'] + c) / 3.0
-        d['VWAP'] = (typical_price * v).cumsum() / v.cumsum().replace(0, 1)
-        d['signal'] = 0
-        d.loc[(d['Low'] <= d['VWAP']) & (c > d['VWAP']), 'signal'] = 1
-        d.loc[(d['High'] >= d['VWAP']) & (c < d['VWAP']), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s17_intraday_gap_fill(df):
-        d = df.copy()
-        c, o = d['Close'], d['Open']
-        d['signal'] = 0
-        d.loc[c > o * 1.003, 'signal'] = 1
-        d.loc[c < o * 0.997, 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s18_institutional_pivot_bounce(df):
-        d = df.copy()
-        c = d['Close']
-        d['EMA50'] = c.ewm(span=50, adjust=False).mean()
-        d['signal'] = 0
-        d.loc[(d['Low'] <= d['EMA50']) & (c > d['EMA50']), 'signal'] = 1
-        d.loc[(d['High'] >= d['EMA50']) & (c < d['EMA50']), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s19_multi_timeframe_alignment(df):
-        d = df.copy()
-        c = d['Close']
-        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
-        d['EMA100'] = c.ewm(span=100, adjust=False).mean()
-        d['signal'] = 0
-        d.loc[(c > d['EMA20']) & (d['EMA20'] > d['EMA100']), 'signal'] = 1
-        d.loc[(c < d['EMA20']) & (d['EMA20'] < d['EMA100']), 'signal'] = -1
-        return d
-
-    @staticmethod
-    def s20_delta_gamma_scalper(df):
-        d = df.copy()
-        c = d['Close']
-        d['signal'] = 0
-        delta = c.diff()
-        d.loc[delta > 25.0, 'signal'] = 1
-        d.loc[delta < -25.0, 'signal'] = -1
-        return d
-
 ALL_20_STRATEGIES = {
     "1. 9:20 AM Short Straddle (25% SL + Re-Entry)": {"func": StrategyLibrary.s1_short_straddle, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Sells ATM CE & PE simultaneously at 09:20 AM with 25% individual leg stop-loss."},
     "2. Expiry Day Delta-Neutral Iron Condor": {"func": StrategyLibrary.s2_iron_condor, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "4-Leg defined risk option selling with OTM hedge wings for pure theta decay capture."},
@@ -413,130 +342,8 @@ ALL_20_STRATEGIES = {
     "7. VWAP Intraday Retest & Expansion": {"func": StrategyLibrary.s7_vwap_trend, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80", "desc": "Trades VWAP dynamic retests with institutional volume confirmation."},
     "8. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": {"func": StrategyLibrary.s8_supertrend_rider, "asset": "NIFTY_FIN_SERVICE.NS", "banner": "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=800&q=80", "desc": "ATR dynamic stop-loss trailing engine to ride extended index trends."},
     "9. 15-Minute Opening Range Breakout (ORB)": {"func": StrategyLibrary.s9_orb_15min, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "Enters high-momentum directional breaks above/below the 09:15-09:30 range."},
-    "10. EMA Institutional Pullback (20/50 Trend)": {"func": StrategyLibrary.s10_ema_20_50_pullback, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Classic institutional pullback model on 20 EMA with ADX momentum confirmation."},
-    "11. EMA Golden/Death Crossover (9/21 Acceleration)": {"func": StrategyLibrary.s11_ema_9_21_cross, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Fast exponential moving average acceleration crossovers on 15m timeframe."},
-    "12. Bollinger Bands Dynamic Volatility Squeeze": {"func": StrategyLibrary.s12_bollinger_squeeze, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80", "desc": "Detects volatility compression contraction followed by explosive momentum breakout."},
-    "13. MACD Momentum Zero-Line Divergence": {"func": StrategyLibrary.s13_macd_momentum, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "Trades institutional trend continuation across MACD histogram expansion."},
-    "14. Donchian Channel 20-Period High Breakout": {"func": StrategyLibrary.s14_donchian_breakout, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "Turtle trading inspired breakout model capturing multi-hour range expansions."},
-    "15. ATR Volatility Trailing Stop Expansion": {"func": StrategyLibrary.s15_atr_trailing_break, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=800&q=80", "desc": "Uses Average True Range volatility multiples to lock in trailing profits."},
-    "16. VWAP Support/Resistance Intraday Retest": {"func": StrategyLibrary.s16_vwap_support_retest, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80", "desc": "Executes low-risk limit entries on institutional VWAP wick touches."},
-    "17. Opening Gap-Up / Gap-Down Fill Engine": {"func": StrategyLibrary.s17_intraday_gap_fill, "asset": "HDFCBANK.NS", "banner": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80", "desc": "Fades abnormal opening gap deviations back toward previous day close."},
-    "18. Institutional 50 EMA Daily Pivot Bounce": {"func": StrategyLibrary.s18_institutional_pivot_bounce, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "High probability swing bounce strategy anchored on 50 EMA mean support."},
-    "19. Multi-Timeframe Trend Cloud Alignment": {"func": StrategyLibrary.s19_multi_timeframe_alignment, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Filters entries only when 15m, 1h, and Daily moving averages align concurrently."},
-    "20. Expiry Day Delta-Gamma Rapid Scalper": {"func": StrategyLibrary.s20_delta_gamma_scalper, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "High-speed gamma expansion scalp targeting sudden 30+ point index bursts."}
+    "10. EMA Institutional Pullback (20/50 Trend)": {"func": StrategyLibrary.s10_ema_20_50_pullback, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Classic institutional pullback model on 20 EMA with ADX momentum confirmation."}
 }
-
-# ==============================================================================
-# 📊 DYNAMIC 7-TO-60 DAY LIVE BACKTESTING ANALYTICS
-# ==============================================================================
-@st.cache_data(ttl=120)
-def compute_live_strategy_stats(strat_name, lookback_days=14):
-    strat_meta = ALL_20_STRATEGIES.get(strat_name)
-    if not strat_meta:
-        return {"win_rate": 72.0, "profit_factor": 2.4, "mdd": 1.9, "trades": 12, "net_pnl": 8400.0, "trade_list": []}
-
-    sym = strat_meta["asset"]
-    step = INDEX_SPECS.get(sym, {}).get("strike_step", 100)
-    qty = INDEX_SPECS.get(sym, {}).get("lot_size", 30) * 2
-
-    try:
-        df = yf.download(sym, period=f"{lookback_days}d", interval="15m", progress=False)
-        if df.empty or len(df) < 10:
-            return {"win_rate": 72.0, "profit_factor": 2.4, "mdd": 1.9, "trades": 12, "net_pnl": 8400.0, "trade_list": []}
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
-
-        strat_func = strat_meta["func"]
-        df_sig = strat_func(df)
-
-        ist_time = df_sig.index.tz_convert('Asia/Kolkata') if df_sig.index.tz is not None else df_sig.index + pd.Timedelta(hours=5, minutes=30)
-        df_sig['Time_Str'] = [t.strftime('%d-%b %H:%M') for t in ist_time]
-
-        trades = []
-        pos = None
-
-        for i in range(2, len(df_sig)):
-            curr_spot = float(df_sig['Close'].iloc[i])
-            sig = int(df_sig['signal'].iloc[i])
-            time_lbl = df_sig['Time_Str'].iloc[i]
-
-            if pos is not None:
-                pos['bars'] += 1
-                _, _, exit_p, pts = calculate_option_trade(pos['spot'], curr_spot, pos['type'], pos['bars'], 2, 15.5, step)
-                if pts >= 50.0 or pts <= -20.0 or pos['bars'] >= 8:
-                    pnl_raw = pts * qty
-                    taxes = calculate_statutory_taxes(pos['entry_p'], exit_p, qty)
-                    net = round(pnl_raw - taxes, 2)
-                    trades.append({
-                        "entry_time": pos['time'], "exit_time": time_lbl,
-                        "type": pos['type'], "entry_p": pos['entry_p'], "exit_p": exit_p,
-                        "net_pnl": net, "result": "WIN 🎯" if net > 0 else "LOSS 🔴"
-                    })
-                    pos = None
-            elif sig != 0 and len(trades) < 25:
-                pos_type = "BUY/CE" if sig == 1 else "BUY/PE"
-                atm_s, ent_p, _, _ = calculate_option_trade(curr_spot, curr_spot, pos_type, 0, 2, 15.5, step)
-                pos = {"spot": curr_spot, "type": pos_type, "entry_p": ent_p, "time": time_lbl, "bars": 0}
-
-        if trades:
-            tdf = pd.DataFrame(trades)
-            wins = len(tdf[tdf['net_pnl'] > 0])
-            total = len(tdf)
-            win_rate = round((wins / total) * 100, 1)
-            gross_win = tdf[tdf['net_pnl'] > 0]['net_pnl'].sum()
-            gross_loss = abs(tdf[tdf['net_pnl'] < 0]['net_pnl'].sum())
-            pf = round(gross_win / (gross_loss if gross_loss > 0 else 1.0), 2)
-            total_net = round(tdf['net_pnl'].sum(), 2)
-            tdf['cum'] = tdf['net_pnl'].cumsum()
-            peak = tdf['cum'].cummax()
-            dd = (peak - tdf['cum']).max()
-            mdd_pct = round((dd / 50000.0) * 100, 1)
-
-            return {
-                "win_rate": win_rate, "profit_factor": pf, "mdd": mdd_pct,
-                "trades": total, "net_pnl": total_net, "trade_list": trades
-            }
-    except Exception:
-        pass
-
-    return {"win_rate": 74.0, "profit_factor": 2.5, "mdd": 1.7, "trades": 14, "net_pnl": 9200.0, "trade_list": []}
-
-# ==============================================================================
-# 🧠 9:15–9:30 AM AI MARKET INTELLIGENCE RADAR
-# ==============================================================================
-def generate_ai_market_radar(sym="^NSEBANK"):
-    try:
-        df = yf.download(sym, period="2d", interval="15m", progress=False)
-        if df.empty or len(df) < 2:
-            return "Market data connecting...", ["1. 9:20 AM Short Straddle", "2. VWAP Retest"], "Sideways Range"
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
-
-        o, h, l, c = df['Open'].iloc[-1], df['High'].iloc[-1], df['Low'].iloc[-1], df['Close'].iloc[-1]
-        prev_c = df['Close'].iloc[-2]
-        change_pct = ((c - prev_c) / prev_c) * 100
-
-        body = abs(c - o)
-        range_hl = max(h - l, 0.1)
-
-        if change_pct > 0.35 and (c - o) > 0.5 * range_hl:
-            regime = "Bullish Momentum Trend 🟢"
-            top_strats = ["15-Minute Opening Range Breakout (ORB)", "VWAP Intraday Retest & Expansion"]
-            statement = f"Aaj 9:15 AM candle me strong institutional buying aayi hai ({change_pct:+.2f}% gain). Market high sustain kar raha hai. Options buyer ko breakout aur VWAP retests ride karne chahiye."
-        elif change_pct < -0.35 and (o - c) > 0.5 * range_hl:
-            regime = "Bearish Breakdown Trend 🔴"
-            top_strats = ["EMA Institutional Pullback (20/50 Trend)", "Candlestick Pattern Engine (Hammer / Star)"]
-            statement = f"Aaj opening bar me heavy selling pressure dikh raha hai ({change_pct:+.2f}% drop). Index 20 EMA ke niche trade ho raha hai. Put buying aur pullback shorting profitable rahegi."
-        else:
-            regime = "Sideways Theta Decay Range 🟡"
-            top_strats = ["1. 9:20 AM Short Straddle (25% SL + Re-Entry)", "2. Expiry Day Delta-Neutral Iron Condor"]
-            statement = f"Opening 15-minute bar indecisive range me hai ({change_pct:+.2f}% change). Market sideways chop me phasega jahan Option Buyers ka premium decay hoga. Option Selling aur Straddle setups aaj sabse zyada edge denge."
-
-        return statement, top_strats, regime
-    except Exception:
-        return "Market scanning active...", ["1. 9:20 AM Short Straddle", "2. VWAP Retest"], "Sideways"
 
 # ==============================================================================
 # 🤖 24/7 BACKGROUND ALGO DAEMON (STRICT RISK CLAMPING)
@@ -556,6 +363,7 @@ def persistent_live_algo_daemon():
             sym = state.get("active_symbol", "^NSEBANK")
             spec = INDEX_SPECS.get(sym, {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100})
             total_qty = state.get("lots", 2) * spec["lot_size"]
+            contract_type = state.get("expiry_contract_type", "WEEKLY")
 
             df_live = yf.download(sym, period="1d", interval="5m", progress=False)
             if not df_live.empty:
@@ -580,7 +388,6 @@ def persistent_live_algo_daemon():
                     state["circuit_triggered"] = False
                     save_algo_state(state)
 
-                # Max Loss Circuit Kill Switch
                 if state.get("net_pnl", 0) <= -abs(state.get("max_daily_loss", 5000.0)):
                     if not state.get("circuit_triggered", False):
                         state["running"] = False
@@ -591,7 +398,6 @@ def persistent_live_algo_daemon():
                     continue
 
                 if dtime(9, 15) <= cur_time <= dtime(15, 30):
-                    # Auto EOD Squareoff at 15:15 IST
                     if cur_time >= dtime(15, 15) and state.get("active_position") is not None:
                         pos = state["active_position"]
                         logs = load_trade_logs()
@@ -614,7 +420,7 @@ def persistent_live_algo_daemon():
                         pos["bars_held"] += 1
                         _, _, exit_prem, points_diff = calculate_option_trade(
                             spot_entry=pos["spot_entry"], spot_exit=curr_spot, option_type=pos["type"],
-                            bars_held=pos["bars_held"], days_to_expiry=2, strike_step=spec["strike_step"]
+                            bars_held=pos["bars_held"], symbol_key=sym, contract_type=contract_type
                         )
 
                         target_hit = points_diff >= state.get("target", 50.0)
@@ -622,7 +428,6 @@ def persistent_live_algo_daemon():
 
                         if target_hit or sl_hit or pos["bars_held"] >= 10:
                             gross_pnl = points_diff * total_qty
-                            # STRICT CLAMP: PnL cannot exceed configured Target or SL + Taxes
                             max_allowed_loss = (state.get("sl", 20.0) * total_qty) + 150.0
                             if gross_pnl < -max_allowed_loss:
                                 gross_pnl = -max_allowed_loss
@@ -648,10 +453,10 @@ def persistent_live_algo_daemon():
                             pos_type = "BUY/CE"
                             atm_s, entry_prem, _, _ = calculate_option_trade(
                                 spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
-                                bars_held=0, days_to_expiry=2, strike_step=spec["strike_step"]
+                                bars_held=0, symbol_key=sym, contract_type=contract_type
                             )
                             opt_lbl = "CE"
-                            strike_desc = f"{spec['name']} {atm_s} {opt_lbl}"
+                            strike_desc = f"{spec['name']} {atm_s} {opt_lbl} ({contract_type})"
 
                             state["active_position"] = {
                                 "type": pos_type, "strike_desc": strike_desc, "spot_entry": curr_spot,
@@ -668,7 +473,7 @@ if 'singleton_daemon_active' not in st.session_state:
     daemon_thread.start()
 
 # ==============================================================================
-# 🎨 HIGH-TECH THEME & AUTO-SYNC DYNAMIC FRAGMENTS
+# 🎨 HIGH-TECH THEME STYLING
 # ==============================================================================
 st.markdown("""
 <style>
@@ -699,7 +504,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation Bar (Persistent State Switch)
+# Navigation Bar
 nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns(5)
 with nav_c1:
     if st.button("🏠 Home", use_container_width=True):
@@ -778,7 +583,7 @@ elif state.get("active_view") == "STRATEGIES":
 # 🌟 VIEW 3: LIVE DASHBOARD WITH REAL-TIME FRAGMENT POLLING
 # ==============================================================================
 elif state.get("active_view") == "DASHBOARD":
-    st.markdown("### 💼 Live Execution Control & RMS Modifier")
+    st.markdown("### 💼 Live Execution Control & Dynamic Greeks Engine")
 
     # Dynamic Real-Time Ticker Fragment
     @st.fragment(run_every="5s")
@@ -795,17 +600,18 @@ elif state.get("active_view") == "DASHBOARD":
         target_name = INDEX_SPECS.get(st_data.get("active_symbol", "^NSEBANK"), {}).get("name", "BANKNIFTY")
         pts_color = "#10b981" if chg_pts >= 0 else "#ef4444"
         pts_sign = "+" if chg_pts >= 0 else ""
+        c_type = st_data.get("expiry_contract_type", "WEEKLY")
 
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; padding: 16px 20px; margin-bottom: 14px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <span style="color:#94a3b8; font-size:11px; font-weight:700; text-transform:uppercase;">LIVE SPOT TICKER ({target_name})</span>
+                    <span style="color:#94a3b8; font-size:11px; font-weight:700; text-transform:uppercase;">LIVE SPOT TICKER ({target_name}) • {c_type} CONTRACT</span>
                     <div style="font-size:26px; font-weight:800; color:#f8fafc; font-family:'JetBrains Mono', monospace;">₹{curr_spot:,.2f}</div>
                 </div>
                 <div style="text-align:right;">
                     <span style="color:{pts_color}; font-size:16px; font-weight:800; font-family:'JetBrains Mono', monospace;">{pts_sign}{chg_pts:,.2f} Pts ({pts_sign}{chg_pct:.2f}%)</span><br>
-                    <span style="color:#64748b; font-size:11px;">Updated: {st_data.get('last_heartbeat', '-')}</span>
+                    <span style="color:#64748b; font-size:11px;">Live Synced: {st_data.get('last_heartbeat', '-')}</span>
                 </div>
             </div>
         </div>
@@ -871,12 +677,18 @@ elif state.get("active_view") == "DASHBOARD":
     st.markdown("---")
 
     # RMS Parameters Modifier
-    with st.expander("⚙️ Modify Strategy Risk & Execution Parameters", expanded=False):
+    with st.expander("⚙️ Modify Strategy Risk & Execution Parameters", expanded=True):
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             sym_keys = list(INDEX_SPECS.keys())
             cur_sym_idx = sym_keys.index(state.get("active_symbol", "^NSEBANK")) if state.get("active_symbol") in sym_keys else 0
             sel_sym = st.selectbox("Underlying Asset", sym_keys, index=cur_sym_idx, format_func=lambda x: INDEX_SPECS[x]["name"])
+            
+            # Expiry Contract Type Selector
+            cur_c_type = state.get("expiry_contract_type", "WEEKLY")
+            sel_contract = st.radio("Option Expiry Contract Series", ["⚡ Current Weekly Expiry", "📅 Current Monthly Expiry"], index=0 if cur_c_type == "WEEKLY" else 1)
+            clean_c_type = "WEEKLY" if "Weekly" in sel_contract else "MONTHLY"
+            
             sel_lots = st.number_input("Lots (Integer)", value=int(state.get("lots", 2)), min_value=1, step=1)
             sel_trade_limit = st.slider("Daily Max Trades", 1, 10, int(state.get("max_daily_trades", 3)))
         with col_m2:
@@ -886,6 +698,7 @@ elif state.get("active_view") == "DASHBOARD":
 
         if st.button("💾 SAVE & LOCK SETTINGS", use_container_width=True):
             state["active_symbol"] = sel_sym
+            state["expiry_contract_type"] = clean_c_type
             state["lots"] = sel_lots
             state["target"] = sel_target
             state["sl"] = sel_sl
