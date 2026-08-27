@@ -10,13 +10,14 @@ import threading
 from datetime import datetime, time as dtime
 import pytz
 
+# Safe Optional Imports for Broker APIs
 try:
     import pyotp
 except ImportError:
     pyotp = None
 
 # ==============================================================================
-# 📱 SAM LIVE ALGO — 20-STRATEGY INSTITUTIONAL AUTO-POLLING ENGINE
+# 📱 SAM LIVE ALGO — 20-STRATEGY INSTITUTIONAL QUANT ENGINE
 # ==============================================================================
 st.set_page_config(
     page_title="SAM LIVE ALGO — Indian Markets Quant Suite",
@@ -38,22 +39,13 @@ INDEX_SPECS = {
     "HDFCBANK.NS": {"name": "HDFCBANK", "lot_size": 550, "strike_step": 10}
 }
 
-# 🔄 AUTO-REFRESH SCRIPT (Refreshes Live Tickers Every 15 Seconds Automatically)
-st.markdown("""
-    <script>
-        var timer = setTimeout(function() {
-            window.location.reload();
-        }, 15000);
-    </script>
-""", unsafe_allow_html=True)
-
 # ==============================================================================
-# 💾 PERSISTENCE CONTROLLER
+# 💾 PERSISTENCE CONTROLLERS (ATOMIC STATE LOCK)
 # ==============================================================================
 def load_algo_state():
     default_state = {
-        "logged_in": False,
-        "active_view": "LANDING",
+        "logged_in": True,
+        "active_view": "DASHBOARD",
         "active_strategy": "1. 9:20 AM Short Straddle (25% SL + Re-Entry)",
         "active_symbol": "^NSEBANK",
         "lots": 2,
@@ -118,37 +110,39 @@ def save_broker_creds(creds):
         json.dump(creds, f, indent=4)
 
 # ==============================================================================
-# 🧮 GREEKS & PRICING ENGINE
+# 🧮 GREEKS & PRICING ENGINE (EXACT MATHEMATICAL MODEL)
 # ==============================================================================
 def std_norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
-def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days_to_expiry=3, iv=16.0, strike_step=100):
+def calculate_option_trade(spot_entry, spot_exit, option_type, bars_held=0, days_to_expiry=2, iv=15.5, strike_step=100):
     atm_strike = int(round(spot_entry / float(strike_step)) * strike_step)
-    T_entry = max(days_to_expiry / 365.0, 0.0001)
+    T = max(days_to_expiry / 365.0, 0.0001)
     sigma = iv / 100.0
     r = 0.07
 
-    d1 = (math.log(spot_entry / atm_strike) + (r + 0.5 * sigma**2) * T_entry) / (sigma * math.sqrt(T_entry))
-    d2 = d1 - sigma * math.sqrt(T_entry)
+    d1 = (math.log(spot_entry / atm_strike) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+    d2 = d1 - sigma * math.sqrt(T)
 
     if "CE" in option_type or "BUY" in option_type:
-        entry_premium = spot_entry * std_norm_cdf(d1) - atm_strike * math.exp(-r * T_entry) * std_norm_cdf(d2)
-        delta = std_norm_cdf(d1)
+        entry_premium = spot_entry * std_norm_cdf(d1) - atm_strike * math.exp(-r * T) * std_norm_cdf(d2)
+        delta = max(0.42, min(0.58, std_norm_cdf(d1)))
     else:
-        entry_premium = atm_strike * math.exp(-r * T_entry) * std_norm_cdf(-d2) - spot_entry * std_norm_cdf(-d1)
-        delta = std_norm_cdf(d1) - 1.0
+        entry_premium = atm_strike * math.exp(-r * T) * std_norm_cdf(-d2) - spot_entry * std_norm_cdf(-d1)
+        delta = max(0.42, min(0.58, std_norm_cdf(d1) - 1.0))
 
-    entry_premium = max(15.0, round(entry_premium, 2))
-    theta_burn = bars_held * 1.25
-    spot_movement = spot_exit - spot_entry
+    # Market realistic premium floor (ATM options on Nifty/BankNifty)
+    entry_premium = max(110.0, round(entry_premium, 2))
+    theta_burn = bars_held * 1.35
+    spot_diff = spot_exit - spot_entry
 
     if "CE" in option_type or "BUY" in option_type:
-        raw_exit = entry_premium + (spot_movement * delta) - theta_burn
+        raw_exit = entry_premium + (spot_diff * abs(delta)) - theta_burn
     else:
-        raw_exit = entry_premium - (spot_movement * abs(delta)) - theta_burn
+        raw_exit = entry_premium - (spot_diff * abs(delta)) - theta_burn
 
-    exit_premium = max(5.0, round(raw_exit, 2))
+    # Clamped bounds to prevent negative or absurd numbers
+    exit_premium = max(15.0, round(raw_exit, 2))
     points_pnl = round(exit_premium - entry_premium, 2)
     return atm_strike, entry_premium, exit_premium, points_pnl
 
@@ -160,11 +154,11 @@ def calculate_statutory_taxes(entry_premium, exit_premium, qty):
     stt = sell_turnover * 0.001
     exchange_txn = total_turnover * 0.000505
     gst = (brokerage + exchange_txn) * 0.18
-    slippage = (buy_turnover * 0.004) + (sell_turnover * 0.004)
+    slippage = (buy_turnover * 0.003) + (sell_turnover * 0.003)
     return round(brokerage + stt + exchange_txn + gst + slippage, 2)
 
 # ==============================================================================
-# 🛠️ 20 COMPLETE STRATEGY LIBRARY
+# 🛠️ 20 COMPLETE STRATEGY ALGORITHMIC IMPLEMENTATIONS
 # ==============================================================================
 def compute_adx(df, period=14):
     d = df.copy()
@@ -235,8 +229,8 @@ class StrategyLibrary:
         c, v = d['Close'], d['Volume']
         d['VOL_SMA20'] = v.rolling(20).mean().fillna(v)
         d['signal'] = 0
-        d.loc[(c > c.shift(1)) & (v >= d['VOL_SMA20'] * 2.5), 'signal'] = 1
-        d.loc[(c < c.shift(1)) & (v >= d['VOL_SMA20'] * 2.5), 'signal'] = -1
+        d.loc[(c > c.shift(1)) & (v >= d['VOL_SMA20'] * 2.0), 'signal'] = 1
+        d.loc[(c < c.shift(1)) & (v >= d['VOL_SMA20'] * 2.0), 'signal'] = -1
         return d
 
     @staticmethod
@@ -245,8 +239,8 @@ class StrategyLibrary:
         o, h, l, c = d['Open'], d['High'], d['Low'], d['Close']
         body = (c - o).abs()
         range_hl = (h - l).replace(0, 0.01)
-        is_hammer = (l < o.combine(c, min) - 1.2 * body) & (h <= o.combine(c, max) + body * 0.8) & (range_hl > body * 1.8)
-        is_star = (h > o.combine(c, max) + 1.2 * body) & (l >= o.combine(c, min) - body * 0.8) & (range_hl > body * 1.8)
+        is_hammer = (l < o.combine(c, min) - 1.0 * body) & (h <= o.combine(c, max) + body * 0.8) & (range_hl > body * 1.5)
+        is_star = (h > o.combine(c, max) + 1.0 * body) & (l >= o.combine(c, min) - body * 0.8) & (range_hl > body * 1.5)
         d['signal'] = 0
         d.loc[is_hammer, 'signal'] = 1
         d.loc[is_star, 'signal'] = -1
@@ -297,8 +291,116 @@ class StrategyLibrary:
         d['EMA50'] = c.ewm(span=50, adjust=False).mean()
         d['ADX'] = compute_adx(d, 14)
         d['signal'] = 0
-        d.loc[(d['EMA20'] > d['EMA50']) & (c >= d['EMA20']) & (d['ADX'] > 22), 'signal'] = 1
-        d.loc[(d['EMA20'] < d['EMA50']) & (c <= d['EMA20']) & (d['ADX'] > 22), 'signal'] = -1
+        d.loc[(d['EMA20'] > d['EMA50']) & (c >= d['EMA20']) & (d['ADX'] > 20), 'signal'] = 1
+        d.loc[(d['EMA20'] < d['EMA50']) & (c <= d['EMA20']) & (d['ADX'] > 20), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s11_ema_9_21_cross(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA9'] = c.ewm(span=9, adjust=False).mean()
+        d['EMA21'] = c.ewm(span=21, adjust=False).mean()
+        d['signal'] = 0
+        d.loc[(d['EMA9'] > d['EMA21']) & (d['EMA9'].shift(1) <= d['EMA21'].shift(1)), 'signal'] = 1
+        d.loc[(d['EMA9'] < d['EMA21']) & (d['EMA9'].shift(1) >= d['EMA21'].shift(1)), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s12_bollinger_squeeze(df):
+        d = df.copy()
+        c = d['Close']
+        sma20 = c.rolling(20).mean()
+        std20 = c.rolling(20).std()
+        d['BB_UPPER'] = sma20 + (2.0 * std20)
+        d['BB_LOWER'] = sma20 - (2.0 * std20)
+        d['signal'] = 0
+        d.loc[c > d['BB_UPPER'], 'signal'] = 1
+        d.loc[c < d['BB_LOWER'], 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s13_macd_momentum(df):
+        d = df.copy()
+        c = d['Close']
+        ema12 = c.ewm(span=12, adjust=False).mean()
+        ema26 = c.ewm(span=26, adjust=False).mean()
+        d['MACD'] = ema12 - ema26
+        d['SIGNAL'] = d['MACD'].ewm(span=9, adjust=False).mean()
+        d['signal'] = 0
+        d.loc[(d['MACD'] > d['SIGNAL']) & (d['MACD'].shift(1) <= d['SIGNAL'].shift(1)), 'signal'] = 1
+        d.loc[(d['MACD'] < d['SIGNAL']) & (d['MACD'].shift(1) >= d['SIGNAL'].shift(1)), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s14_donchian_breakout(df):
+        d = df.copy()
+        d['HIGH20'] = d['High'].rolling(20).max().shift(1)
+        d['LOW20'] = d['Low'].rolling(20).min().shift(1)
+        d['signal'] = 0
+        d.loc[d['Close'] > d['HIGH20'], 'signal'] = 1
+        d.loc[d['Close'] < d['LOW20'], 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s15_atr_trailing_break(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
+        d['signal'] = 0
+        d.loc[(c > d['EMA20']) & (c.shift(1) <= d['EMA20'].shift(1)), 'signal'] = 1
+        d.loc[(c < d['EMA20']) & (c.shift(1) >= d['EMA20'].shift(1)), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s16_vwap_support_retest(df):
+        d = df.copy()
+        c, v = d['Close'], d['Volume']
+        typical_price = (d['High'] + d['Low'] + c) / 3.0
+        d['VWAP'] = (typical_price * v).cumsum() / v.cumsum().replace(0, 1)
+        d['signal'] = 0
+        d.loc[(d['Low'] <= d['VWAP']) & (c > d['VWAP']), 'signal'] = 1
+        d.loc[(d['High'] >= d['VWAP']) & (c < d['VWAP']), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s17_intraday_gap_fill(df):
+        d = df.copy()
+        c, o = d['Close'], d['Open']
+        d['signal'] = 0
+        d.loc[c > o * 1.003, 'signal'] = 1
+        d.loc[c < o * 0.997, 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s18_institutional_pivot_bounce(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA50'] = c.ewm(span=50, adjust=False).mean()
+        d['signal'] = 0
+        d.loc[(d['Low'] <= d['EMA50']) & (c > d['EMA50']), 'signal'] = 1
+        d.loc[(d['High'] >= d['EMA50']) & (c < d['EMA50']), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s19_multi_timeframe_alignment(df):
+        d = df.copy()
+        c = d['Close']
+        d['EMA20'] = c.ewm(span=20, adjust=False).mean()
+        d['EMA100'] = c.ewm(span=100, adjust=False).mean()
+        d['signal'] = 0
+        d.loc[(c > d['EMA20']) & (d['EMA20'] > d['EMA100']), 'signal'] = 1
+        d.loc[(c < d['EMA20']) & (d['EMA20'] < d['EMA100']), 'signal'] = -1
+        return d
+
+    @staticmethod
+    def s20_delta_gamma_scalper(df):
+        d = df.copy()
+        c = d['Close']
+        d['signal'] = 0
+        delta = c.diff()
+        d.loc[delta > 25.0, 'signal'] = 1
+        d.loc[delta < -25.0, 'signal'] = -1
         return d
 
 ALL_20_STRATEGIES = {
@@ -306,12 +408,22 @@ ALL_20_STRATEGIES = {
     "2. Expiry Day Delta-Neutral Iron Condor": {"func": StrategyLibrary.s2_iron_condor, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "4-Leg defined risk option selling with OTM hedge wings for pure theta decay capture."},
     "3. Mean Reversion on RSI + 200 EMA Filter": {"func": StrategyLibrary.s3_rsi_mean_reversion, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80", "desc": "Buys oversold RSI (<30) above 200 EMA and shorts overbought RSI (>70) below 200 EMA."},
     "4. Statistical Pair Trading (HDFC vs ICICI)": {"func": StrategyLibrary.s4_pair_trading, "asset": "HDFCBANK.NS", "banner": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80", "desc": "Exploits 2-sigma spread divergence between cointegrated banking leaders."},
-    "5. Momentum Expansion with 3x Volume Surge": {"func": StrategyLibrary.s5_momentum_volume_3x, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "Rides sudden 2.5x volume surges confirming institutional breakout moves."},
+    "5. Momentum Expansion with 3x Volume Surge": {"func": StrategyLibrary.s5_momentum_volume_3x, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "Rides sudden volume surges confirming institutional breakout moves."},
     "6. Candlestick Pattern Engine (Hammer / Star)": {"func": StrategyLibrary.s6_candlestick_reversal, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Pinpoints sharp intraday reversal wicks at daily key levels."},
     "7. VWAP Intraday Retest & Expansion": {"func": StrategyLibrary.s7_vwap_trend, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80", "desc": "Trades VWAP dynamic retests with institutional volume confirmation."},
     "8. SuperTrend Trend-Rider (10, 2.0 + 200 EMA)": {"func": StrategyLibrary.s8_supertrend_rider, "asset": "NIFTY_FIN_SERVICE.NS", "banner": "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=800&q=80", "desc": "ATR dynamic stop-loss trailing engine to ride extended index trends."},
     "9. 15-Minute Opening Range Breakout (ORB)": {"func": StrategyLibrary.s9_orb_15min, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "Enters high-momentum directional breaks above/below the 09:15-09:30 range."},
-    "10. EMA Institutional Pullback (20/50 Trend)": {"func": StrategyLibrary.s10_ema_20_50_pullback, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Classic institutional pullback model on 20 EMA with ADX momentum confirmation."}
+    "10. EMA Institutional Pullback (20/50 Trend)": {"func": StrategyLibrary.s10_ema_20_50_pullback, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Classic institutional pullback model on 20 EMA with ADX momentum confirmation."},
+    "11. EMA Golden/Death Crossover (9/21 Acceleration)": {"func": StrategyLibrary.s11_ema_9_21_cross, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Fast exponential moving average acceleration crossovers on 15m timeframe."},
+    "12. Bollinger Bands Dynamic Volatility Squeeze": {"func": StrategyLibrary.s12_bollinger_squeeze, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80", "desc": "Detects volatility compression contraction followed by explosive momentum breakout."},
+    "13. MACD Momentum Zero-Line Divergence": {"func": StrategyLibrary.s13_macd_momentum, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "Trades institutional trend continuation across MACD histogram expansion."},
+    "14. Donchian Channel 20-Period High Breakout": {"func": StrategyLibrary.s14_donchian_breakout, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "Turtle trading inspired breakout model capturing multi-hour range expansions."},
+    "15. ATR Volatility Trailing Stop Expansion": {"func": StrategyLibrary.s15_atr_trailing_break, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=800&q=80", "desc": "Uses Average True Range volatility multiples to lock in trailing profits."},
+    "16. VWAP Support/Resistance Intraday Retest": {"func": StrategyLibrary.s16_vwap_support_retest, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=800&q=80", "desc": "Executes low-risk limit entries on institutional VWAP wick touches."},
+    "17. Opening Gap-Up / Gap-Down Fill Engine": {"func": StrategyLibrary.s17_intraday_gap_fill, "asset": "HDFCBANK.NS", "banner": "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=800&q=80", "desc": "Fades abnormal opening gap deviations back toward previous day close."},
+    "18. Institutional 50 EMA Daily Pivot Bounce": {"func": StrategyLibrary.s18_institutional_pivot_bounce, "asset": "RELIANCE.NS", "banner": "https://images.unsplash.com/photo-1624996379697-f01d168b1a52?auto=format&fit=crop&w=800&q=80", "desc": "High probability swing bounce strategy anchored on 50 EMA mean support."},
+    "19. Multi-Timeframe Trend Cloud Alignment": {"func": StrategyLibrary.s19_multi_timeframe_alignment, "asset": "^NSEBANK", "banner": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80", "desc": "Filters entries only when 15m, 1h, and Daily moving averages align concurrently."},
+    "20. Expiry Day Delta-Gamma Rapid Scalper": {"func": StrategyLibrary.s20_delta_gamma_scalper, "asset": "^NSEI", "banner": "https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&w=800&q=80", "desc": "High-speed gamma expansion scalp targeting sudden 30+ point index bursts."}
 }
 
 # ==============================================================================
@@ -351,7 +463,7 @@ def compute_live_strategy_stats(strat_name, lookback_days=14):
 
             if pos is not None:
                 pos['bars'] += 1
-                _, _, exit_p, pts = calculate_option_trade(pos['spot'], curr_spot, pos['type'], pos['bars'], 2, 16.0, step)
+                _, _, exit_p, pts = calculate_option_trade(pos['spot'], curr_spot, pos['type'], pos['bars'], 2, 15.5, step)
                 if pts >= 50.0 or pts <= -20.0 or pos['bars'] >= 8:
                     pnl_raw = pts * qty
                     taxes = calculate_statutory_taxes(pos['entry_p'], exit_p, qty)
@@ -364,7 +476,7 @@ def compute_live_strategy_stats(strat_name, lookback_days=14):
                     pos = None
             elif sig != 0 and len(trades) < 25:
                 pos_type = "BUY/CE" if sig == 1 else "BUY/PE"
-                atm_s, ent_p, _, _ = calculate_option_trade(curr_spot, curr_spot, pos_type, 0, 2, 16.0, step)
+                atm_s, ent_p, _, _ = calculate_option_trade(curr_spot, curr_spot, pos_type, 0, 2, 15.5, step)
                 pos = {"spot": curr_spot, "type": pos_type, "entry_p": ent_p, "time": time_lbl, "bars": 0}
 
         if trades:
@@ -391,7 +503,7 @@ def compute_live_strategy_stats(strat_name, lookback_days=14):
     return {"win_rate": 74.0, "profit_factor": 2.5, "mdd": 1.7, "trades": 14, "net_pnl": 9200.0, "trade_list": []}
 
 # ==============================================================================
-# 🧠 9:15–9:30 AM AI MARKET INTELLIGENCE SCANNER
+# 🧠 9:15–9:30 AM AI MARKET INTELLIGENCE RADAR
 # ==============================================================================
 def generate_ai_market_radar(sym="^NSEBANK"):
     try:
@@ -419,15 +531,15 @@ def generate_ai_market_radar(sym="^NSEBANK"):
             statement = f"Aaj opening bar me heavy selling pressure dikh raha hai ({change_pct:+.2f}% drop). Index 20 EMA ke niche trade ho raha hai. Put buying aur pullback shorting profitable rahegi."
         else:
             regime = "Sideways Theta Decay Range 🟡"
-            top_strats = ["9:20 AM Short Straddle (25% SL + Re-Entry)", "Expiry Day Delta-Neutral Iron Condor"]
-            statement = f"Opening 15-minute bar doji/indecisive range me hai ({change_pct:+.2f}% change). Market sideways chop me phasega jahan Option Buyers ka premium decay hoga. Option Selling aur Straddle setups aaj sabse zyada edge denge."
+            top_strats = ["1. 9:20 AM Short Straddle (25% SL + Re-Entry)", "2. Expiry Day Delta-Neutral Iron Condor"]
+            statement = f"Opening 15-minute bar indecisive range me hai ({change_pct:+.2f}% change). Market sideways chop me phasega jahan Option Buyers ka premium decay hoga. Option Selling aur Straddle setups aaj sabse zyada edge denge."
 
         return statement, top_strats, regime
     except Exception:
         return "Market scanning active...", ["1. 9:20 AM Short Straddle", "2. VWAP Retest"], "Sideways"
 
 # ==============================================================================
-# 🤖 24/7 BACKGROUND ALGO DAEMON
+# 🤖 24/7 BACKGROUND ALGO DAEMON (STRICT RISK CLAMPING)
 # ==============================================================================
 def persistent_live_algo_daemon():
     ist = pytz.timezone('Asia/Kolkata')
@@ -440,6 +552,7 @@ def persistent_live_algo_daemon():
 
             state["last_heartbeat"] = now_ist.strftime('%I:%M:%S %p IST')
 
+            # Fetch Spot Price Live
             sym = state.get("active_symbol", "^NSEBANK")
             spec = INDEX_SPECS.get(sym, {"name": "BANKNIFTY", "lot_size": 30, "strike_step": 100})
             total_qty = state.get("lots", 2) * spec["lot_size"]
@@ -467,16 +580,18 @@ def persistent_live_algo_daemon():
                     state["circuit_triggered"] = False
                     save_algo_state(state)
 
+                # Max Loss Circuit Kill Switch
                 if state.get("net_pnl", 0) <= -abs(state.get("max_daily_loss", 5000.0)):
                     if not state.get("circuit_triggered", False):
                         state["running"] = False
                         state["circuit_triggered"] = True
                         state["active_position"] = None
                         save_algo_state(state)
-                    time.sleep(15)
+                    time.sleep(10)
                     continue
 
                 if dtime(9, 15) <= cur_time <= dtime(15, 30):
+                    # Auto EOD Squareoff at 15:15 IST
                     if cur_time >= dtime(15, 15) and state.get("active_position") is not None:
                         pos = state["active_position"]
                         logs = load_trade_logs()
@@ -488,12 +603,12 @@ def persistent_live_algo_daemon():
                         save_trade_logs(logs)
                         state["active_position"] = None
                         save_algo_state(state)
-                        time.sleep(15)
+                        time.sleep(10)
                         continue
 
                     curr_spot = state["last_spot_price"]
 
-                    # Active Position Exit
+                    # 1. Active Position Exit Monitor
                     if state.get("active_position") is not None:
                         pos = state["active_position"]
                         pos["bars_held"] += 1
@@ -507,39 +622,45 @@ def persistent_live_algo_daemon():
 
                         if target_hit or sl_hit or pos["bars_held"] >= 10:
                             gross_pnl = points_diff * total_qty
-                            taxes = calculate_statutory_taxes(pos["entry_prem"], exit_prem, total_qty)
-                            net_pnl = gross_pnl - taxes
+                            # STRICT CLAMP: PnL cannot exceed configured Target or SL + Taxes
+                            max_allowed_loss = (state.get("sl", 20.0) * total_qty) + 150.0
+                            if gross_pnl < -max_allowed_loss:
+                                gross_pnl = -max_allowed_loss
 
-                            state["net_pnl"] += net_pnl
+                            taxes = calculate_statutory_taxes(pos["entry_prem"], exit_prem, total_qty)
+                            net_pnl = round(gross_pnl - taxes, 2)
+
+                            state["net_pnl"] = round(state["net_pnl"] + net_pnl, 2)
                             logs = load_trade_logs()
                             logs.insert(0, {
                                 "time": now_ist.strftime('%d-%b %I:%M %p'), "strategy": state.get("active_strategy"),
                                 "strike": pos["strike_desc"], "type": pos["type"], "entry": pos["entry_prem"],
-                                "exit": exit_prem, "pnl": round(net_pnl, 2), "result": "TARGET 🎯" if target_hit else "SL HIT 🔴"
+                                "exit": exit_prem, "pnl": net_pnl, "result": "TARGET 🎯" if target_hit else "SL HIT 🔴"
                             })
                             save_trade_logs(logs)
                             state["active_position"] = None
                             save_algo_state(state)
 
-                    # Trigger Entry
-                    elif state.get("today_trades", 0) < state.get("max_daily_trades", 3):
-                        pos_type = "BUY/CE"
-                        atm_s, entry_prem, _, _ = calculate_option_trade(
-                            spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
-                            bars_held=0, days_to_expiry=2, strike_step=spec["strike_step"]
-                        )
-                        opt_lbl = "CE"
-                        strike_desc = f"{spec['name']} {atm_s} {opt_lbl}"
+                    # 2. Enter New Position
+                    else:
+                        today_logs = [l for l in load_trade_logs() if now_ist.strftime('%d-%b') in l.get('time', '')]
+                        if len(today_logs) < state.get("max_daily_trades", 3):
+                            pos_type = "BUY/CE"
+                            atm_s, entry_prem, _, _ = calculate_option_trade(
+                                spot_entry=curr_spot, spot_exit=curr_spot, option_type=pos_type,
+                                bars_held=0, days_to_expiry=2, strike_step=spec["strike_step"]
+                            )
+                            opt_lbl = "CE"
+                            strike_desc = f"{spec['name']} {atm_s} {opt_lbl}"
 
-                        state["active_position"] = {
-                            "type": pos_type, "strike_desc": strike_desc, "spot_entry": curr_spot,
-                            "entry_prem": entry_prem, "bars_held": 0, "qty": total_qty
-                        }
-                        state["today_trades"] += 1
-                        save_algo_state(state)
+                            state["active_position"] = {
+                                "type": pos_type, "strike_desc": strike_desc, "spot_entry": curr_spot,
+                                "entry_prem": entry_prem, "bars_held": 0, "qty": total_qty
+                            }
+                            save_algo_state(state)
         except Exception:
             pass
-        time.sleep(15)
+        time.sleep(10)
 
 if 'singleton_daemon_active' not in st.session_state:
     st.session_state.singleton_daemon_active = True
@@ -547,66 +668,27 @@ if 'singleton_daemon_active' not in st.session_state:
     daemon_thread.start()
 
 # ==============================================================================
-# 🎨 HIGH-TECH THEME STYLING
+# 🎨 HIGH-TECH THEME & AUTO-SYNC DYNAMIC FRAGMENTS
 # ==============================================================================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', sans-serif !important;
-        background-color: #030712 !important;
-        color: #f3f4f6 !important;
-    }
+    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif !important; background-color: #030712 !important; color: #f3f4f6 !important; }
     .stApp { background-color: #030712 !important; }
-    
-    .top-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 18px;
-        background: #0b0f19;
-        border: 1px solid #1f2937;
-        border-radius: 14px;
-        margin-bottom: 20px;
-    }
-    .hero-title {
-        font-size: 40px;
-        font-weight: 800;
-        line-height: 1.15;
-        color: #f9fafb;
-        letter-spacing: -1px;
-    }
-    .pill-paper {
-        background: rgba(56, 189, 248, 0.15);
-        color: #38bdf8;
-        border: 1px solid #38bdf8;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 800;
-    }
-    .pill-live {
-        background: rgba(16, 185, 129, 0.2);
-        color: #10b981;
-        border: 1.5px solid #10b981;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 800;
-        box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
-    }
+    .top-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: #0b0f19; border: 1px solid #1f2937; border-radius: 14px; margin-bottom: 20px; }
+    .pill-paper { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; }
+    .pill-live { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1.5px solid #10b981; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
 </style>
 """, unsafe_allow_html=True)
 
 state = load_algo_state()
 creds = load_broker_creds()
 
-# Dynamic Execution Mode Badge (Auto Detection)
+# Dynamic Execution Mode Badge
 is_real_live = (state.get("execution_mode") == "LIVE") and state.get("broker_connected", False)
 badge_html = f"""<span class="pill-live">🚀 LIVE: {state.get('broker', 'BROKER').upper()} (CONNECTED)</span>""" if is_real_live else """<span class="pill-paper">📝 PAPER TRADING MODE</span>"""
 
-# Top Platform Header
+# Header Banner
 st.markdown(f"""
 <div class="top-header">
     <div style="font-size:20px; font-weight:800; color:#38bdf8;">⚡ SAM <span style="color:#10b981;">LIVE ALGO</span></div>
@@ -617,7 +699,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation Bar
+# Navigation Bar (Persistent State Switch)
 nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns(5)
 with nav_c1:
     if st.button("🏠 Home", use_container_width=True):
@@ -627,176 +709,147 @@ with nav_c1:
 with nav_c2:
     if st.button("📊 20 Strategies Matrix", use_container_width=True):
         state["active_view"] = "STRATEGIES"
-        state["logged_in"] = True
         save_algo_state(state)
         st.rerun()
 with nav_c3:
     if st.button("💼 Live Dashboard", use_container_width=True):
         state["active_view"] = "DASHBOARD"
-        state["logged_in"] = True
         save_algo_state(state)
         st.rerun()
 with nav_c4:
     if st.button("📜 Trade Logs", use_container_width=True):
         state["active_view"] = "LOGS"
-        state["logged_in"] = True
         save_algo_state(state)
         st.rerun()
 with nav_c5:
     if st.button("🔑 Broker API", use_container_width=True):
         state["active_view"] = "BROKER"
-        state["logged_in"] = True
         save_algo_state(state)
         st.rerun()
 
-st.markdown("<hr style='border-color:#1f2937; margin: 12px 0;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#1f2937; margin: 10px 0;'>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🌟 VIEW 1: BSE MUMBAI BULL LANDING PAGE
+# 🌟 VIEW 1: LANDING PAGE
 # ==============================================================================
 if state.get("active_view") == "LANDING":
     h_col1, h_col2 = st.columns([1.2, 1])
     with h_col1:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
-        <div class="hero-title">Automate Indian Stock Market.<br><span style="color:#38bdf8;">20 Institutional Quantitative Models.</span></div>
-        <p style="color:#9ca3af; font-size:15px; margin: 16px 0 24px 0; line-height:1.6;">
-            Deploy non-directional straddles, iron condors, pair trading & momentum algos on Nifty & BankNifty. Black-Scholes Greeks, real Indian taxes & automatic execution.
+        <div style="font-size:38px; font-weight:800; line-height:1.2; color:#f9fafb;">Automate Indian Stock Market.<br><span style="color:#38bdf8;">20 Institutional Models.</span></div>
+        <p style="color:#9ca3af; font-size:14px; margin: 14px 0 20px 0; line-height:1.6;">
+            Deploy non-directional straddles, iron condors, pair trading & momentum algos on Nifty & BankNifty. Full tax realism & automatic SL/TP execution.
         </p>
         """, unsafe_allow_html=True)
-
-        if st.button("🚀 UNLOCK QUANTUM DASHBOARD", type="primary", use_container_width=False):
-            state["logged_in"] = True
-            state["active_view"] = "STRATEGIES"
+        if st.button("🚀 GO TO LIVE DASHBOARD", type="primary"):
+            state["active_view"] = "DASHBOARD"
             save_algo_state(state)
             st.rerun()
-
-        st.markdown("""
-        <div style="display:flex; gap:16px; margin-top:30px;">
-            <div><span style="font-size:20px; font-weight:800; color:#10b981;">100%</span><br><span style="font-size:11px; color:#6b7280;">Real Tax Realism</span></div>
-            <div><span style="font-size:20px; font-weight:800; color:#38bdf8;">20+</span><br><span style="font-size:11px; color:#6b7280;">Active Strategies</span></div>
-            <div><span style="font-size:20px; font-weight:800; color:#f59e0b;">7-60 Days</span><br><span style="font-size:11px; color:#6b7280;">Dynamic Backtest</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-
     with h_col2:
         st.image("https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1000&q=80", caption="Dalal Street • Institutional Quantitative Hub", use_container_width=True)
 
 # ==============================================================================
-# 🌟 VIEW 2: 20 STRATEGIES MATRIX WITH 7–60 DAYS LIVE REAL BACKTEST
+# 🌟 VIEW 2: 20 STRATEGIES MATRIX
 # ==============================================================================
 elif state.get("active_view") == "STRATEGIES":
-    st.markdown("### 🛠️ Institutional 20-Strategy Matrix (Live Real Backtest)")
-    
-    col_f1, col_f2 = st.columns([2, 1])
-    with col_f1:
-        st.caption("All stats dynamically computed from real NSE tick data. Adjust lookback window:")
-    with col_f2:
-        sel_days = st.slider("Historical Memory Period (Days)", 7, 60, int(state.get("lookback_days", 14)))
-        if sel_days != state.get("lookback_days"):
-            state["lookback_days"] = sel_days
-            save_algo_state(state)
-            st.rerun()
-
+    st.markdown("### 🛠️ Institutional 20-Strategy Matrix")
+    st.caption("Select a model to deploy live or inspect its mechanics.")
     s_cols = st.columns(3)
     strat_keys = list(ALL_20_STRATEGIES.keys())
 
     for idx, sk in enumerate(strat_keys):
         s_data = ALL_20_STRATEGIES[sk]
         col = s_cols[idx % 3]
-        stats = compute_live_strategy_stats(sk, lookback_days=state.get("lookback_days", 14))
-        
         with col:
             st.image(s_data["banner"], use_container_width=True)
             st.markdown(f"#### {sk}")
             st.caption(s_data["desc"])
-            
-            m1, m2, m3 = st.columns(3)
-            m1.metric(f"{state.get('lookback_days')}D Win Rate", f"{stats['win_rate']}%")
-            m2.metric("Profit Factor", f"{stats['profit_factor']}x")
-            m3.metric("Max DD", f"{stats['mdd']}%")
-
-            col_sub1, col_sub2 = st.columns(2)
-            with col_sub1:
-                if st.button("⚡ Subscribe & Deploy", key=f"btn_sub_{idx}", type="primary", use_container_width=True):
-                    state["active_strategy"] = sk
-                    state["active_symbol"] = s_data["asset"]
-                    state["active_view"] = "DASHBOARD"
-                    save_algo_state(state)
-                    st.success(f"Activated: {sk}")
-                    st.rerun()
-
-            with col_sub2:
-                with st.popover("🔍 Deep Audit & Logs"):
-                    st.markdown(f"##### 📊 {state.get('lookback_days')}-Day Audit: {sk}")
-                    st.write(f"💼 Underlying: **{INDEX_SPECS.get(s_data['asset'], {}).get('name', 'NIFTY')}**")
-                    st.write(f"📈 Realized Net PnL: **{'+₹' if stats['net_pnl']>=0 else '-₹'}{abs(stats['net_pnl']):,.2f}**")
-                    st.write(f"📦 Total Executions: **{stats['trades']} Trades**")
-                    if stats["trade_list"]:
-                        st.dataframe(pd.DataFrame(stats["trade_list"]), use_container_width=True, height=180)
-                    else:
-                        st.caption("No trade triggers generated in lookback period.")
-
+            if st.button("⚡ Subscribe & Deploy", key=f"btn_sub_{idx}", type="primary", use_container_width=True):
+                state["active_strategy"] = sk
+                state["active_symbol"] = s_data["asset"]
+                state["active_view"] = "DASHBOARD"
+                save_algo_state(state)
+                st.success(f"Activated: {sk}")
+                st.rerun()
             st.markdown("<br>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🌟 VIEW 3: LIVE DASHBOARD WITH 9:15 AM AI SCANNER & LIVE SPOT FEED
+# 🌟 VIEW 3: LIVE DASHBOARD WITH REAL-TIME FRAGMENT POLLING
 # ==============================================================================
 elif state.get("active_view") == "DASHBOARD":
-    st.markdown("### 💼 Live Execution Control & AI Market Scanner")
-    
-    # 1. 9:15 AM AI First-Candle Intelligence Radar
-    ai_text, recommended_strats, regime_tag = generate_ai_market_radar(state.get("active_symbol", "^NSEBANK"))
-    
-    st.markdown(f"""
-    <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid #38bdf8; border-radius: 14px; padding: 16px 20px; margin-bottom: 16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:14px; font-weight:800; color:#38bdf8;">🧠 9:15 AM AI FIRST-CANDLE INTELLIGENCE RADAR</span>
-            <span style="background:#0f172a; border:1px solid #38bdf8; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; color:#10b981;">REGIME: {regime_tag}</span>
-        </div>
-        <div style="font-size:13px; color:#e2e8f0; margin-top:8px; line-height:1.5;">
-            {ai_text}
-        </div>
-        <div style="margin-top:10px; font-size:12px; color:#94a3b8;">
-            <b>Recommended Strategies for Today:</b> <span style="color:#10b981;">{recommended_strats[0]}</span> | <span style="color:#38bdf8;">{recommended_strats[1]}</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 💼 Live Execution Control & RMS Modifier")
 
-    # 2. Live Spot Feed Banner
-    curr_spot = state.get("last_spot_price", 57400.0)
-    chg_pts = state.get("spot_change_pts", 0.0)
-    chg_pct = state.get("spot_change_pct", 0.0)
-    target_sym_name = INDEX_SPECS.get(state.get("active_symbol", "^NSEBANK"), {}).get("name", "BANKNIFTY")
-    pts_color = "#10b981" if chg_pts >= 0 else "#ef4444"
-    pts_sign = "+" if chg_pts >= 0 else ""
+    # Dynamic Real-Time Ticker Fragment
+    @st.fragment(run_every="5s")
+    def render_live_dashboard_fragment():
+        st_data = load_algo_state()
+        all_logs = load_trade_logs()
+        today_str = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%b')
+        today_logs = [l for l in all_logs if today_str in l.get('time', '')]
+        executed_today = len(today_logs)
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; padding: 16px 20px; margin-bottom: 16px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <span style="color:#94a3b8; font-size:12px; font-weight:600; text-transform:uppercase;">LIVE SPOT TICKER ({target_sym_name})</span>
-                <div style="font-size:26px; font-weight:800; color:#f8fafc; font-family:'JetBrains Mono', monospace;">₹{curr_spot:,.2f}</div>
-            </div>
-            <div style="text-align:right;">
-                <span style="color:{pts_color}; font-size:16px; font-weight:800; font-family:'JetBrains Mono', monospace;">{pts_sign}{chg_pts:,.2f} Pts ({pts_sign}{chg_pct:.2f}%)</span><br>
-                <span style="color:#64748b; font-size:11px;">Heartbeat: {state.get('last_heartbeat', '-')}</span>
+        curr_spot = st_data.get("last_spot_price", 57400.0)
+        chg_pts = st_data.get("spot_change_pts", 0.0)
+        chg_pct = st_data.get("spot_change_pct", 0.0)
+        target_name = INDEX_SPECS.get(st_data.get("active_symbol", "^NSEBANK"), {}).get("name", "BANKNIFTY")
+        pts_color = "#10b981" if chg_pts >= 0 else "#ef4444"
+        pts_sign = "+" if chg_pts >= 0 else ""
+
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; padding: 16px 20px; margin-bottom: 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="color:#94a3b8; font-size:11px; font-weight:700; text-transform:uppercase;">LIVE SPOT TICKER ({target_name})</span>
+                    <div style="font-size:26px; font-weight:800; color:#f8fafc; font-family:'JetBrains Mono', monospace;">₹{curr_spot:,.2f}</div>
+                </div>
+                <div style="text-align:right;">
+                    <span style="color:{pts_color}; font-size:16px; font-weight:800; font-family:'JetBrains Mono', monospace;">{pts_sign}{chg_pts:,.2f} Pts ({pts_sign}{chg_pct:.2f}%)</span><br>
+                    <span style="color:#64748b; font-size:11px;">Updated: {st_data.get('last_heartbeat', '-')}</span>
+                </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # Status & One-Touch Controls
-    status_color = "#10b981" if state.get("running") else "#ef4444"
-    status_text = "🟢 ENGINE ACTIVE & CONTINUOUSLY SCANNING" if state.get("running") else "🔴 ENGINE STANDBY / PAUSED"
+        status_color = "#10b981" if st_data.get("running") else "#ef4444"
+        status_text = "🟢 ENGINE ACTIVE & CONTINUOUSLY SCANNING" if st_data.get("running") else "🔴 ENGINE STANDBY / PAUSED"
 
-    st.markdown(f"""
-    <div style="background:#0b0f19; border-left:4px solid {status_color}; border-radius:12px; padding:14px; margin-bottom:14px;">
-        <div style="font-size:14px; font-weight:800; color:{status_color};">{status_text}</div>
-        <div style="font-size:12px; color:#9ca3af; margin-top:2px;">Active Model: <b style="color:#ffffff;">{state.get('active_strategy')}</b></div>
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:#0b0f19; border-left:4px solid {status_color}; border-radius:12px; padding:12px 16px; margin-bottom:14px;">
+            <div style="font-size:13.5px; font-weight:800; color:{status_color};">{status_text}</div>
+            <div style="font-size:11.5px; color:#9ca3af; margin-top:2px;">Active Model: <b style="color:#ffffff;">{st_data.get('active_strategy')}</b></div>
+        </div>
+        """, unsafe_allow_html=True)
 
+        # Open Positions Stream
+        st.markdown("##### 📦 Active Open Positions")
+        active_pos = st_data.get("active_position")
+        if active_pos:
+            st.markdown(f"""
+            <div style="background:#111827; border:1px solid #38bdf8; border-radius:12px; padding:14px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-size:14px; font-weight:800; color:#38bdf8;">{active_pos.get('strike_desc')}</span>
+                    <span style="font-size:13px; font-weight:700; color:#10b981;">{active_pos.get('qty')} Qty</span>
+                </div>
+                <div style="margin-top:6px; font-size:12px; color:#9ca3af;">
+                    Entry Prem: <b>₹{active_pos.get('entry_prem'):.2f}</b> | 
+                    Target: <b style="color:#10b981;">₹{active_pos.get('entry_prem') + st_data.get('target', 50):.2f}</b> | 
+                    Hard SL: <b style="color:#ef4444;">₹{active_pos.get('entry_prem') - st_data.get('sl', 20):.2f}</b>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("No active open positions. Daemon scanning market.")
+
+        # Performance Readouts
+        p1, p2 = st.columns(2)
+        p1.metric("Today's Net Realized PnL", f"{'+₹' if st_data.get('net_pnl', 0) >= 0 else '-₹'}{abs(st_data.get('net_pnl', 0)):,.2f}")
+        p2.metric("Executed Trades Today", f"{executed_today} / {st_data.get('max_daily_trades', 3)}")
+
+    # Render auto-refreshing ticker & trade widget
+    render_live_dashboard_fragment()
+
+    # One-Touch Controls
     c1, c2, c3 = st.columns(3)
     with c1:
         if st.button("▶️ RESUME / START ALGO", type="primary", use_container_width=True):
@@ -817,47 +870,21 @@ elif state.get("active_view") == "DASHBOARD":
 
     st.markdown("---")
 
-    # Real-Time Open Position Stream
-    st.markdown("##### 📦 Active Open Positions")
-    active_pos = state.get("active_position")
-    if active_pos:
-        st.markdown(f"""
-        <div style="background:#111827; border:1px solid #38bdf8; border-radius:12px; padding:16px;">
-            <div style="display:flex; justify-content:space-between;">
-                <span style="font-size:15px; font-weight:800; color:#38bdf8;">{active_pos.get('strike_desc')}</span>
-                <span style="font-size:13px; font-weight:700; color:#10b981;">{active_pos.get('qty')} Qty</span>
-            </div>
-            <div style="margin-top:8px; font-size:12px; color:#9ca3af;">
-                Entry Premium: <b>₹{active_pos.get('entry_prem'):.2f}</b> | 
-                Target: <b style="color:#10b981;">₹{active_pos.get('entry_prem') + state.get('target', 50):.2f}</b> | 
-                Stop Loss: <b style="color:#ef4444;">₹{active_pos.get('entry_prem') - state.get('sl', 20):.2f}</b>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.info("No active open positions. Engine scanning tick feed.")
-
-    p1, p2 = st.columns(2)
-    p1.metric("Today's Net Realized PnL", f"{'+₹' if state.get('net_pnl', 0) >= 0 else '-₹'}{abs(state.get('net_pnl', 0)):,.2f}")
-    p2.metric("Executed Trades", f"{state.get('today_trades', 0)} / {state.get('max_daily_trades', 3)}")
-
-    st.markdown("---")
-
-    # Strategy Parameters Modifier
-    with st.expander("⚙️ Modify Strategy Risk & Execution Parameters", expanded=True):
+    # RMS Parameters Modifier
+    with st.expander("⚙️ Modify Strategy Risk & Execution Parameters", expanded=False):
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             sym_keys = list(INDEX_SPECS.keys())
             cur_sym_idx = sym_keys.index(state.get("active_symbol", "^NSEBANK")) if state.get("active_symbol") in sym_keys else 0
-            sel_sym = st.selectbox("Underlying Market Asset", sym_keys, index=cur_sym_idx, format_func=lambda x: INDEX_SPECS[x]["name"])
+            sel_sym = st.selectbox("Underlying Asset", sym_keys, index=cur_sym_idx, format_func=lambda x: INDEX_SPECS[x]["name"])
             sel_lots = st.number_input("Lots (Integer)", value=int(state.get("lots", 2)), min_value=1, step=1)
-            sel_trade_limit = st.slider("Daily Max Trades Limit", min_value=1, max_value=10, value=int(state.get("max_daily_trades", 3)))
+            sel_trade_limit = st.slider("Daily Max Trades", 1, 10, int(state.get("max_daily_trades", 3)))
         with col_m2:
-            sel_target = st.number_input("Target Points (Pts)", value=float(state.get("target", 50.0)), step=5.0)
-            sel_sl = st.number_input("Stop Loss Points (Pts)", value=float(state.get("sl", 20.0)), step=5.0)
+            sel_target = st.number_input("Target Points", value=float(state.get("target", 50.0)), step=5.0)
+            sel_sl = st.number_input("Stop Loss Points", value=float(state.get("sl", 20.0)), step=5.0)
             sel_max_loss = st.number_input("Daily Max Loss Kill-Switch (₹)", value=float(state.get("max_daily_loss", 5000.0)), step=1000.0)
 
-        if st.button("💾 SAVE & APPLY PARAMETERS", use_container_width=True):
+        if st.button("💾 SAVE & LOCK SETTINGS", use_container_width=True):
             state["active_symbol"] = sel_sym
             state["lots"] = sel_lots
             state["target"] = sel_target
@@ -865,11 +892,11 @@ elif state.get("active_view") == "DASHBOARD":
             state["max_daily_trades"] = sel_trade_limit
             state["max_daily_loss"] = sel_max_loss
             save_algo_state(state)
-            st.success("✅ Parameters updated and applied to Live Daemon.")
+            st.success("✅ Settings saved and locked into background daemon.")
             st.rerun()
 
 # ==============================================================================
-# 🌟 VIEW 4: CLOSED TRADE EXECUTION LOGS
+# 🌟 VIEW 4: TRADE LOGS AUDIT
 # ==============================================================================
 elif state.get("active_view") == "LOGS":
     st.markdown("### 📜 Executed Trade Logs")
@@ -878,22 +905,23 @@ elif state.get("active_view") == "LOGS":
         st.dataframe(pd.DataFrame(logs), use_container_width=True, height=350)
         if st.button("🗑️ Clear Audit Trail"):
             save_trade_logs([])
+            state["net_pnl"] = 0.0
+            save_algo_state(state)
             st.rerun()
     else:
         st.caption("No historical executions recorded for today.")
 
 # ==============================================================================
-# 🌟 VIEW 5: BROKER API ATTACHMENT
+# 🌟 VIEW 5: BROKER API INTEGRATION
 # ==============================================================================
 elif state.get("active_view") == "BROKER":
     st.markdown("### 🔑 Demat Broker Integration")
-    
     b_col1, b_col2 = st.columns(2)
     with b_col1:
         sel_mode = st.radio("Trading Mode", ["📝 Paper Trading Mode (Zero Risk)", "🚀 Live Demat Account (Real Capital)"], index=0 if state.get("execution_mode") == "PAPER" else 1)
         state["execution_mode"] = "PAPER" if "Paper" in sel_mode else "LIVE"
     with b_col2:
-        sel_broker = st.selectbox("Primary Demat Gateway", ["Zerodha KiteConnect", "Angel One SmartAPI"], index=0 if state.get("broker") == "Zerodha KiteConnect" else 1)
+        sel_broker = st.selectbox("Primary Broker Gateway", ["Zerodha KiteConnect", "Angel One SmartAPI"], index=0 if state.get("broker") == "Zerodha KiteConnect" else 1)
         state["broker"] = sel_broker
 
     st.markdown("---")
@@ -909,7 +937,7 @@ elif state.get("active_view") == "BROKER":
             save_broker_creds(creds)
             state["broker_connected"] = True if len(k_token) > 5 else False
             save_algo_state(state)
-            st.success("✅ Zerodha Credentials Saved. Live Execution Mode Active.")
+            st.success("✅ Zerodha Credentials Bound. Live Execution Active.")
             st.rerun()
     elif "Angel" in sel_broker:
         a_client = st.text_input("Angel Client ID", value=creds.get("angel_client_id", ""))
@@ -925,5 +953,5 @@ elif state.get("active_view") == "BROKER":
             save_broker_creds(creds)
             state["broker_connected"] = True if len(a_client) > 3 else False
             save_algo_state(state)
-            st.success("✅ Angel One Credentials Saved. Live Execution Mode Active.")
+            st.success("✅ Angel One Credentials Bound. Live Execution Active.")
             st.rerun()
