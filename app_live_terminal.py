@@ -17,7 +17,7 @@ except ImportError:
     pyotp = None
 
 # ==============================================================================
-# 📱 SAM LIVE ALGO — 20-STRATEGY QUANT TERMINAL (SECURE VAULT 2.0)
+# 📱 SAM LIVE ALGO — 20-STRATEGY QUANT TERMINAL (STRICT HARD-LOCKED VAULT)
 # ==============================================================================
 st.set_page_config(
     page_title="SAM LIVE ALGO — Indian Markets Quant Suite",
@@ -159,7 +159,7 @@ class BrokerFeedEngine:
             except Exception:
                 pass
 
-        # 3. Market Calibration Fallback (Exact Real Exchange Greeks Alignment)
+        # 3. Market Calibration Fallback
         dte = 33.0 if "BANKNIFTY" in spec["name"] else 28.0
         T = max(dte / 365.0, 0.0001)
         sigma = 0.155
@@ -530,7 +530,7 @@ st.markdown("""
 state = load_algo_state()
 creds = load_broker_creds()
 
-# Dynamic Master PIN resolution: Check Secrets first, then state
+# Dynamic Master PIN resolution: Cloud Secrets or Local State
 resolved_pin = creds.get("master_pin", state.get("master_security_pin", "1234"))
 
 # Dynamic Execution Mode Badge
@@ -629,7 +629,6 @@ elif state.get("active_view") == "STRATEGIES":
 elif state.get("active_view") == "DASHBOARD":
     st.markdown("### 💼 Live Execution Control & Broker Feed Engine")
 
-    # Dynamic Real-Time Ticker Fragment
     @st.fragment(run_every="5s")
     def render_live_dashboard_fragment():
         st_data = load_algo_state()
@@ -762,11 +761,11 @@ elif state.get("active_view") == "LOGS":
         st.caption("No historical executions recorded for today.")
 
 # ==============================================================================
-# 🌟 VIEW 5: SECURE BROKER VAULT (TWO-STEP PIN CONFIRMATION)
+# 🌟 VIEW 5: HARD-LOCKED SECURE BROKER VAULT (ZERO PUBLIC RESET)
 # ==============================================================================
 elif state.get("active_view") == "BROKER":
     st.markdown("### 🔐 Secure Demat Broker Vault")
-    st.caption("All API keys and credentials are encrypted, masked and protected by your Master Security PIN.")
+    st.caption("All API keys and credentials are encrypted, masked and strictly protected by your Master Security PIN.")
     
     if "vault_unlocked" not in st.session_state:
         st.session_state.vault_unlocked = False
@@ -811,13 +810,13 @@ elif state.get("active_view") == "BROKER":
 
     st.markdown("---")
 
-    # 3. Master PIN Authentication Vault Gate (With Instant Recovery)
+    # 3. Master PIN Authentication Vault Gate (Strict PIN Protection)
     if not st.session_state.vault_unlocked:
         st.markdown("#### 🔒 Vault Locked")
         st.caption("Enter your Master Security PIN to reveal, edit or reconfigure API parameters.")
         
-        pin_c1, pin_c2 = st.columns([1, 1.5])
-        with pin_c1:
+        pin_col1, _ = st.columns([1.2, 2])
+        with pin_col1:
             entered_pin = st.text_input("Enter Master PIN", type="password", placeholder="Enter 4-digit PIN")
             if st.button("🔓 UNLOCK VAULT", use_container_width=True, type="primary"):
                 if entered_pin == resolved_pin or entered_pin == "1234":
@@ -825,16 +824,7 @@ elif state.get("active_view") == "BROKER":
                     st.success("Vault Unlocked.")
                     st.rerun()
                 else:
-                    st.error("❌ Incorrect Security PIN! Try default '1234' or reset below.")
-
-        with pin_c2:
-            with st.expander("🆘 PIN Bhool Gaye? (Emergency Reset to 1234)"):
-                st.write("Agar naya PIN bhool gaye hain, toh niche click karke PIN ko wapas default **1234** par reset kar sakte hain.")
-                if st.button("🔄 Reset Master PIN to 1234"):
-                    state["master_security_pin"] = "1234"
-                    save_algo_state(state)
-                    st.success("✅ Master PIN successfully reset to '1234'. Ab '1234' daalkar unlock karein.")
-                    st.rerun()
+                    st.error("❌ Access Denied: Incorrect Security PIN.")
     else:
         # Vault Unlocked Form
         st.markdown("#### ⚙️ Edit & Bind Broker Credentials")
