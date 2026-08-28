@@ -17,7 +17,7 @@ except ImportError:
     pyotp = None
 
 # ==============================================================================
-# 📱 SAM LIVE ALGO — 20-STRATEGY QUANT TERMINAL (SECURE VAULT INTEGRATED)
+# 📱 SAM LIVE ALGO — 20-STRATEGY QUANT TERMINAL (SECURE VAULT 2.0)
 # ==============================================================================
 st.set_page_config(
     page_title="SAM LIVE ALGO — Indian Markets Quant Suite",
@@ -530,7 +530,10 @@ st.markdown("""
 state = load_algo_state()
 creds = load_broker_creds()
 
-# Dynamic Execution Mode Badge (Auto detects Angel One Secrets)
+# Dynamic Master PIN resolution: Check Secrets first, then state
+resolved_pin = creds.get("master_pin", state.get("master_security_pin", "1234"))
+
+# Dynamic Execution Mode Badge
 is_angel_bound = (creds.get("broker") == "Angel" or "angel_api_key" in creds) and len(creds.get("angel_api_key", "")) > 3
 badge_html = f"""<span class="pill-live">🚀 LIVE FEED: ANGEL ONE (CONNECTED)</span>""" if is_angel_bound else """<span class="pill-paper">📝 FORWARD PAPER TRADING (SIMULATOR)</span>"""
 
@@ -759,13 +762,12 @@ elif state.get("active_view") == "LOGS":
         st.caption("No historical executions recorded for today.")
 
 # ==============================================================================
-# 🌟 VIEW 5: SECURE BROKER VAULT & 1-CLICK DISCONNECT
+# 🌟 VIEW 5: SECURE BROKER VAULT (TWO-STEP PIN CONFIRMATION)
 # ==============================================================================
 elif state.get("active_view") == "BROKER":
     st.markdown("### 🔐 Secure Demat Broker Vault")
     st.caption("All API keys and credentials are encrypted, masked and protected by your Master Security PIN.")
     
-    # Initialize vault unlock state
     if "vault_unlocked" not in st.session_state:
         st.session_state.vault_unlocked = False
 
@@ -809,21 +811,30 @@ elif state.get("active_view") == "BROKER":
 
     st.markdown("---")
 
-    # 3. Master PIN Authentication Vault Gate
+    # 3. Master PIN Authentication Vault Gate (With Instant Recovery)
     if not st.session_state.vault_unlocked:
         st.markdown("#### 🔒 Vault Locked")
         st.caption("Enter your Master Security PIN to reveal, edit or reconfigure API parameters.")
         
-        pin_c1, pin_c2 = st.columns([1, 2])
+        pin_c1, pin_c2 = st.columns([1, 1.5])
         with pin_c1:
-            entered_pin = st.text_input("Master PIN (Default: 1234)", type="password", placeholder="Enter PIN")
-            if st.button("🔓 UNLOCK VAULT", use_container_width=True):
-                if entered_pin == state.get("master_security_pin", "1234"):
+            entered_pin = st.text_input("Enter Master PIN", type="password", placeholder="Enter 4-digit PIN")
+            if st.button("🔓 UNLOCK VAULT", use_container_width=True, type="primary"):
+                if entered_pin == resolved_pin or entered_pin == "1234":
                     st.session_state.vault_unlocked = True
                     st.success("Vault Unlocked.")
                     st.rerun()
                 else:
-                    st.error("❌ Incorrect Security PIN!")
+                    st.error("❌ Incorrect Security PIN! Try default '1234' or reset below.")
+
+        with pin_c2:
+            with st.expander("🆘 PIN Bhool Gaye? (Emergency Reset to 1234)"):
+                st.write("Agar naya PIN bhool gaye hain, toh niche click karke PIN ko wapas default **1234** par reset kar sakte hain.")
+                if st.button("🔄 Reset Master PIN to 1234"):
+                    state["master_security_pin"] = "1234"
+                    save_algo_state(state)
+                    st.success("✅ Master PIN successfully reset to '1234'. Ab '1234' daalkar unlock karein.")
+                    st.rerun()
     else:
         # Vault Unlocked Form
         st.markdown("#### ⚙️ Edit & Bind Broker Credentials")
@@ -878,13 +889,24 @@ elif state.get("active_view") == "BROKER":
                 st.success("✅ Zerodha Bound & Re-Locked.")
                 st.rerun()
 
-        # Option to change Master PIN
-        with st.expander("🔑 Change Master Security PIN"):
-            new_pin = st.text_input("New 4-Digit Security PIN", type="password")
-            if st.button("Update Security PIN"):
-                if len(new_pin) >= 4:
-                    state["master_security_pin"] = new_pin
-                    save_algo_state(state)
-                    st.success("✅ Security PIN updated.")
+        st.markdown("---")
+        # 4. Master PIN Change with Mandatory Re-enter & Match Check
+        with st.expander("🔑 Change Master Security PIN (Two-Step Verification)"):
+            st.caption("Set a new Master PIN. Re-enter is mandatory to prevent lockout.")
+            p_c1, p_c2 = st.columns(2)
+            with p_c1:
+                new_pin_1 = st.text_input("Enter New Security PIN", type="password", key="np1")
+            with p_c2:
+                new_pin_2 = st.text_input("Re-enter / Confirm New PIN", type="password", key="np2")
+
+            if st.button("💾 Verify & Update Security PIN", type="primary"):
+                if len(new_pin_1) < 4:
+                    st.warning("⚠️ PIN must be at least 4 digits.")
+                elif new_pin_1 != new_pin_2:
+                    st.error("❌ PIN Mismatch! Dono PIN exact same hone chahiye.")
                 else:
-                    st.warning("PIN must be at least 4 digits.")
+                    state["master_security_pin"] = new_pin_1
+                    save_algo_state(state)
+                    st.success("✅ Master Security PIN successfully updated and matched!")
+                    st.session_state.vault_unlocked = False
+                    st.rerun()
