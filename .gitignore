@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+benefit_audit_enterprise.db
+terminal_audit.db
+users_db.json

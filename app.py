@@ -6,6 +6,7 @@ import io
 import re
 from datetime import datetime
 from pypdf import PdfReader
+from reconciliation import reconcile_benefits
 
 # ==========================================
 # 1. DATABASE & SECURITY LAYER (SQLite + Auth)
@@ -203,11 +204,6 @@ with st.sidebar:
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
-def clean_val(val):
-    if pd.isna(val):
-        return ""
-    return str(val).replace("$", "").replace("%", "").strip().upper()
-
 def extract_text_from_pdf(uploaded_file):
     pdf = PdfReader(uploaded_file)
     text = ""
@@ -266,71 +262,14 @@ if selected_page == "🔍 Run Benefit Audit":
             rules_df = pd.read_sql_query("SELECT * FROM job_aid_rules WHERE is_active = 1", conn)
             conn.close()
             
-            if "Plan_ID" not in df_src.columns or "Benefit_Service" not in df_src.columns:
-                st.error("Uploaded files must contain 'Plan_ID' and 'Benefit_Service' columns.")
-                st.stop()
-
-            merged = pd.merge(df_src, df_cod, on=["Plan_ID", "Benefit_Service"], suffixes=('_Source', '_Coded'), how='outer')
-            discrepancies = []
-
-            for _, row in merged.iterrows():
-                plan = row.get("Plan_ID", "N/A")
-                service = row.get("Benefit_Service", "N/A")
-
-                # Copay Check
-                if "Copay_Source" in row and "Copay_Coded" in row:
-                    if clean_val(row["Copay_Source"]) != clean_val(row["Copay_Coded"]):
-                        rule = rules_df[rules_df["rule_code"] == "JA-COPAY-01"]
-                        rule_desc = rule["clarification_action"].values[0] if not rule.empty else "Copay value mismatch."
-                        discrepancies.append({
-                            "Plan_ID": plan,
-                            "Benefit_Service": service,
-                            "Field_Audited": "Copay",
-                            "Source_Benchmark": row["Copay_Source"],
-                            "System_Coded": row["Copay_Coded"],
-                            "Error_Type": "Type 1: Financial Mismatch",
-                            "Job_Aid_Code": "JA-COPAY-01",
-                            "Action_Clarification": rule_desc
-                        })
-
-                # Coinsurance Check
-                if "Coinsurance_Source" in row and "Coinsurance_Coded" in row:
-                    if clean_val(row["Coinsurance_Source"]) != clean_val(row["Coinsurance_Coded"]):
-                        rule = rules_df[rules_df["rule_code"] == "JA-COINS-01"]
-                        rule_desc = rule["clarification_action"].values[0] if not rule.empty else "Coinsurance percentage mismatch."
-                        discrepancies.append({
-                            "Plan_ID": plan,
-                            "Benefit_Service": service,
-                            "Field_Audited": "Coinsurance (%)",
-                            "Source_Benchmark": row["Coinsurance_Source"],
-                            "System_Coded": row["Coinsurance_Coded"],
-                            "Error_Type": "Type 1: Financial Mismatch",
-                            "Job_Aid_Code": "JA-COINS-01",
-                            "Action_Clarification": rule_desc
-                        })
-
-                # Deductible Check
-                if "Deductible_Applies_Source" in row and "Deductible_Applies_Coded" in row:
-                    if clean_val(row["Deductible_Applies_Source"]) != clean_val(row["Deductible_Applies_Coded"]):
-                        rule = rules_df[rules_df["rule_code"] == "JA-DED-01"]
-                        rule_desc = rule["clarification_action"].values[0] if not rule.empty else "Deductible accumulator mismatch."
-                        discrepancies.append({
-                            "Plan_ID": plan,
-                            "Benefit_Service": service,
-                            "Field_Audited": "Deductible Applies Flag",
-                            "Source_Benchmark": row["Deductible_Applies_Source"],
-                            "System_Coded": row["Deductible_Applies_Coded"],
-                            "Error_Type": "Type 2: Policy / Job Aid Clarification",
-                            "Job_Aid_Code": "JA-DED-01",
-                            "Action_Clarification": rule_desc
-                        })
-
-            err_df = pd.DataFrame(discrepancies)
-            total_checked = len(merged)
+            audit = reconcile_benefits(df_src, df_cod, rules_df)
+            merged = audit["merged"]
+            err_df = audit["errors"]
+            total_checked = audit["total_rows"]
             total_err = len(err_df)
-            t1 = len(err_df[err_df["Error_Type"].str.contains("Type 1", na=False)]) if total_err > 0 else 0
-            t2 = len(err_df[err_df["Error_Type"].str.contains("Type 2", na=False)]) if total_err > 0 else 0
-            acc = round(((total_checked - total_err) / total_checked) * 100, 1) if total_checked > 0 else 100
+            t1 = audit["type1_errors"]
+            t2 = audit["type2_errors"]
+            acc = audit["accuracy"]
 
             st.markdown("---")
             m1, m2, m3, m4 = st.columns(4)
